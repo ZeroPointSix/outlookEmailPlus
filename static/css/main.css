@@ -397,6 +397,23 @@
             margin-bottom: 6px;
         }
 
+        .copy-verification-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 2px 4px;
+            border-radius: 4px;
+            opacity: 0.5;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+
+        .copy-verification-btn:hover {
+            opacity: 1;
+            background-color: #f0f0f0;
+        }
+
         .account-status-tag {
             font-size: 10px;
             padding: 1px 6px;
@@ -1157,9 +1174,8 @@
         /* 消息提示 */
         .toast {
             position: fixed;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%) translateY(-20px);
+            bottom: 24px;
+            right: 24px;
             padding: 14px 24px;
             background-color: #1a1a1a;
             color: #ffffff;
@@ -1169,14 +1185,15 @@
             opacity: 0;
             transition: all 0.3s;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-            min-width: 300px;
-            text-align: center;
+            min-width: 200px;
+            max-width: 400px;
+            text-align: left;
             pointer-events: none;
         }
 
         .toast.show {
             opacity: 1;
-            transform: translateX(-50%) translateY(0);
+            transform: translateY(0);
             pointer-events: auto;
         }
 

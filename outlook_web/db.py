@@ -483,6 +483,26 @@ def init_db(database_path: Optional[str] = None):
             """
         )
 
+        # 初始化轮询配置
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO settings (key, value)
+            VALUES ('enable_auto_polling', 'false')
+            """
+        )
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO settings (key, value)
+            VALUES ('polling_interval', '10')
+            """
+        )
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO settings (key, value)
+            VALUES ('polling_count', '5')
+            """
+        )
+
         # 索引（性能基线）
         cursor.execute(
             """

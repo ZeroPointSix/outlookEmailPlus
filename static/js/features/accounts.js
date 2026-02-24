@@ -2,6 +2,11 @@
 
         // 选择账号
         function selectAccount(email) {
+            // 静默停止之前的轮询
+            if (typeof stopPolling === 'function') {
+                stopPolling(true); // silent = true
+            }
+
             currentAccount = email;
             isTempEmailGroup = false;
             currentFolder = 'inbox'; // 重置为收件箱

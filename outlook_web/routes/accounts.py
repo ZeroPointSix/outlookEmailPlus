@@ -15,6 +15,7 @@ def create_blueprint(*, impl) -> Blueprint:
 
     bp.add_url_rule("/api/accounts/search", view_func=impl.api_search_accounts, methods=["GET"])
     bp.add_url_rule("/api/accounts/batch-update-group", view_func=impl.api_batch_update_account_group, methods=["POST"])
+    bp.add_url_rule("/api/accounts/batch-delete", view_func=impl.api_batch_delete_accounts, methods=["POST"])
     bp.add_url_rule("/api/accounts/tags", view_func=impl.api_batch_manage_tags, methods=["POST"])
 
     bp.add_url_rule("/api/accounts/export", view_func=impl.api_export_all_accounts, methods=["GET"])

@@ -172,23 +172,38 @@
                         <div class="empty-state-text">该分组暂无邮箱</div>
                     </div>
                 `;
+                // ���置全选复选框（但不清空已选中的其他分组账号）
+                const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
+                }
+                // 更新批量操作栏显示
+                updateBatchActionBar();
                 return;
             }
 
-            container.innerHTML = accounts.map((acc, index) => `
+            container.innerHTML = accounts.map((acc, index) => {
+                // 根据全局 Set 设置复选框状态
+                const isChecked = selectedAccountIds.has(acc.id);
+                return `
                 <div class="account-item ${currentAccount === acc.email ? 'active' : ''} ${acc.status === 'inactive' ? 'inactive' : ''}"
                      onclick="selectAccount('${escapeJs(acc.email)}')">
                     <div style="display: flex; align-items: flex-start; gap: 10px;">
-                        <input type="checkbox" class="account-select-checkbox" value="${acc.id}" 
-                               onclick="event.stopPropagation(); updateBatchActionBar()"
+                        <input type="checkbox" class="account-select-checkbox" value="${acc.id}"
+                               ${isChecked ? 'checked' : ''}
+                               onclick="event.stopPropagation(); updateBatchActionBar(); updateSelectAllCheckbox()"
                                style="margin-top: 6px; cursor: pointer;">
                         <div style="flex: 1; min-width: 0;">
-                            <div class="account-email" title="${escapeHtml(acc.email)}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; ${acc.last_refresh_status === 'failed' ? 'color: #dc3545; font-weight: 700;' : ''}">
-                                <span class="account-number">${index + 1}.</span> ${escapeHtml(acc.email)}
+                            <div class="account-email" title="${escapeHtml(acc.email)}" style="display: flex; align-items: center; gap: 6px; overflow: hidden; ${acc.last_refresh_status === 'failed' ? 'color: #dc3545; font-weight: 700;' : ''}">
+                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <span class="account-number">${index + 1}.</span> ${escapeHtml(acc.email)}
+                                </span>
+                                <button class="copy-verification-btn" onclick="event.stopPropagation(); copyVerificationInfo('${escapeJs(acc.email)}', this)" title="提取验证码并复制">📋</button>
                                 ${acc.status === 'inactive' ? '<span class="account-status-tag">已停用</span>' : ''}
                             </div>
                             ${acc.remark && acc.remark.trim() ? `<div class="account-remark" title="${escapeHtml(acc.remark)}">📝 ${escapeHtml(acc.remark)}</div>` : ''}
-                            
+
                             <div class="account-tags">
                                 ${(acc.tags || []).map(tag => `
                                     <span class="tag-badge" style="background-color: ${tag.color}">
@@ -196,7 +211,7 @@
                                     </span>
                                 `).join('')}
                             </div>
-                            
+
                             <div class="account-refresh-time" style="font-size: 11px; color: ${acc.last_refresh_status === 'failed' ? '#dc3545' : '#999'}; margin-top: 4px; padding-left: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                 <span>🕐 ${formatRelativeTime(acc.last_refresh_at)}</span>
                                 ${acc.last_refresh_status === 'failed' ? '<button class="account-action-btn" onclick="event.stopPropagation(); showRefreshError(' + acc.id + ', \'' + escapeJs(acc.last_refresh_error || '未知错误') + '\', \'' + escapeJs(acc.email) + '\')" style="padding: 2px 6px; font-size: 10px; background-color: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer;">查看错误</button>' : ''}
@@ -210,7 +225,12 @@
                         <button class="account-action-btn delete" onclick="event.stopPropagation(); deleteAccount(${acc.id}, '${escapeJs(acc.email)}')" title="删除">删除</button>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
+
+            // 更新全选复选框状态
+            updateSelectAllCheckbox();
+            // 更新批量操作栏显示
+            updateBatchActionBar();
         }
 
         // 排序相关变量
@@ -476,6 +496,138 @@
                 }
             } catch (error) {
                 showToast('删除失败', 'error');
+            }
+        }
+
+        // ==================== 全选功能 ====================
+
+        // 全选/取消全选账号（当前分组）
+        function toggleSelectAll() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+
+            if (selectAllCheckbox.checked) {
+                selectAllAccounts();
+            } else {
+                unselectAllAccounts();
+            }
+        }
+
+        // 全选当前分组所有账号
+        function selectAllAccounts() {
+            const checkboxes = document.querySelectorAll('.account-select-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = true;
+                selectedAccountIds.add(parseInt(cb.value));
+            });
+            updateBatchActionBar();
+            updateSelectAllCheckbox();
+        }
+
+        // 取消全选当前分组
+        function unselectAllAccounts() {
+            const checkboxes = document.querySelectorAll('.account-select-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+                selectedAccountIds.delete(parseInt(cb.value));
+            });
+            updateBatchActionBar();
+            updateSelectAllCheckbox();
+        }
+
+        // 更新全选复选框状态（基于当前分组）
+        function updateSelectAllCheckbox() {
+            const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+            const checkboxes = document.querySelectorAll('.account-select-checkbox');
+            const checkedCount = document.querySelectorAll('.account-select-checkbox:checked').length;
+
+            if (checkboxes.length === 0) {
+                // 当前分组没有账号，但如果其他分组有选中则显示半选
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
+            } else if (checkedCount === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
+            } else if (checkedCount === checkboxes.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+
+        // ==================== 验证码复制功能 ====================
+
+        // 复制验证信息到剪贴板
+        let copyVerificationInProgress = false; // 防重复点击
+
+        async function copyVerificationInfo(email, buttonElement) {
+            // 防止重复点击
+            if (copyVerificationInProgress) {
+                return;
+            }
+            copyVerificationInProgress = true;
+
+            // 禁用按钮并显示加载状态
+            const originalContent = buttonElement.innerHTML;
+            buttonElement.disabled = true;
+            buttonElement.innerHTML = '⏳';
+            buttonElement.style.opacity = '0.6';
+            buttonElement.style.cursor = 'wait';
+
+            try {
+                const response = await fetch(`/api/emails/${encodeURIComponent(email)}/extract-verification`);
+                const data = await response.json();
+
+                if (data.success && data.data && data.data.formatted) {
+                    await copyToClipboard(data.data.formatted);
+                    showToast(`已复制: ${data.data.formatted}`, 'success');
+                    // 成功状态
+                    buttonElement.innerHTML = '✅';
+                    buttonElement.style.opacity = '1';
+                } else {
+                    const errorMsg = data.error?.message || data.error || '未找到验证码或链接';
+                    showToast(errorMsg, 'error');
+                    // 失败状态
+                    buttonElement.innerHTML = '❌';
+                    buttonElement.style.opacity = '1';
+                }
+            } catch (error) {
+                console.error('提取验证码失败:', error);
+                showToast('网络错误，请重试', 'error');
+                // 失败状态
+                buttonElement.innerHTML = '❌';
+                buttonElement.style.opacity = '1';
+            } finally {
+                copyVerificationInProgress = false;
+                // 延迟恢复按钮状态
+                setTimeout(() => {
+                    buttonElement.disabled = false;
+                    buttonElement.innerHTML = originalContent;
+                    buttonElement.style.cursor = 'pointer';
+                }, 1500);
+            }
+        }
+
+        // 复制文本到剪贴板
+        async function copyToClipboard(text) {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    // 降级方案：使用 textarea
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.left = '-9999px';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                }
+            } catch (error) {
+                console.error('复制失败:', error);
+                throw error;
             }
         }
 

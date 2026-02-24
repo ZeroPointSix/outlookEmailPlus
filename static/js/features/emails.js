@@ -73,6 +73,29 @@
                     document.getElementById('emailCount').textContent = `(${data.emails.length})`;
 
                     renderEmailList(data.emails);
+
+                    // 初始化已知邮件ID集合（用于轮询检测新邮件）
+                    if (typeof knownEmailIds !== 'undefined') {
+                        knownEmailIds = new Set(currentEmails.map(e => e.id));
+                    }
+
+                    // 检查是否需要自动开始轮询
+                    if (typeof isPolling !== 'undefined' && !isPolling && typeof startPolling === 'function') {
+                        // 检查设置是否启用了自动轮询（后端返回 boolean，兼容处理）
+                        fetch('/api/settings')
+                            .then(res => res.json())
+                            .then(settingsData => {
+                                if (settingsData.success && settingsData.settings) {
+                                    const enablePolling = settingsData.settings.enable_auto_polling === true || settingsData.settings.enable_auto_polling === 'true';
+                                    console.log('[轮询] 自动轮询设置:', enablePolling, '当前账号:', currentAccount);
+                                    if (enablePolling && currentAccount) {
+                                        console.log('[轮询] 开始自动轮询');
+                                        startPolling();
+                                    }
+                                }
+                            })
+                            .catch(err => console.error('检查轮询设置失败:', err));
+                    }
                 } else {
                     // 显示详细的多方法失败弹框
                     if (data.details) {

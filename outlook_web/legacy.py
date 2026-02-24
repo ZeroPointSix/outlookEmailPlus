@@ -2660,6 +2660,69 @@ def api_delete_account_by_email(email_addr):
         return jsonify({'success': False, 'error': '删除失败'})
 
 
+@app.route('/api/accounts/batch-delete', methods=['POST'])
+@login_required
+def api_batch_delete_accounts():
+    """
+    批量删除账号 API
+
+    功能：支持一次性删除多个账号，记录审计日志
+
+    请求体：
+    {
+        "account_ids": [1, 2, 3]  // 账号 ID 列表
+    }
+
+    返回：
+    {
+        "success": true,
+        "message": "成功删除 N 个账号，失败 M 个",
+        "deleted_count": N,
+        "failed_count": M
+    }
+
+    注意事项：
+    - 当前实现为循环删除，未使用事务保护
+    - 部分删除失败时不会回滚已删除的账号
+    - 建议后续优化为事务批量删除
+
+    关联文档：PRD-批量操作与自动化增强
+    """
+    data = request.get_json()
+    account_ids = data.get('account_ids', [])
+
+    if not account_ids:
+        return jsonify({'success': False, 'error': '请选择要删除的账号'})
+
+    if not isinstance(account_ids, list):
+        return jsonify({'success': False, 'error': '参数格式错误'})
+
+    deleted_count = 0
+    failed_count = 0
+
+    for account_id in account_ids:
+        try:
+            # 获取邮箱地址用于审计日志
+            db = get_db()
+            row = db.execute('SELECT email FROM accounts WHERE id = ?', (account_id,)).fetchone()
+            email_addr = row['email'] if row else ''
+
+            if delete_account_by_id(account_id):
+                log_audit('delete', 'account', str(account_id), f"批量删除账号：{email_addr}" if email_addr else "批量删除账号")
+                deleted_count += 1
+            else:
+                failed_count += 1
+        except Exception:
+            failed_count += 1
+
+    return jsonify({
+        'success': True,
+        'message': f'成功删除 {deleted_count} 个账号' + (f'，失败 {failed_count} 个' if failed_count > 0 else ''),
+        'deleted_count': deleted_count,
+        'failed_count': failed_count
+    })
+
+
 # ==================== 账号刷新 API ====================
 
 REFRESH_LOCK_NAME = "token_refresh"
@@ -3937,6 +4000,235 @@ def api_get_email_detail(email_addr, message_id):
     return jsonify({'success': False, 'error': '获取邮件详情失败'})
 
 
+# ==================== 验证码提取 API ====================
+
+@app.route('/api/emails/<email_addr>/extract-verification')
+@login_required
+def api_extract_verification(email_addr):
+    """
+    提取验证码和链接接口
+
+    功能：从指定邮箱的最新邮件中提取验证码和链接
+
+    实现策略（多 API 回退机制）：
+    1. Graph API (inbox) - 优先从收件箱获取
+    2. Graph API (junkemail) - 从垃圾邮件获取
+    3. IMAP (新服务器) - Graph API 失败时回退
+    4. IMAP (旧服务器) - 最后的回退方案
+
+    提取算法：
+    - 智能识别：基于关键词（"验证码"、"code"等）上下文提取
+    - 保底提取：正则匹配 4-8 位数字/字母组合，过滤年份/时间
+    - 链接提取：提取所有 HTTP/HTTPS 链接
+
+    参数：
+    - email_addr: 邮箱地址（路径参数）
+
+    返回：
+    成功：
+    {
+        "success": true,
+        "data": {
+            "verification_code": "123456",
+            "links": ["https://example.com/verify"],
+            "formatted": "123456 https://example.com/verify"
+        },
+        "message": "提取成功"
+    }
+
+    失败：
+    {
+        "success": false,
+        "error": "未找到验证信息",
+        "trace_id": "xxx"
+    }
+
+    性能考虑：
+    - 最多 4 次 API 调用（2 Graph + 2 IMAP）
+    - 建议添加缓存机制，避免短时间内重复提取
+
+    关联文档：PRD-批量操作与自动化增强、TDD-验证码提取测试
+    关联服务：outlook_web/services/verification_extractor.py
+    """
+    from outlook_web.services.verification_extractor import (
+        extract_verification_info,
+        extract_verification_info_from_text,
+        extract_email_text
+    )
+
+    # 获取账号信息
+    account = get_account_by_email(email_addr)
+
+    if not account:
+        error_payload = build_error_payload(
+            "ACCOUNT_NOT_FOUND",
+            "邮箱不存在",
+            "NotFoundError",
+            404,
+            f"email={email_addr}"
+        )
+        return jsonify({'success': False, 'error': error_payload}), 404
+
+    # 获取分组代理设置
+    proxy_url = ''
+    if account.get('group_id'):
+        group = get_group_by_id(account['group_id'])
+        if group:
+            proxy_url = group.get('proxy_url', '') or ''
+
+    # 收集邮件（同时从收件箱和垃圾邮件获取）
+    emails = []
+    graph_success = False
+
+    # 1. 尝试 Graph API 从收件箱获取最新邮件
+    try:
+        inbox_result = get_emails_graph(
+            account['client_id'],
+            account['refresh_token'],
+            folder='inbox',
+            skip=0,
+            top=1,
+            proxy_url=proxy_url
+        )
+        if inbox_result.get("success"):
+            emails.extend(inbox_result.get("emails", []))
+            graph_success = True
+    except Exception:
+        pass
+
+    # 2. 尝试 Graph API 从垃圾邮件获取最新邮件
+    try:
+        junk_result = get_emails_graph(
+            account['client_id'],
+            account['refresh_token'],
+            folder='junkemail',
+            skip=0,
+            top=1,
+            proxy_url=proxy_url
+        )
+        if junk_result.get("success"):
+            emails.extend(junk_result.get("emails", []))
+            graph_success = True
+    except Exception:
+        pass
+
+    # 3. 如果 Graph API 失败，尝试 IMAP 回退
+    if not graph_success or not emails:
+        # 尝试新版 IMAP 服务器
+        try:
+            imap_new_result = get_emails_imap_with_server(
+                account['email'], account['client_id'], account['refresh_token'],
+                folder='inbox', skip=0, top=1, server=IMAP_SERVER_NEW
+            )
+            if imap_new_result.get("success"):
+                emails.extend(imap_new_result.get("emails", []))
+        except Exception:
+            pass
+
+        # 尝试旧版 IMAP 服务器
+        try:
+            imap_old_result = get_emails_imap_with_server(
+                account['email'], account['client_id'], account['refresh_token'],
+                folder='inbox', skip=0, top=1, server=IMAP_SERVER_OLD
+            )
+            if imap_old_result.get("success"):
+                emails.extend(imap_old_result.get("emails", []))
+        except Exception:
+            pass
+
+    if not emails:
+        error_payload = build_error_payload(
+            "EMAIL_NOT_FOUND",
+            "未找到邮件",
+            "NotFoundError",
+            404,
+            f"email={email_addr}"
+        )
+        return jsonify({'success': False, 'error': error_payload}), 404
+
+    # 按时间排序，取最新的一封
+    emails.sort(key=lambda x: x.get('receivedDateTime', '') or x.get('date', ''), reverse=True)
+    latest_email = emails[0]
+
+    # 获取邮件详情以获取完整内容
+    email_detail = None
+
+    # 尝试 Graph API 获取详情
+    try:
+        email_detail = get_email_detail_graph(
+            account['client_id'],
+            account['refresh_token'],
+            latest_email.get('id'),
+            proxy_url
+        )
+    except Exception:
+        pass
+
+    # 如果 Graph API 失败，尝试 IMAP 获取详情
+    if not email_detail:
+        try:
+            email_detail = get_email_detail_imap(
+                account['email'],
+                account['client_id'],
+                account['refresh_token'],
+                latest_email.get('id'),
+                'inbox'
+            )
+        except Exception:
+            pass
+
+    # 构建邮件对象用于提取
+    email_obj = {
+        'subject': latest_email.get('subject', ''),
+        'body_preview': latest_email.get('bodyPreview', '') or latest_email.get('body_preview', '')
+    }
+
+    if email_detail:
+        # Graph API 格式
+        if 'body' in email_detail:
+            body_content = email_detail.get('body', {})
+            email_obj['body'] = body_content.get('content', '') if body_content.get('contentType') == 'text' else ''
+            email_obj['body_html'] = body_content.get('content', '') if body_content.get('contentType') == 'html' else ''
+            email_obj['bodyContent'] = body_content.get('content', '')
+            email_obj['bodyContentType'] = body_content.get('contentType', 'text')
+        # IMAP 格式
+        elif 'body' in email_detail or 'body_html' in email_detail:
+            email_obj['body'] = email_detail.get('body', '')
+            email_obj['body_html'] = email_detail.get('body_html', '')
+
+    try:
+        # 尝试从邮件详情提取验证信息
+        result = extract_verification_info(email_obj)
+
+        return jsonify({
+            'success': True,
+            'data': result,
+            'message': '提取成功'
+        })
+
+    except ValueError as e:
+        # 未找到验证信息
+        error_payload = build_error_payload(
+            "VERIFICATION_NOT_FOUND",
+            str(e),
+            "NotFoundError",
+            404,
+            f"email={email_addr}"
+        )
+        return jsonify({'success': False, 'error': error_payload}), 404
+
+    except Exception as e:
+        # 其他错误
+        error_payload = build_error_payload(
+            "EXTRACT_ERROR",
+            "提取失败",
+            "ExtractError",
+            500,
+            str(e)
+        )
+        return jsonify({'success': False, 'error': error_payload}), 500
+
+
 # ==================== GPTMail 临时邮箱 API ====================
 
 def gptmail_request(method: str, endpoint: str, params: dict = None, json_data: dict = None) -> Optional[Dict]:
@@ -4491,7 +4783,11 @@ def api_get_settings():
         'refresh_delay_seconds': all_settings.get('refresh_delay_seconds', '5'),
         'refresh_cron': all_settings.get('refresh_cron', '0 2 * * *'),
         'use_cron_schedule': all_settings.get('use_cron_schedule', 'false'),
-        'enable_scheduled_refresh': all_settings.get('enable_scheduled_refresh', 'true')
+        'enable_scheduled_refresh': all_settings.get('enable_scheduled_refresh', 'true'),
+        # 轮询配置
+        'enable_auto_polling': all_settings.get('enable_auto_polling', 'false') == 'true',
+        'polling_interval': int(all_settings.get('polling_interval', '10')),
+        'polling_count': int(all_settings.get('polling_count', '5'))
     }
 
     # 敏感字段：不返回明文/哈希，仅提供“是否已设置/脱敏展示”
@@ -4603,6 +4899,41 @@ def api_update_settings():
                 errors.append('更新定时刷新开关失败')
         else:
             errors.append('定时刷新开关必须是 true 或 false')
+
+    # 更新轮询配置
+    if 'enable_auto_polling' in data:
+        enable_polling = str(data['enable_auto_polling']).lower()
+        if enable_polling in ('true', 'false'):
+            if set_setting('enable_auto_polling', enable_polling):
+                updated.append('自动轮询开关')
+            else:
+                errors.append('更新自动轮询开关失败')
+        else:
+            errors.append('自动轮询开关必须是 true 或 false')
+
+    if 'polling_interval' in data:
+        try:
+            interval = int(data['polling_interval'])
+            if interval < 5 or interval > 300:
+                errors.append('轮询间隔必须在 5-300 秒之间')
+            elif set_setting('polling_interval', str(interval)):
+                updated.append('轮询间隔')
+            else:
+                errors.append('更新轮询间隔失败')
+        except ValueError:
+            errors.append('轮询间隔必须是数字')
+
+    if 'polling_count' in data:
+        try:
+            count = int(data['polling_count'])
+            if count < 0 or count > 100:
+                errors.append('轮询次数必须在 0-100 次之间（0 表示持续轮询）')
+            elif set_setting('polling_count', str(count)):
+                updated.append('轮询次数')
+            else:
+                errors.append('更新轮询次数失败')
+        except ValueError:
+            errors.append('轮询次数必须是数字')
 
     if errors:
         return jsonify({'success': False, 'error': '；'.join(errors)})

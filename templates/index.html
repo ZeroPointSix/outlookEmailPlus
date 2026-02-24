@@ -88,7 +88,12 @@
                         style="padding: 4px 10px; font-size: 12px; background-color: #ffffff; border: 1px solid #e5e5e5; border-radius: 4px; color: #666; cursor: pointer; transition: all 0.15s;">
                         📧 邮箱名
                     </button>
-                    <!-- Tag Filter moved to new row -->
+                </div>
+                <!-- 全选复选框 -->
+                <div style="display: flex; align-items: center; gap: 4px; margin-left: auto;">
+                    <input type="checkbox" id="selectAllCheckbox" onclick="toggleSelectAll()"
+                        style="width: 14px; height: 14px; cursor: pointer;">
+                    <label for="selectAllCheckbox" style="font-size: 12px; color: #666; cursor: pointer;">全选</label>
                 </div>
             </div>
             <!-- Tag Filter Row -->
@@ -110,6 +115,7 @@
                 <button class="btn btn-sm btn-secondary" onclick="showBatchTagModal('add')">打标签</button>
                 <button class="btn btn-sm btn-secondary" onclick="showBatchTagModal('remove')">去标签</button>
                 <button class="btn btn-sm btn-secondary" onclick="showBatchMoveGroupModal()">移动分组</button>
+                <button class="btn btn-sm btn-danger" onclick="showBatchDeleteConfirm()" style="background-color: #dc3545; border-color: #dc3545; color: white;">删除</button>
             </div>
             <div class="account-panel-footer">
                 <button class="add-account-btn" onclick="showAddAccountModal()">+ 导入邮箱</button>

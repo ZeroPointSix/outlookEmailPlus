@@ -22,6 +22,14 @@
         let currentEmailDetail = null; // 当前查看的邮件详细数据
         let isTrustedMode = false; // 是否处于信任模式（不过滤 HTML）
 
+        // 轮询相关
+        let pollingTimer = null; // 轮询定时器
+        let pollingCount = 0; // 当前轮询次数
+        let maxPollingCount = 5; // 最大轮询次数
+        let pollingInterval = 10; // 轮询间隔（秒）
+        let isPolling = false; // 是否正在轮询
+        let knownEmailIds = new Set(); // 已知的邮件ID集合
+
         // ==================== CSRF 防护 ====================
 
         // 初始化 CSRF Token
@@ -66,6 +74,14 @@
             initColorPicker();
             initColorPicker();
             initEmailListScroll();
+
+            // 初始化轮询设置
+            initPollingSettings();
+
+            // 请求浏览器通知权限
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
 
             // 绑定搜索框事件
             const searchInput = document.getElementById('globalSearch');
@@ -663,6 +679,12 @@ ${details}
                     const useCron = data.settings.use_cron_schedule === 'true';
                     document.querySelector('input[name="refreshStrategy"][value="' + (useCron ? 'cron' : 'days') + '"]').checked = true;
                     toggleRefreshStrategy();
+
+                    // 加载轮询设置（后端返回 boolean，兼容处理）
+                    const enablePolling = data.settings.enable_auto_polling === true || data.settings.enable_auto_polling === 'true';
+                    document.getElementById('enableAutoPolling').checked = enablePolling;
+                    document.getElementById('pollingInterval').value = data.settings.polling_interval || '10';
+                    document.getElementById('pollingCount').value = data.settings.polling_count || '5';
                 }
             } catch (error) {
                 showToast('加载设置失败', 'error');
@@ -735,6 +757,11 @@ ${details}
             const strategy = document.querySelector('input[name="refreshStrategy"]:checked').value;
             const enableScheduled = document.getElementById('enableScheduledRefresh').checked;
 
+            // 轮询设置
+            const enablePolling = document.getElementById('enableAutoPolling').checked;
+            const pollingInterval = document.getElementById('pollingInterval').value;
+            const pollingCount = document.getElementById('pollingCount').value;
+
             const settings = {};
 
             // 只有输入了密码才更新密码
@@ -772,6 +799,25 @@ ${details}
                 settings.refresh_cron = refreshCron;
             }
 
+            // 轮询配置验证
+            const pInterval = parseInt(pollingInterval);
+            const pCount = parseInt(pollingCount);
+
+            if (isNaN(pInterval) || pInterval < 5 || pInterval > 300) {
+                showToast('轮询间隔必须在 5-300 秒之间', 'error');
+                return;
+            }
+
+            // 0 表示持续轮询，1-100 表示有限次数
+            if (isNaN(pCount) || pCount < 0 || pCount > 100) {
+                showToast('轮询次数必须在 0-100 次之间（0 表示持续轮询）', 'error');
+                return;
+            }
+
+            settings.enable_auto_polling = enablePolling;
+            settings.polling_interval = pInterval;
+            settings.polling_count = pCount;
+
             try {
                 const response = await fetch('/api/settings', {
                     method: 'PUT',
@@ -789,6 +835,315 @@ ${details}
                 }
             } catch (error) {
                 showToast('保存设置失败', 'error');
+            }
+        }
+
+        // ==================== 自动轮询功能 ====================
+
+        // 初始化轮询设置
+        async function initPollingSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+
+                if (data.success) {
+                    pollingInterval = parseInt(data.settings.polling_interval) || 10;
+                    maxPollingCount = parseInt(data.settings.polling_count) || 5;
+
+                    // 如果启用了自动轮询，则开始轮询（后端返回 boolean，兼容处理）
+                    const enablePolling = data.settings.enable_auto_polling === true || data.settings.enable_auto_polling === 'true';
+                    if (enablePolling && currentAccount) {
+                        startPolling();
+                    }
+                }
+            } catch (error) {
+                console.error('初始化轮询设置失败:', error);
+            }
+        }
+
+        // 开始轮询
+        function startPolling() {
+            if (isPolling || !currentAccount) {
+                console.log('[轮询] 无法启动: isPolling=', isPolling, ', currentAccount=', currentAccount);
+                return;
+            }
+
+            isPolling = true;
+            pollingCount = 0;
+            pollingErrorCount = 0; // 重置错误计数
+
+            // 初始化已知邮件ID集合
+            knownEmailIds = new Set(currentEmails.map(email => email.id));
+
+            console.log('[轮询] 已启动，间隔:', pollingInterval, '秒，最大次数:', maxPollingCount);
+
+            // 显示轮询状态指示器
+            showPollingStatusIndicator();
+
+            // 立即执行一次
+            pollForNewEmails();
+
+            // 设置定时器
+            pollingTimer = setInterval(pollForNewEmails, pollingInterval * 1000);
+        }
+
+        // 显示轮询状态指示器
+        function showPollingStatusIndicator() {
+            let indicator = document.getElementById('pollingStatusIndicator');
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'pollingStatusIndicator';
+                indicator.style.cssText = `
+                    position: fixed;
+                    bottom: 24px;
+                    right: 24px;
+                    background-color: #28a745;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+                    z-index: 1000;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    cursor: pointer;
+                `;
+                indicator.innerHTML = `<span style="animation: pulse 1.5s infinite;">🔄</span> 轮询中`;
+                indicator.onclick = () => {
+                    if (confirm('是否停止轮询？')) {
+                        stopPolling(false);
+                    }
+                };
+                document.body.appendChild(indicator);
+            }
+            indicator.style.display = 'flex';
+        }
+
+        // 隐藏轮询状态指示器
+        function hidePollingStatusIndicator() {
+            const indicator = document.getElementById('pollingStatusIndicator');
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+        }
+
+        // 停止轮询
+        function stopPolling(silent = false) {
+            console.log('[轮询] 停止轮询, silent=', silent);
+            if (pollingTimer) {
+                clearInterval(pollingTimer);
+                pollingTimer = null;
+            }
+            isPolling = false;
+            pollingCount = 0;
+            pollingErrorCount = 0;
+            hideNewEmailIndicator();
+            hideAccountNewEmailDot();
+            hidePollingStatusIndicator();
+            // 用户主动停止时显示提示
+            if (!silent) {
+                showToast('已停止轮询', 'info');
+            }
+        }
+
+        // 轮询检查新邮件
+        let pollingErrorCount = 0; // 连续错误计数
+        const MAX_POLLING_ERRORS = 3; // 最大连续错误次数
+
+        async function pollForNewEmails() {
+            if (!currentAccount) {
+                stopPolling(true);
+                return;
+            }
+
+            pollingCount++;
+
+            try {
+                const response = await fetch(`/api/emails/${encodeURIComponent(currentAccount)}?skip=0&limit=10&folder=${currentFolder}`);
+                const data = await response.json();
+
+                if (data.success && data.emails) {
+                    pollingErrorCount = 0; // 重置错误计数
+                    const newEmails = data.emails.filter(email => !knownEmailIds.has(email.id));
+
+                    if (newEmails.length > 0) {
+                        // 发现新邮件
+                        showNewEmailNotification(newEmails);
+
+                        // 更新已知邮件ID集合
+                        newEmails.forEach(email => knownEmailIds.add(email.id));
+
+                        // 更新邮件列表（在现有列表前面插入新邮件）
+                        currentEmails = [...newEmails, ...currentEmails];
+                        renderEmailList(currentEmails);
+                        document.getElementById('emailCount').textContent = `(${currentEmails.length})`;
+
+                        // 显示新邮件指示器（账号列表项红点）
+                        showAccountNewEmailDot(newEmails.length);
+                    }
+                } else {
+                    pollingErrorCount++;
+                }
+            } catch (error) {
+                console.error('轮询新邮件失败:', error);
+                pollingErrorCount++;
+            }
+
+            // 连续错误超过阈值，停止轮询并提示
+            if (pollingErrorCount >= MAX_POLLING_ERRORS) {
+                stopPolling(true);
+                showToast('轮询连续失败，已自动停止', 'error');
+                return;
+            }
+
+            // 检查是否达到最大轮询次数（0 表示持续轮询，不检查次数）
+            if (maxPollingCount > 0 && pollingCount >= maxPollingCount) {
+                stopPolling(true);
+            }
+        }
+
+        // 显示新邮件通知（包含邮箱地址和邮件主题）
+        function showNewEmailNotification(newEmails) {
+            const count = newEmails.length;
+            const firstEmail = newEmails[0];
+            const subject = firstEmail?.subject || '无主题';
+
+            // 请求浏览器通知权限
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const title = count === 1 ? `新邮件 - ${currentAccount}` : `新邮件 (${count}封) - ${currentAccount}`;
+                const body = count === 1 ? subject : `${subject} 等 ${count} 封新邮件`;
+                new Notification(title, {
+                    body: body,
+                    icon: '/static/favicon.ico'
+                });
+            } else if ('Notification' in window && Notification.permission !== 'denied') {
+                Notification.requestPermission();
+            }
+
+            // 显示页面内通知（包含邮箱和主题）
+            const message = count === 1
+                ? `📬 ${currentAccount}: ${subject}`
+                : `📬 ${currentAccount}: ${subject} 等 ${count} 封新邮件`;
+            showToast(message, 'success');
+        }
+
+        // 显示账号列表项上的红点
+        function showAccountNewEmailDot(count) {
+            // 在当前选中的账号项上显示红点
+            const activeItem = document.querySelector('.account-item.active');
+            if (activeItem) {
+                let dot = activeItem.querySelector('.new-email-badge');
+                if (!dot) {
+                    dot = document.createElement('span');
+                    dot.className = 'new-email-badge';
+                    dot.style.cssText = `
+                        position: absolute;
+                        top: 8px;
+                        right: 8px;
+                        background-color: #dc3545;
+                        color: white;
+                        padding: 2px 6px;
+                        border-radius: 10px;
+                        font-size: 11px;
+                        font-weight: 500;
+                        min-width: 18px;
+                        text-align: center;
+                    `;
+                    activeItem.style.position = 'relative';
+                    activeItem.appendChild(dot);
+                }
+                dot.textContent = count;
+                dot.style.display = 'block';
+            }
+
+            // 同时保留右上角指示器（作为备用）
+            showNewEmailIndicator(count);
+        }
+
+        // 隐藏账号列表项上的红点
+        function hideAccountNewEmailDot() {
+            const dots = document.querySelectorAll('.new-email-badge');
+            dots.forEach(dot => dot.style.display = 'none');
+        }
+
+        // 显示新邮件指示器（红点）- 移到右下角
+        function showNewEmailIndicator(count) {
+            let indicator = document.getElementById('newEmailIndicator');
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'newEmailIndicator';
+                indicator.style.cssText = `
+                    position: fixed;
+                    bottom: 70px;
+                    right: 24px;
+                    background-color: #dc3545;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+                    z-index: 1000;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    animation: slideIn 0.3s ease;
+                `;
+                indicator.innerHTML = `<span class="new-email-dot"></span> 新邮件 (${count})`;
+                indicator.onclick = () => {
+                    hideNewEmailIndicator();
+                    hideAccountNewEmailDot();
+                    // 滚动到邮件列表顶部
+                    document.getElementById('emailList').scrollTop = 0;
+                };
+                document.body.appendChild(indicator);
+
+                // 添加动画样式
+                if (!document.getElementById('newEmailIndicatorStyles')) {
+                    const style = document.createElement('style');
+                    style.id = 'newEmailIndicatorStyles';
+                    style.textContent = `
+                        @keyframes slideIn {
+                            from { transform: translateX(100%); opacity: 0; }
+                            to { transform: translateX(0); opacity: 1; }
+                        }
+                        .new-email-dot {
+                            width: 8px;
+                            height: 8px;
+                            background-color: white;
+                            border-radius: 50%;
+                            animation: pulse 1.5s infinite;
+                        }
+                        @keyframes pulse {
+                            0%, 100% { opacity: 1; }
+                            50% { opacity: 0.5; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+            } else {
+                indicator.innerHTML = `<span class="new-email-dot"></span> 新邮件 (${count})`;
+                indicator.style.display = 'flex';
+            }
+        }
+
+        // 隐藏新邮件指示器
+        function hideNewEmailIndicator() {
+            const indicator = document.getElementById('newEmailIndicator');
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+        }
+
+        // 切换轮询状态
+        function togglePolling() {
+            if (isPolling) {
+                stopPolling();
+            } else {
+                startPolling();
             }
         }
 
@@ -1421,17 +1776,79 @@ ${details}
 
         // ==================== 批量操作 ====================
 
+        // 全局选中的账号 ID 集合（跨分组保持）
+        let selectedAccountIds = new Set();
+
         // 更新批量操作栏状态
         function updateBatchActionBar() {
-            const checked = document.querySelectorAll('.account-select-checkbox:checked');
+            // 同步 DOM 复选框状态到全局 Set
+            const allCheckboxes = document.querySelectorAll('.account-select-checkbox');
+            allCheckboxes.forEach(cb => {
+                const id = parseInt(cb.value);
+                if (cb.checked) {
+                    selectedAccountIds.add(id);
+                } else {
+                    selectedAccountIds.delete(id);
+                }
+            });
+
             const bar = document.getElementById('batchActionBar');
             const countSpan = document.getElementById('selectedCount');
 
-            if (checked.length > 0) {
+            if (selectedAccountIds.size > 0) {
                 bar.style.display = 'flex';
-                countSpan.textContent = `已选 ${checked.length} 项`;
+                countSpan.textContent = `已选 ${selectedAccountIds.size} 项`;
             } else {
                 bar.style.display = 'none';
+            }
+        }
+
+        // 显示批量删除确认
+        function showBatchDeleteConfirm() {
+            if (selectedAccountIds.size === 0) {
+                showToast('请选择要删除的账号', 'error');
+                return;
+            }
+
+            if (!confirm(`确定要删除选中的 ${selectedAccountIds.size} 个账号吗？此操作不可恢复！`)) {
+                return;
+            }
+
+            batchDeleteAccounts();
+        }
+
+        // 批量删除账号
+        async function batchDeleteAccounts() {
+            const accountIds = Array.from(selectedAccountIds);
+
+            // 确保使用最新的 CSRF token
+            await initCSRFToken();
+
+            try {
+                const response = await fetch('/api/accounts/batch-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account_ids: accountIds })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    // 清空选中状态
+                    selectedAccountIds.clear();
+                    // 刷新分组和邮箱列表
+                    loadGroups();
+                    if (currentGroupId) {
+                        delete accountsCache[currentGroupId];
+                        loadAccountsByGroup(currentGroupId, true);
+                    }
+                    // 更新批量操作栏
+                    updateBatchActionBar();
+                } else {
+                    showToast(data.error || '删除失败', 'error');
+                }
+            } catch (error) {
+                showToast('删除失败', 'error');
             }
         }
 
@@ -1479,8 +1896,7 @@ ${details}
                 return;
             }
 
-            const checked = document.querySelectorAll('.account-select-checkbox:checked');
-            const accountIds = Array.from(checked).map(cb => parseInt(cb.value));
+            const accountIds = Array.from(selectedAccountIds);
 
             if (accountIds.length === 0) return;
 
@@ -1499,12 +1915,14 @@ ${details}
                 if (data.success) {
                     showToast(data.message, 'success');
                     hideBatchTagModal();
+                    // 清空选中状态
+                    selectedAccountIds.clear();
                     // 刷新列表
+                    loadGroups();
                     if (currentGroupId) {
+                        delete accountsCache[currentGroupId];
                         loadAccountsByGroup(currentGroupId, true);
                     }
-                    // 隐藏操作栏
-                    document.querySelectorAll('.account-select-checkbox').forEach(cb => cb.checked = false);
                     updateBatchActionBar();
                 } else {
                     showToast(data.error || '操作失败', 'error');
@@ -1554,8 +1972,7 @@ ${details}
                 return;
             }
 
-            const checked = document.querySelectorAll('.account-select-checkbox:checked');
-            const accountIds = Array.from(checked).map(cb => parseInt(cb.value));
+            const accountIds = Array.from(selectedAccountIds);
 
             if (accountIds.length === 0) return;
 
@@ -1573,6 +1990,8 @@ ${details}
                 if (data.success) {
                     showToast(data.message, 'success');
                     hideBatchMoveGroupModal();
+                    // 清空选中状态
+                    selectedAccountIds.clear();
                     // 刷新分组列表
                     loadGroups();
                     // 刷新当前分组的邮箱列表
@@ -1580,8 +1999,6 @@ ${details}
                         delete accountsCache[currentGroupId];
                         loadAccountsByGroup(currentGroupId, true);
                     }
-                    // 清除选择
-                    document.querySelectorAll('.account-select-checkbox').forEach(cb => cb.checked = false);
                     updateBatchActionBar();
                 } else {
                     showToast(data.error || '操作失败', 'error');

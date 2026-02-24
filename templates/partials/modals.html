@@ -292,6 +292,44 @@
                         <div class="form-hint">建议设置为 5-10 秒，避免频繁请求触发 API 限流</div>
                     </div>
                 </div>
+
+                <div style="border-top: 1px solid #e5e5e5; margin: 24px 0; padding-top: 24px;">
+                    <h4 style="font-size: 15px; font-weight: 600; margin-bottom: 16px;">🔔 自动轮询设置</h4>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="enableAutoPolling">
+                            <span class="form-label" style="margin: 0;">启用自动轮询</span>
+                        </label>
+                        <div class="form-hint">开启后自动检查当前账号是否有新邮件</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">
+                            轮询间隔
+                            <span style="font-size: 12px; color: #999; font-weight: 400;">（检查新邮件的时间间隔）</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="number" class="form-input" id="pollingInterval" min="5" max="300" value="10"
+                                placeholder="10" style="max-width: 120px;">
+                            <span style="font-size: 14px; color: #666; font-weight: 500;">秒</span>
+                        </div>
+                        <div class="form-hint">范围：5-300 秒，建议设置为 10-30 秒</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">
+                            轮询次数
+                            <span style="font-size: 12px; color: #999; font-weight: 400;">（最多轮询多少次后停止）</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <input type="number" class="form-input" id="pollingCount" min="1" max="100" value="5"
+                                placeholder="5" style="max-width: 120px;">
+                            <span style="font-size: 14px; color: #666; font-weight: 500;">次</span>
+                        </div>
+                        <div class="form-hint">范围：1-100 次，设置为 0 表示持续轮询</div>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="hideSettingsModal()">取消</button>
