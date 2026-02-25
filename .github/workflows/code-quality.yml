@@ -1,0 +1,75 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - ".github/workflows/code-quality.yml"
+  pull_request:
+    paths:
+      - "**.py"
+      - "requirements.txt"
+      - ".github/workflows/code-quality.yml"
+  workflow_dispatch:
+
+jobs:
+  linting:
+    name: Code Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy
+
+      - name: Run Black (Code Formatter Check)
+        run: black --check --diff .
+
+      - name: Run isort (Import Sorting Check)
+        run: isort --check-only --diff .
+
+      - name: Run Flake8 (Linting)
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run Flake8 (Complexity Check)
+        run: flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit[toml]
+
+      - name: Run Bandit Security Scan
+        run: bandit -r . -f json -o bandit-report.json || true
+
+      - name: Display Bandit Results
+        run: |
+          if [ -f bandit-report.json ]; then
+            cat bandit-report.json
+          fi
