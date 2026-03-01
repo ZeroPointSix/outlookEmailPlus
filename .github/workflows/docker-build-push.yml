@@ -10,6 +10,7 @@ on:
       - 'requirements.txt'
       - 'Dockerfile'
       - 'templates/**'
+      - '.github/workflows/docker-build-push.yml'
   workflow_dispatch:
 
 env:
@@ -17,9 +18,28 @@ env:
   DOCKERHUB_IMAGE: guangshanshui/outlook-email-plus
 
 jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      has_secrets: ${{ steps.check.outputs.has_secrets }}
+    steps:
+      - id: check
+        env:
+          HAS_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          HAS_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$HAS_USERNAME" ] && [ -n "$HAS_TOKEN" ]; then
+            echo "has_secrets=true" >> $GITHUB_OUTPUT
+            echo "✅ Docker Hub credentials found"
+          else
+            echo "has_secrets=false" >> $GITHUB_OUTPUT
+            echo "❌ Docker Hub credentials not configured"
+            echo "Please set DOCKERHUB_USERNAME and DOCKERHUB_TOKEN in repository secrets"
+          fi
+
   build-and-push:
-    # 未配置 Docker Hub 凭据时跳过，避免在 fork/未配置 secrets 场景失败
-    if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    needs: check-secrets
+    if: needs.check-secrets.outputs.has_secrets == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
