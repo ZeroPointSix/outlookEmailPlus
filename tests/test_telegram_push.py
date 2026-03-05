@@ -17,6 +17,7 @@
 
 import json
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 from tests._import_app import clear_login_attempts, import_web_app_module
@@ -444,12 +445,16 @@ class TestRunTelegramPushJob(unittest.TestCase):
             )
             self._set_settings()
 
+            # 使用近期时间（PUSH_RECENCY_HOURS 内）
+            from datetime import timedelta
+            recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
             emails = [
-                self._make_email("2026-03-04T10:00:00"),
-                self._make_email("2026-03-04T11:00:00"),
+                self._make_email(recent),
+                self._make_email(recent),
             ]
             with patch("outlook_web.services.telegram_push._fetch_new_emails_imap", return_value=emails), \
-                 patch("outlook_web.services.telegram_push._send_telegram_message", return_value=True) as mock_send:
+                 patch("outlook_web.services.telegram_push._send_telegram_message", return_value=True) as mock_send, \
+                 patch("outlook_web.services.telegram_push.TELEGRAM_PUSH_DELAY_SEC", 0):
 
                 self._run_job()
 
@@ -473,8 +478,10 @@ class TestRunTelegramPushJob(unittest.TestCase):
             _insert_test_account(db, "bb@tgjob.com", enabled=1, last_checked="2026-01-01T00:00:00")
             self._set_settings()
 
-            emails_a = [self._make_email(f"2026-03-04T10:{i:02d}:00") for i in range(12)]
-            emails_b = [self._make_email(f"2026-03-04T11:{i:02d}:00") for i in range(15)]
+            from datetime import timedelta
+            recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+            emails_a = [self._make_email(recent) for _ in range(12)]
+            emails_b = [self._make_email(recent) for _ in range(15)]
 
             call_count = 0
 
@@ -490,7 +497,8 @@ class TestRunTelegramPushJob(unittest.TestCase):
                 return True
 
             with patch("outlook_web.services.telegram_push._fetch_new_emails_imap", side_effect=fake_fetch), \
-                 patch("outlook_web.services.telegram_push._send_telegram_message", side_effect=fake_send):
+                 patch("outlook_web.services.telegram_push._send_telegram_message", side_effect=fake_send), \
+                 patch("outlook_web.services.telegram_push.TELEGRAM_PUSH_DELAY_SEC", 0):
                 self._run_job()
 
             self.assertEqual(call_count, 20, f"Expected 20, got {call_count}")
@@ -534,9 +542,12 @@ class TestRunTelegramPushJob(unittest.TestCase):
             )
             self._set_settings()
 
-            emails = [self._make_email("2026-03-04T10:00:00"), self._make_email("2026-03-04T11:00:00")]
+            from datetime import timedelta
+            recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+            emails = [self._make_email(recent), self._make_email(recent)]
             with patch("outlook_web.services.telegram_push._fetch_new_emails_imap", return_value=emails), \
-                 patch("outlook_web.services.telegram_push._send_telegram_message", return_value=False):
+                 patch("outlook_web.services.telegram_push._send_telegram_message", return_value=False), \
+                 patch("outlook_web.services.telegram_push.TELEGRAM_PUSH_DELAY_SEC", 0):
                 try:
                     self._run_job()
                 except Exception as e:
@@ -984,7 +995,9 @@ class TestParallelJobBehavior(unittest.TestCase):
                                  last_checked="2026-03-01T00:00:00")
             self._set_settings()
 
-            emails = [self._make_email("2026-03-04T10:00:00")]
+            from datetime import timedelta
+            recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+            emails = [self._make_email(recent)]
 
             send_calls = []
             def fake_send(token, chat, msg):
@@ -992,7 +1005,8 @@ class TestParallelJobBehavior(unittest.TestCase):
                 return False  # 发送失败
 
             with patch("outlook_web.services.telegram_push._fetch_new_emails_imap", return_value=emails), \
-                 patch("outlook_web.services.telegram_push._send_telegram_message", side_effect=fake_send):
+                 patch("outlook_web.services.telegram_push._send_telegram_message", side_effect=fake_send), \
+                 patch("outlook_web.services.telegram_push.TELEGRAM_PUSH_DELAY_SEC", 0):
                 self._run_job()
 
             self.assertEqual(len(send_calls), 1, "应尝试发送 1 次")
@@ -1008,7 +1022,9 @@ class TestParallelJobBehavior(unittest.TestCase):
                                           last_checked="2026-03-01T00:00:00")
             self._set_settings()
 
-            emails = [self._make_email("2026-03-04T10:00:00")]
+            from datetime import timedelta
+            recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%S")
+            emails = [self._make_email(recent)]
 
             def fake_fetch(account, since):
                 if account["email"] == "ok@parallel.com":
@@ -1016,7 +1032,8 @@ class TestParallelJobBehavior(unittest.TestCase):
                 raise ConnectionError("IMAP timeout")
 
             with patch("outlook_web.services.telegram_push._fetch_new_emails_imap", side_effect=fake_fetch), \
-                 patch("outlook_web.services.telegram_push._send_telegram_message", return_value=True):
+                 patch("outlook_web.services.telegram_push._send_telegram_message", return_value=True), \
+                 patch("outlook_web.services.telegram_push.TELEGRAM_PUSH_DELAY_SEC", 0):
                 self._run_job()
 
             ok_cursor = db.execute(
@@ -1063,6 +1080,58 @@ class TestParallelJobBehavior(unittest.TestCase):
             set_setting("telegram_poll_interval", "")
             interval = _get_telegram_interval(self.app)
             self.assertEqual(interval, 60)
+
+    def test_recency_filter_skips_old_emails(self):
+        """PUSH_RECENCY_HOURS: 超过 12 小时的邮件应被跳过"""
+        with self.app.app_context():
+            from outlook_web.db import get_db
+            db = get_db()
+            _insert_test_account(db, "old@parallel.com", enabled=1,
+                                 last_checked="2026-01-01T00:00:00")
+            self._set_settings()
+
+            # 创建一封很旧的邮件（比当前时间早 24 小时以上）
+            from datetime import timedelta
+            old_time = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+            old_emails = [self._make_email(old_time)]
+
+            send_calls = []
+            def fake_send(token, chat, msg):
+                send_calls.append(msg)
+                return True
+
+            with patch("outlook_web.services.telegram_push._fetch_new_emails_imap", return_value=old_emails), \
+                 patch("outlook_web.services.telegram_push._send_telegram_message", side_effect=fake_send), \
+                 patch("outlook_web.services.telegram_push.TELEGRAM_PUSH_DELAY_SEC", 0):
+                self._run_job()
+
+            self.assertEqual(len(send_calls), 0, "超过 12 小时的邮件不应推送")
+
+    def test_recent_email_passes_recency_filter(self):
+        """PUSH_RECENCY_HOURS: 12 小时内的邮件应正常推送"""
+        with self.app.app_context():
+            from outlook_web.db import get_db
+            db = get_db()
+            _insert_test_account(db, "new@parallel.com", enabled=1,
+                                 last_checked="2026-01-01T00:00:00")
+            self._set_settings()
+
+            # 创建一封 1 小时前的邮件
+            from datetime import timedelta
+            recent_time = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+            recent_emails = [self._make_email(recent_time)]
+
+            send_calls = []
+            def fake_send(token, chat, msg):
+                send_calls.append(msg)
+                return True
+
+            with patch("outlook_web.services.telegram_push._fetch_new_emails_imap", return_value=recent_emails), \
+                 patch("outlook_web.services.telegram_push._send_telegram_message", side_effect=fake_send), \
+                 patch("outlook_web.services.telegram_push.TELEGRAM_PUSH_DELAY_SEC", 0):
+                self._run_job()
+
+            self.assertEqual(len(send_calls), 1, "1 小时内的邮件应正常推送")
 
 
 if __name__ == "__main__":

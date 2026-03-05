@@ -21,6 +21,8 @@ MAX_TELEGRAM_LENGTH = 4096
 MAX_PREVIEW_LENGTH = 200
 MAX_EMAILS_PER_FETCH = 50
 MAX_SENT_PER_JOB = 20
+PUSH_RECENCY_HOURS = 12  # 超过此小时数的邮件不推送（防止首次启用时轰炸）
+TELEGRAM_PUSH_DELAY_SEC = 1.5  # 连续发送 Telegram 消息的间隔（防限流）
 
 
 def _escape_html(text: str) -> str:
@@ -355,6 +357,9 @@ def run_telegram_push_job(app) -> None:
             return
 
         job_start_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        # 计算 recency 截止时间（超过此时间的邮件不推送）
+        from datetime import timedelta
+        recency_cutoff = (datetime.now(timezone.utc) - timedelta(hours=PUSH_RECENCY_HOURS)).strftime("%Y-%m-%dT%H:%M:%S")
         sent_count = 0
 
         # 并行获取所有账号邮件
@@ -382,9 +387,15 @@ def run_telegram_push_job(app) -> None:
             for em in sorted(emails, key=lambda e: e.get("received_at", "")):
                 if sent_count >= MAX_SENT_PER_JOB:
                     break
+                # 跳过超过 PUSH_RECENCY_HOURS 的旧邮件
+                if em.get("received_at", "") < recency_cutoff:
+                    continue
                 msg = _build_telegram_message(account["email"], em)
                 if _send_telegram_message(bot_token, chat_id, msg):
                     sent_count += 1
+                    # 消息间延迟，防止 Telegram API 限流
+                    if TELEGRAM_PUSH_DELAY_SEC > 0:
+                        time.sleep(TELEGRAM_PUSH_DELAY_SEC)
 
             update_telegram_cursor(account["id"], job_start_time)
 
