@@ -154,13 +154,11 @@ class ExternalApiBaseTest(unittest.TestCase):
             from outlook_web.db import get_db
 
             db = get_db()
-            rows = db.execute(
-                """
+            rows = db.execute("""
                 SELECT consumer_key, consumer_name, endpoint, total_count, success_count, error_count
                 FROM external_api_consumer_usage_daily
                 ORDER BY id ASC
-                """
-            ).fetchall()
+                """).fetchall()
         return [dict(row) for row in rows]
 
 
@@ -766,8 +764,18 @@ class ExternalApiSchemaValidationTests(ExternalApiBaseTest):
 
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json().get("data", {})
-        for key in ("id", "email_address", "from_address", "subject", "content", "html_content", "raw_content",
-                     "timestamp", "created_at", "has_html"):
+        for key in (
+            "id",
+            "email_address",
+            "from_address",
+            "subject",
+            "content",
+            "html_content",
+            "raw_content",
+            "timestamp",
+            "created_at",
+            "has_html",
+        ):
             self.assertIn(key, data, f"MessageDetail 缺少字段: {key}")
 
     @patch("outlook_web.services.graph.get_email_raw_graph")
@@ -820,7 +828,16 @@ class ExternalApiSchemaValidationTests(ExternalApiBaseTest):
 
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json().get("data", {})
-        for key in ("status", "service", "version", "server_time_utc", "database", "upstream_probe_ok", "last_probe_at", "last_probe_error"):
+        for key in (
+            "status",
+            "service",
+            "version",
+            "server_time_utc",
+            "database",
+            "upstream_probe_ok",
+            "last_probe_at",
+            "last_probe_error",
+        ):
             self.assertIn(key, data, f"HealthData 缺少字段: {key}")
 
     def test_capabilities_response_schema_has_required_fields(self):
@@ -867,8 +884,7 @@ class ExternalApiRawFieldTrimTests(ExternalApiBaseTest):
         data = resp.get_json().get("data", {})
         allowed_keys = {"id", "email_address", "raw_content", "method"}
         actual_keys = set(data.keys())
-        self.assertEqual(actual_keys, allowed_keys,
-                         f"raw 接口应仅返回 {allowed_keys}，实际返回 {actual_keys}")
+        self.assertEqual(actual_keys, allowed_keys, f"raw 接口应仅返回 {allowed_keys}，实际返回 {actual_keys}")
         self.assertEqual(data["raw_content"], "MIME-Version: 1.0\r\nraw content")
         # 不应包含详情字段
         self.assertNotIn("content", data)
@@ -1273,10 +1289,12 @@ class ExternalApiVerificationConfidenceTests(ExternalApiBaseTest):
         self._set_external_api_key("abc123")
         mock_list.return_value = {
             "success": True,
-            "emails": [self._graph_email(
-                subject="Runpod - 50% OFF GPU Instances",
-                sender="marketing@runpod.io",
-            )],
+            "emails": [
+                self._graph_email(
+                    subject="Runpod - 50% OFF GPU Instances",
+                    sender="marketing@runpod.io",
+                )
+            ],
         }
         # 关键：detail 的 subject 也要与 email 列表一致（营销主题）
         marketing_detail = {
@@ -1308,10 +1326,12 @@ class ExternalApiVerificationConfidenceTests(ExternalApiBaseTest):
         self._set_external_api_key("abc123")
         mock_list.return_value = {
             "success": True,
-            "emails": [self._graph_email(
-                subject="Weekly Newsletter - Check out new features",
-                sender="news@example.com",
-            )],
+            "emails": [
+                self._graph_email(
+                    subject="Weekly Newsletter - Check out new features",
+                    sender="news@example.com",
+                )
+            ],
         }
         mock_detail.return_value = {
             "id": "msg-1",
@@ -1541,8 +1561,7 @@ class ExternalApiVerificationConfidenceTests(ExternalApiBaseTest):
             headers=self._auth_headers(),
         )
 
-        self.assertEqual(resp.status_code, 404,
-                         "'discount code' 语境不应让普通链接通过门控")
+        self.assertEqual(resp.status_code, 404, "'discount code' 语境不应让普通链接通过门控")
 
     @patch("outlook_web.services.graph.get_email_raw_graph")
     @patch("outlook_web.services.graph.get_email_detail_graph")
@@ -1569,8 +1588,9 @@ class ExternalApiVerificationConfidenceTests(ExternalApiBaseTest):
             headers=self._auth_headers(),
         )
 
-        self.assertEqual(resp.status_code, 404,
-                         "'confirm your order' 不应让普通链接通过门控")
+        self.assertEqual(resp.status_code, 404, "'confirm your order' 不应让普通链接通过门控")
+
+
 # ---------------------------------------------------------------------------
 class ExternalApiRegressionExtendedTests(ExternalApiBaseTest):
     """TC-REG-02, TC-REG-05"""
@@ -1605,6 +1625,7 @@ class ExternalApiRegressionExtendedTests(ExternalApiBaseTest):
         # external_api_key 不应被清空
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
+
             key = settings_repo.get_external_api_key()
             self.assertTrue(key, "external_api_key 不应被清空")
 
@@ -1647,8 +1668,7 @@ class ExternalApiAuditTests(ExternalApiBaseTest):
         audit_logs = self._external_audit_logs()
         for log in audit_logs:
             details_str = json.dumps(log) if isinstance(log, dict) else str(log)
-            self.assertNotIn("super-secret-api-key-12345", details_str,
-                             "审计日志不应包含明文 API Key")
+            self.assertNotIn("super-secret-api-key-12345", details_str, "审计日志不应包含明文 API Key")
 
 
 if __name__ == "__main__":
@@ -1677,27 +1697,33 @@ class ExternalApiGuardBaseTest(ExternalApiBaseTest):
     def _set_public_mode(self, enabled: bool):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
+
             settings_repo.set_setting("external_api_public_mode", "true" if enabled else "false")
 
     def _set_ip_whitelist(self, ips: list):
         import json as _json
+
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
+
             settings_repo.set_setting("external_api_ip_whitelist", _json.dumps(ips))
 
     def _set_rate_limit(self, limit: int):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
+
             settings_repo.set_setting("external_api_rate_limit_per_minute", str(limit))
 
     def _set_disable_feature(self, feature: str, disabled: bool):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
+
             settings_repo.set_setting(f"external_api_disable_{feature}", "true" if disabled else "false")
 
     def _clear_rate_limits(self):
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             db.execute("DELETE FROM external_api_rate_limits")
             db.commit()
@@ -2025,7 +2051,6 @@ class GuardSettingsApiTests(ExternalApiGuardBaseTest):
             self.assertTrue(s["external_api_disable_wait_message"])
 
 
-
 # ======================================================================
 # P2 异步探测 (probe) 测试
 # ======================================================================
@@ -2039,6 +2064,7 @@ class ExternalApiProbeBaseTest(ExternalApiBaseTest):
         with self.app.app_context():
             from outlook_web.db import get_db
             from outlook_web.repositories import settings as settings_repo
+
             db = get_db()
             db.execute("DELETE FROM external_probe_cache")
             db.commit()
@@ -2163,10 +2189,12 @@ class ProbePollTests(ExternalApiProbeBaseTest):
     def test_poll_marks_expired_as_timeout(self):
         """TC-PROBE-09: 过期的 pending 探测被标记为 timeout"""
         from datetime import datetime, timedelta, timezone
+
         email_addr = self._insert_outlook_account()
         self._set_external_api_key("abc123")
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             past = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
             db.execute(
@@ -2179,18 +2207,21 @@ class ProbePollTests(ExternalApiProbeBaseTest):
 
         with self.app.app_context():
             from outlook_web.services.external_api import poll_pending_probes
+
             poll_pending_probes()
 
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             row = db.execute("SELECT status FROM external_probe_cache WHERE id = ?", ("expired-probe-1",)).fetchone()
             self.assertEqual(row["status"], "timeout")
 
     def test_poll_matches_new_email(self):
         """TC-PROBE-10: 后台轮询命中新邮件时标记为 matched"""
-        from unittest.mock import patch
         from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
         email_addr = self._insert_outlook_account()
         self._set_external_api_key("abc123")
 
@@ -2200,6 +2231,7 @@ class ProbePollTests(ExternalApiProbeBaseTest):
 
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             db.execute(
                 """INSERT INTO external_probe_cache
@@ -2218,10 +2250,12 @@ class ProbePollTests(ExternalApiProbeBaseTest):
         with self.app.app_context():
             with patch("outlook_web.services.external_api.get_latest_message_for_external", return_value=mock_msg):
                 from outlook_web.services.external_api import poll_pending_probes
+
                 poll_pending_probes()
 
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             row = db.execute("SELECT * FROM external_probe_cache WHERE id = ?", ("match-probe-1",)).fetchone()
             self.assertEqual(row["status"], "matched")
@@ -2230,9 +2264,11 @@ class ProbePollTests(ExternalApiProbeBaseTest):
     def test_cleanup_old_probes(self):
         """TC-PROBE-11: cleanup 清理过期已完成探测"""
         from datetime import datetime, timedelta, timezone
+
         email_addr = self._insert_outlook_account()
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             old = (datetime.now(timezone.utc) - timedelta(minutes=60)).isoformat()
             db.execute(
@@ -2245,19 +2281,22 @@ class ProbePollTests(ExternalApiProbeBaseTest):
 
         with self.app.app_context():
             from outlook_web.services.external_api import cleanup_expired_probes
+
             deleted = cleanup_expired_probes(max_age_minutes=30)
             self.assertGreaterEqual(deleted, 1)
 
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             row = db.execute("SELECT * FROM external_probe_cache WHERE id = ?", ("old-probe-1",)).fetchone()
             self.assertIsNone(row)
 
     def test_poll_handles_upstream_error(self):
         """TC-PROBE-12: 轮询中上游错误标记为 error"""
-        from unittest.mock import patch
         from datetime import datetime, timedelta, timezone
+        from unittest.mock import patch
+
         email_addr = self._insert_outlook_account()
 
         now = datetime.now(timezone.utc)
@@ -2266,6 +2305,7 @@ class ProbePollTests(ExternalApiProbeBaseTest):
 
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             db.execute(
                 """INSERT INTO external_probe_cache
@@ -2276,13 +2316,16 @@ class ProbePollTests(ExternalApiProbeBaseTest):
             db.commit()
 
         with self.app.app_context():
-            with patch("outlook_web.services.external_api.get_latest_message_for_external",
-                        side_effect=RuntimeError("Network down")):
+            with patch(
+                "outlook_web.services.external_api.get_latest_message_for_external", side_effect=RuntimeError("Network down")
+            ):
                 from outlook_web.services.external_api import poll_pending_probes
+
                 poll_pending_probes()
 
         with self.app.app_context():
             from outlook_web.db import get_db
+
             db = get_db()
             row = db.execute("SELECT * FROM external_probe_cache WHERE id = ?", ("error-probe-1",)).fetchone()
             self.assertEqual(row["status"], "error")

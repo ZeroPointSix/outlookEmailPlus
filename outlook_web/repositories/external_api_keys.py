@@ -170,10 +170,14 @@ def update_external_api_key(
         """,
         (
             str(existing["name"] if name is None else name).strip(),
-            encrypt_data(str(api_key).strip()) if api_key is not None else db.execute(
-                "SELECT api_key_encrypted FROM external_api_keys WHERE id = ?",
-                (int(key_id),),
-            ).fetchone()["api_key_encrypted"],
+            (
+                encrypt_data(str(api_key).strip())
+                if api_key is not None
+                else db.execute(
+                    "SELECT api_key_encrypted FROM external_api_keys WHERE id = ?",
+                    (int(key_id),),
+                ).fetchone()["api_key_encrypted"]
+            ),
             _allowed_emails_json(existing["allowed_emails"] if allowed_emails is None else allowed_emails),
             int(_coerce_bool(existing["enabled"] if enabled is None else enabled, bool(existing["enabled"]))),
             int(key_id),
@@ -256,14 +260,12 @@ def find_external_api_key_by_plaintext(provided_key: str) -> dict[str, Any] | No
         return None
 
     db = get_db()
-    rows = db.execute(
-        """
+    rows = db.execute("""
         SELECT id, name, api_key_encrypted, allowed_emails_json, enabled, last_used_at, created_at, updated_at
         FROM external_api_keys
         WHERE enabled = 1
         ORDER BY id ASC
-        """
-    ).fetchall()
+        """).fetchall()
 
     for row in rows:
         plain = _decrypt_api_key(row["api_key_encrypted"] or "")

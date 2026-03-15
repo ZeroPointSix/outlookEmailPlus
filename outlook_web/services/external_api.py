@@ -859,9 +859,7 @@ def get_probe_status(probe_id: str) -> Dict[str, Any]:
         raise InvalidParamError("probe_id 不能为空")
 
     db = get_db()
-    row = db.execute(
-        "SELECT * FROM external_probe_cache WHERE id = ?", (probe_id,)
-    ).fetchone()
+    row = db.execute("SELECT * FROM external_probe_cache WHERE id = ?", (probe_id,)).fetchone()
 
     if not row:
         raise MailNotFoundError("探测请求不存在", data={"probe_id": probe_id})
@@ -889,6 +887,82 @@ def get_probe_status(probe_id: str) -> Dict[str, Any]:
     return result
 
 
+def _mark_expired_pending_probes(db: Any, now: str) -> None:
+    db.execute(
+        """
+        UPDATE external_probe_cache
+        SET status = 'timeout',
+            error_message = '等待超时，未检测到匹配邮件',
+            updated_at = ?
+        WHERE status = 'pending' AND expires_at <= ?
+        """,
+        (now, now),
+    )
+    db.commit()
+
+
+def _load_pending_probe_rows(db: Any, now: str, *, limit: int = 50) -> list[Any]:
+    return db.execute(
+        """
+        SELECT * FROM external_probe_cache
+        WHERE status = 'pending' AND expires_at > ?
+        ORDER BY created_at ASC
+        LIMIT ?
+        """,
+        (now, limit),
+    ).fetchall()
+
+
+def _get_probe_baseline_timestamp(row: Any) -> int:
+    try:
+        created_str = row["created_at"] or ""
+        if created_str.endswith("Z"):
+            created_str = created_str[:-1] + "+00:00"
+        created_dt = datetime.fromisoformat(created_str)
+        if created_dt.tzinfo is None:
+            created_dt = created_dt.replace(tzinfo=timezone.utc)
+        return int(created_dt.timestamp())
+    except Exception:
+        return int(time.time()) - int(row["timeout_seconds"] or 0)
+
+
+def _mark_probe_matched(db: Any, probe_id: str, latest: Dict[str, Any], now: str) -> None:
+    db.execute(
+        """
+        UPDATE external_probe_cache
+        SET status = 'matched', result_json = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (json.dumps(latest, ensure_ascii=False), now, probe_id),
+    )
+    db.commit()
+
+
+def _mark_probe_error(db: Any, probe_id: str, exc: Exception, now: str) -> None:
+    db.execute(
+        """
+        UPDATE external_probe_cache
+        SET status = 'error', error_code = 'PROBE_ERROR',
+            error_message = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (str(exc)[:500], now, probe_id),
+    )
+    db.commit()
+
+
+def _poll_single_probe(db: Any, row: Any, now: str) -> None:
+    latest = get_latest_message_for_external(
+        email_addr=row["email_addr"],
+        folder=row["folder"],
+        from_contains=row["from_contains"],
+        subject_contains=row["subject_contains"],
+        since_minutes=row["since_minutes"],
+    )
+    if int(latest.get("timestamp") or 0) >= _get_probe_baseline_timestamp(row):
+        _mark_probe_matched(db, row["id"], latest, now)
+
+
 def poll_pending_probes(app: Any = None) -> int:
     """
     后台任务：遍历所有 pending 状态的探测请求，执行一轮轮询。
@@ -904,79 +978,18 @@ def poll_pending_probes(app: Any = None) -> int:
     try:
         db = get_db()
         now = datetime.now(timezone.utc).isoformat()
-
-        # 1. 将已过期的 pending 标记为 timeout
-        db.execute(
-            """
-            UPDATE external_probe_cache
-            SET status = 'timeout',
-                error_message = '等待超时，未检测到匹配邮件',
-                updated_at = ?
-            WHERE status = 'pending' AND expires_at <= ?
-            """,
-            (now, now),
-        )
-        db.commit()
-
-        # 2. 获取仍在 pending 的探测
-        rows = db.execute(
-            """
-            SELECT * FROM external_probe_cache
-            WHERE status = 'pending' AND expires_at > ?
-            ORDER BY created_at ASC
-            LIMIT 50
-            """,
-            (now,),
-        ).fetchall()
+        _mark_expired_pending_probes(db, now)
+        rows = _load_pending_probe_rows(db, now)
 
         processed = 0
         for row in rows:
             processed += 1
-            probe_id = row["id"]
-            # 基线时间戳：探测创建时间（只匹配创建后到达的新邮件）
             try:
-                created_str = row["created_at"] or ""
-                if created_str.endswith("Z"):
-                    created_str = created_str[:-1] + "+00:00"
-                created_dt = datetime.fromisoformat(created_str)
-                if created_dt.tzinfo is None:
-                    created_dt = created_dt.replace(tzinfo=timezone.utc)
-                baseline_ts = int(created_dt.timestamp())
-            except Exception:
-                baseline_ts = int(time.time()) - row["timeout_seconds"]
-
-            try:
-                latest = get_latest_message_for_external(
-                    email_addr=row["email_addr"],
-                    folder=row["folder"],
-                    from_contains=row["from_contains"],
-                    subject_contains=row["subject_contains"],
-                    since_minutes=row["since_minutes"],
-                )
-                msg_ts = int(latest.get("timestamp") or 0)
-                if msg_ts >= baseline_ts:
-                    db.execute(
-                        """
-                        UPDATE external_probe_cache
-                        SET status = 'matched', result_json = ?, updated_at = ?
-                        WHERE id = ?
-                        """,
-                        (json.dumps(latest, ensure_ascii=False), now, probe_id),
-                    )
-                    db.commit()
+                _poll_single_probe(db, row, now)
             except MailNotFoundError:
-                pass  # 未找到邮件，保持 pending
+                continue
             except Exception as exc:
-                db.execute(
-                    """
-                    UPDATE external_probe_cache
-                    SET status = 'error', error_code = 'PROBE_ERROR',
-                        error_message = ?, updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (str(exc)[:500], now, probe_id),
-                )
-                db.commit()
+                _mark_probe_error(db, row["id"], exc, now)
 
         return processed
     finally:

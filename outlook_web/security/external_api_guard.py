@@ -24,7 +24,6 @@ from outlook_web.repositories import settings as settings_repo
 from outlook_web.security.auth import get_client_ip as get_trusted_client_ip
 from outlook_web.services import external_api as external_api_service
 
-
 # ── IP 白名单 ────────────────────────────────────────
 
 
@@ -75,11 +74,16 @@ def check_ip_whitelist() -> Optional[Any]:
     client_ip = _get_client_ip()
     if _ip_in_whitelist(client_ip, whitelist):
         return None
-    return jsonify(external_api_service.fail(
-        code="IP_NOT_ALLOWED",
-        message="当前 IP 不在白名单中",
-        data={"ip": client_ip},
-    )), 403
+    return (
+        jsonify(
+            external_api_service.fail(
+                code="IP_NOT_ALLOWED",
+                message="当前 IP 不在白名单中",
+                data={"ip": client_ip},
+            )
+        ),
+        403,
+    )
 
 
 # ── 高风险接口禁用 ────────────────────────────────────
@@ -100,11 +104,16 @@ def check_feature_enabled(feature: str) -> Optional[Any]:
         disabled = settings_repo.get_external_api_disable_raw_content()
     if not disabled:
         return None
-    return jsonify(external_api_service.fail(
-        code="FEATURE_DISABLED",
-        message=f"功能 {feature} 在公网模式下已禁用",
-        data={"feature": feature},
-    )), 403
+    return (
+        jsonify(
+            external_api_service.fail(
+                code="FEATURE_DISABLED",
+                message=f"功能 {feature} 在公网模式下已禁用",
+                data={"feature": feature},
+            )
+        ),
+        403,
+    )
 
 
 # ── 基础限流（滑动窗口，按 IP + 分钟桶） ─────────────
@@ -159,11 +168,16 @@ def check_rate_limit() -> Optional[Any]:
         return None
 
     if count > limit:
-        return jsonify(external_api_service.fail(
-            code="RATE_LIMIT_EXCEEDED",
-            message=f"请求频率超限（{limit} 次/分钟）",
-            data={"limit": limit, "current": count, "ip": client_ip},
-        )), 429
+        return (
+            jsonify(
+                external_api_service.fail(
+                    code="RATE_LIMIT_EXCEEDED",
+                    message=f"请求频率超限（{limit} 次/分钟）",
+                    data={"limit": limit, "current": count, "ip": client_ip},
+                )
+            ),
+            429,
+        )
     return None
 
 
@@ -181,6 +195,7 @@ def external_api_guards(feature: Optional[str] = None) -> Callable:
         def api_external_raw(message_id):
             ...
     """
+
     def decorator(f: Callable) -> Callable:
         @wraps(f)
         def decorated(*args: Any, **kwargs: Any) -> Any:
@@ -198,5 +213,7 @@ def external_api_guards(feature: Optional[str] = None) -> Callable:
                 if resp is not None:
                     return resp
             return f(*args, **kwargs)
+
         return decorated
+
     return decorator

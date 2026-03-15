@@ -267,7 +267,7 @@ def api_external_health() -> Any:
         except Exception:
             db_ok = False
 
-        probe_summary = {
+        probe_summary: dict[str, Any] = {
             "upstream_probe_ok": None,
             "last_probe_at": "",
             "last_probe_error": "",
