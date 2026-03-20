@@ -34,13 +34,6 @@ data/
 # 内部文档（不开源）
 PRD/
 我们的文档/
-docs/
-!docs/
-docs/*
-!docs/INDEX.md
-!docs/API/
-docs/API/*
-!docs/API/*.md
 AGENTS.md
 CONTRIBUTING.md
 SECURITY.md
