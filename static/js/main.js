@@ -36,6 +36,235 @@
         let currentPage = 'dashboard';
         let accountPanelDensitySyncHandle = null;
 
+        // ==================== 布局状态管理 (ui_layout_v2) ====================
+        // 布局状态缓存
+        let uiLayoutV2 = null;
+        let layoutSaveDebounceTimer = null;
+        const LAYOUT_SAVE_DEBOUNCE_MS = 2000;
+
+        // 默认布局状态
+        function getDefaultLayoutV2() {
+            return {
+                version: 2,
+                sidebar: { collapsed: false },
+                mailbox: { groupPanelWidth: 220, accountPanelWidth: 280 },
+                tempEmails: { listPanelWidth: 300 }
+            };
+        }
+
+        // 从后端读取布局状态
+        async function loadLayoutFromServer() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                if (data.success && data.settings && data.settings.ui_layout_v2) {
+                    const layout = data.settings.ui_layout_v2;
+                    if (layout.version === 2) {
+                        uiLayoutV2 = layout;
+                        return layout;
+                    }
+                }
+            } catch (error) {
+                console.warn('加载布局状态失败:', error);
+            }
+            return null;
+        }
+
+        // 迁移旧 localStorage key 到 ui_layout_v2
+        function migrateOldLayoutKeys() {
+            const migrated = { version: 2, sidebar: {}, mailbox: {}, tempEmails: {} };
+            let needsMigration = false;
+
+            try {
+                // 迁移侧边栏折叠状态
+                const oldSidebarCollapsed = localStorage.getItem('ol_sidebar_collapsed');
+                if (oldSidebarCollapsed !== null) {
+                    migrated.sidebar.collapsed = oldSidebarCollapsed === 'true';
+                    needsMigration = true;
+                } else {
+                    migrated.sidebar.collapsed = false;
+                }
+
+                // 迁移列宽
+                const oldColumnWidths = localStorage.getItem('ol_column_widths');
+                if (oldColumnWidths) {
+                    try {
+                        const widths = JSON.parse(oldColumnWidths);
+                        // groupPanel / accountPanel 的宽度迁移
+                        if (widths.groupPanel) {
+                            const w = parseInt(widths.groupPanel, 10);
+                            if (!isNaN(w) && w > 0) {
+                                migrated.mailbox.groupPanelWidth = w;
+                                needsMigration = true;
+                            }
+                        }
+                        if (widths.accountPanel) {
+                            const w = parseInt(widths.accountPanel, 10);
+                            if (!isNaN(w) && w > 0) {
+                                migrated.mailbox.accountPanelWidth = w;
+                                needsMigration = true;
+                            }
+                        }
+                        // temp-emails 列宽迁移（如果有）
+                        if (widths.tempEmailPanel) {
+                            const w = parseInt(widths.tempEmailPanel, 10);
+                            if (!isNaN(w) && w > 0) {
+                                migrated.tempEmails.listPanelWidth = w;
+                                needsMigration = true;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('解析旧列宽数据失败:', e);
+                    }
+                }
+
+                // 设置默认值
+                if (!migrated.mailbox.groupPanelWidth) migrated.mailbox.groupPanelWidth = 220;
+                if (!migrated.mailbox.accountPanelWidth) migrated.mailbox.accountPanelWidth = 280;
+                if (!migrated.tempEmails.listPanelWidth) migrated.tempEmails.listPanelWidth = 300;
+
+            } catch (e) {
+                console.warn('迁移布局状态失败:', e);
+                return null;
+            }
+
+            return needsMigration ? migrated : null;
+        }
+
+        // 清理旧 localStorage key（可选，迁移成功后调用）
+        function cleanupOldLayoutKeys() {
+            try {
+                localStorage.removeItem('ol_sidebar_collapsed');
+                localStorage.removeItem('ol_column_widths');
+            } catch (e) {}
+        }
+
+        // 保存布局状态到后端（带 debounce）
+        function saveLayoutToServer() {
+            if (!uiLayoutV2) return;
+
+            if (layoutSaveDebounceTimer) {
+                clearTimeout(layoutSaveDebounceTimer);
+            }
+
+            layoutSaveDebounceTimer = setTimeout(async () => {
+                try {
+                    await fetch('/api/settings', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ui_layout_v2: uiLayoutV2 })
+                    });
+                } catch (error) {
+                    console.warn('保存布局状态失败:', error);
+                }
+            }, LAYOUT_SAVE_DEBOUNCE_MS);
+        }
+
+        // 初始化布局状态
+        async function initLayoutState() {
+            // 1. 先尝试从后端加载
+            let layout = await loadLayoutFromServer();
+
+            // 2. 如果后端没有有效布局，尝试迁移旧 key
+            if (!layout) {
+                const migrated = migrateOldLayoutKeys();
+                if (migrated) {
+                    uiLayoutV2 = migrated;
+                    // 保存迁移结果到后端
+                    try {
+                        await fetch('/api/settings', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ui_layout_v2: migrated })
+                        });
+                        // 迁移成功后清理旧 key
+                        cleanupOldLayoutKeys();
+                        console.log('布局状态迁移完成');
+                    } catch (e) {
+                        console.warn('保存迁移布局失败:', e);
+                    }
+                } else {
+                    // 使用默认布局
+                    uiLayoutV2 = getDefaultLayoutV2();
+                }
+            } else {
+                uiLayoutV2 = layout;
+            }
+
+            // 3. 应用布局状态
+            applyLayoutState();
+        }
+
+        // 应用布局状态到 DOM
+        function applyLayoutState() {
+            if (!uiLayoutV2) return;
+
+            // 应用侧边栏折叠状态
+            const app = document.getElementById('app');
+            if (app && uiLayoutV2.sidebar && uiLayoutV2.sidebar.collapsed) {
+                app.classList.add('sidebar-collapsed');
+            }
+
+            // 应用 mailbox 列宽
+            if (uiLayoutV2.mailbox) {
+                const groupPanel = document.getElementById('groupPanel');
+                const accountPanel = document.getElementById('accountPanel');
+                if (groupPanel && uiLayoutV2.mailbox.groupPanelWidth) {
+                    groupPanel.style.width = uiLayoutV2.mailbox.groupPanelWidth + 'px';
+                }
+                if (accountPanel && uiLayoutV2.mailbox.accountPanelWidth) {
+                    accountPanel.style.width = uiLayoutV2.mailbox.accountPanelWidth + 'px';
+                }
+            }
+
+            // 应用 temp-emails 列宽
+            if (uiLayoutV2.tempEmails) {
+                const tempEmailPanel = document.getElementById('tempEmailPanel');
+                if (tempEmailPanel && uiLayoutV2.tempEmails.listPanelWidth) {
+                    tempEmailPanel.style.width = uiLayoutV2.tempEmails.listPanelWidth + 'px';
+                }
+            }
+        }
+
+        // 更新布局状态中的侧边栏折叠
+        function updateLayoutSidebarCollapsed(collapsed) {
+            if (!uiLayoutV2) uiLayoutV2 = getDefaultLayoutV2();
+            uiLayoutV2.sidebar.collapsed = collapsed;
+            saveLayoutToServer();
+        }
+
+        // 更新布局状态中的列宽
+        function updateLayoutColumnWidths() {
+            if (!uiLayoutV2) uiLayoutV2 = getDefaultLayoutV2();
+
+            // 读取 mailbox 列宽
+            const groupPanel = document.getElementById('groupPanel');
+            const accountPanel = document.getElementById('accountPanel');
+            if (groupPanel && groupPanel.style.width) {
+                const w = parseInt(groupPanel.style.width, 10);
+                if (!isNaN(w) && w > 0) {
+                    uiLayoutV2.mailbox.groupPanelWidth = w;
+                }
+            }
+            if (accountPanel && accountPanel.style.width) {
+                const w = parseInt(accountPanel.style.width, 10);
+                if (!isNaN(w) && w > 0) {
+                    uiLayoutV2.mailbox.accountPanelWidth = w;
+                }
+            }
+
+            // 读取 temp-emails 列宽
+            const tempEmailPanel = document.getElementById('tempEmailPanel');
+            if (tempEmailPanel && tempEmailPanel.style.width) {
+                const w = parseInt(tempEmailPanel.style.width, 10);
+                if (!isNaN(w) && w > 0) {
+                    uiLayoutV2.tempEmails.listPanelWidth = w;
+                }
+            }
+
+            saveLayoutToServer();
+        }
+
         function getUiLanguage() {
             return window.getCurrentUiLanguage ? window.getCurrentUiLanguage() : 'zh';
         }
@@ -211,9 +440,9 @@
                 // Desktop: toggle collapsed state
                 const app = document.getElementById('app');
                 app.classList.toggle('sidebar-collapsed');
-                try {
-                    localStorage.setItem('ol_sidebar_collapsed', app.classList.contains('sidebar-collapsed'));
-                } catch(e) {}
+                const collapsed = app.classList.contains('sidebar-collapsed');
+                // 使用新的布局状态管理保存
+                updateLayoutSidebarCollapsed(collapsed);
             }
         }
 
@@ -380,7 +609,8 @@
         }
 
         function initResizeHandles() {
-            document.querySelectorAll('.resize-handle').forEach(handle => {
+            // 支持新的 .workspace-resizer 和旧的 .resize-handle 类名
+            document.querySelectorAll('.workspace-resizer, .resize-handle').forEach(handle => {
                 handle.addEventListener('mousedown', function(e) {
                     e.preventDefault();
                     const leftId = this.dataset.left;
@@ -409,14 +639,8 @@
                         document.body.style.userSelect = '';
                         document.removeEventListener('mousemove', onMouseMove);
                         document.removeEventListener('mouseup', onMouseUp);
-                        // Save widths to localStorage
-                        try {
-                            const widths = {};
-                            document.querySelectorAll('.groups-column, .accounts-column').forEach(col => {
-                                widths[col.id] = col.style.width;
-                            });
-                            localStorage.setItem('ol_column_widths', JSON.stringify(widths));
-                        } catch(e) {}
+                        // 使用新的布局状态管理保存列宽
+                        updateLayoutColumnWidths();
                     }
 
                     document.addEventListener('mousemove', onMouseMove);
@@ -424,15 +648,7 @@
                 });
             });
 
-            // Restore saved widths
-            try {
-                const saved = JSON.parse(localStorage.getItem('ol_column_widths') || '{}');
-                Object.entries(saved).forEach(([id, width]) => {
-                    const el = document.getElementById(id);
-                    if (el && width) el.style.width = width;
-                });
-            } catch(e) {}
-
+            // 布局状态已在 initLayoutState() 中恢复，这里只需更新紧凑模式
             if (currentPage === 'mailbox') {
                 syncAccountPanelDensityIfVisible();
                 scheduleAccountPanelDensitySync();
@@ -627,18 +843,14 @@
             // 应用保存的主题
             applyTheme(localStorage.getItem('ol_theme') || 'light');
 
-            // 恢复侧边栏折叠状态
-            try {
-                if (localStorage.getItem('ol_sidebar_collapsed') === 'true') {
-                    document.getElementById('app').classList.add('sidebar-collapsed');
-                }
-            } catch(e) {}
-
             // 初始化 CSRF Token。失败时不阻断首屏，其它初始化继续执行，
             // 具体的写请求再走按需恢复逻辑。
             try {
                 await initCSRFToken();
             } catch (error) {}
+
+            // 初始化布局状态（从后端读取或迁移旧 localStorage）
+            await initLayoutState();
 
             closeAllModals();
             loadGroups();
@@ -1394,6 +1606,21 @@ ${details}
                     const disableWaitEl = document.getElementById('externalApiDisableWait');
                     if (disableWaitEl) disableWaitEl.checked = data.settings.external_api_disable_wait_message === true;
 
+                    const poolExternalEnabledEl = document.getElementById('poolExternalEnabled');
+                    if (poolExternalEnabledEl) poolExternalEnabledEl.checked = data.settings.pool_external_enabled === true;
+
+                    const disablePoolClaimRandomEl = document.getElementById('externalApiDisablePoolClaimRandom');
+                    if (disablePoolClaimRandomEl) disablePoolClaimRandomEl.checked = data.settings.external_api_disable_pool_claim_random === true;
+
+                    const disablePoolClaimReleaseEl = document.getElementById('externalApiDisablePoolClaimRelease');
+                    if (disablePoolClaimReleaseEl) disablePoolClaimReleaseEl.checked = data.settings.external_api_disable_pool_claim_release === true;
+
+                    const disablePoolClaimCompleteEl = document.getElementById('externalApiDisablePoolClaimComplete');
+                    if (disablePoolClaimCompleteEl) disablePoolClaimCompleteEl.checked = data.settings.external_api_disable_pool_claim_complete === true;
+
+                    const disablePoolStatsEl = document.getElementById('externalApiDisablePoolStats');
+                    if (disablePoolStatsEl) disablePoolStatsEl.checked = data.settings.external_api_disable_pool_stats === true;
+
                     // 加载刷新配置
                     document.getElementById('refreshIntervalDays').value = data.settings.refresh_interval_days || '30';
                     document.getElementById('refreshDelaySeconds').value = data.settings.refresh_delay_seconds || '5';
@@ -1590,6 +1817,21 @@ ${details}
 
             const disableWaitEl = document.getElementById('externalApiDisableWait');
             if (disableWaitEl) settings.external_api_disable_wait_message = disableWaitEl.checked;
+
+            const poolExternalEnabledEl = document.getElementById('poolExternalEnabled');
+            if (poolExternalEnabledEl) settings.pool_external_enabled = poolExternalEnabledEl.checked;
+
+            const disablePoolClaimRandomEl = document.getElementById('externalApiDisablePoolClaimRandom');
+            if (disablePoolClaimRandomEl) settings.external_api_disable_pool_claim_random = disablePoolClaimRandomEl.checked;
+
+            const disablePoolClaimReleaseEl = document.getElementById('externalApiDisablePoolClaimRelease');
+            if (disablePoolClaimReleaseEl) settings.external_api_disable_pool_claim_release = disablePoolClaimReleaseEl.checked;
+
+            const disablePoolClaimCompleteEl = document.getElementById('externalApiDisablePoolClaimComplete');
+            if (disablePoolClaimCompleteEl) settings.external_api_disable_pool_claim_complete = disablePoolClaimCompleteEl.checked;
+
+            const disablePoolStatsEl = document.getElementById('externalApiDisablePoolStats');
+            if (disablePoolStatsEl) settings.external_api_disable_pool_stats = disablePoolStatsEl.checked;
 
             // 刷新配置
             const days = parseInt(refreshDays);

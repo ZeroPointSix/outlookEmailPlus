@@ -50,19 +50,12 @@
 
 /* ---------- Reset ---------- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html {
-  font-size: 15px;
-  height: 100%;
-  scroll-behavior: smooth;
-  overflow: auto;
-}
+html { font-size: 15px; scroll-behavior: smooth; }
 body {
   font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
-  height: 100%;
   min-height: 100vh;
-  overflow: auto;
   transition: background var(--transition), color var(--transition);
   line-height: 1.6;
 }
@@ -76,7 +69,7 @@ input, textarea, select { font-family: inherit; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
 /* ---------- 全局布局 ---------- */
-#app { display: flex; min-height: 100vh; height: 100vh; overflow: hidden; }
+#app { display: flex; min-height: 100vh; }
 
 /* ===== 登录页 ===== */
 #auth-page {
@@ -106,7 +99,7 @@ input, textarea, select { font-family: inherit; }
 .auth-logo p  { font-size: 0.82rem; color: var(--text-muted); margin-top: 0.2rem; }
 
 /* ===== Sidebar ===== */
-#main-layout { display: flex; flex: 1; min-height: 0; }
+#main-layout { display: flex; flex: 1; }
 
 .sidebar {
   width: var(--sidebar-w); min-height: 100vh; background: var(--bg-sidebar);
@@ -189,7 +182,7 @@ input, textarea, select { font-family: inherit; }
 .btn-theme:hover { background: rgba(255,255,255,0.12); color: #FAEBD7; }
 
 /* ===== Content Area ===== */
-.content { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.content { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow-x: hidden; }
 
 .topbar {
   background: var(--bg-card); border-bottom: 1px solid var(--border);
@@ -200,14 +193,58 @@ input, textarea, select { font-family: inherit; }
 .topbar-title { font-size: 1.05rem; font-weight: 700; color: var(--text); }
 .topbar-subtitle { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.05rem; }
 #topbar-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-#topbar-actions.topbar-actions-compact { gap: 0.35rem; }
 
 .page { flex: 1; padding: 1.8rem; overflow-y: auto; }
-.page.page-no-padding { padding: 0; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+.page.page-no-padding { padding: 0; overflow: hidden; }
+.page.page-workspace { padding: 0; overflow: hidden; }
 .page-hidden { display: none !important; }
 
-/* ===== 三栏主布局（账号管理页） ===== */
-.mailbox-layout { display: flex; flex: 1; min-height: 0; height: 100%; gap: 0; }
+/* ===== Workspace 公共样式 (新布局系统) ===== */
+.workspace {
+  display: flex;
+  height: 100%;
+  gap: 0;
+}
+.workspace-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.workspace-resizer {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 5;
+  transition: background 0.2s;
+}
+.workspace-resizer:hover,
+.workspace-resizer.active {
+  background: var(--clr-primary);
+}
+.workspace-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  right: -3px;
+}
+
+/* Workspace 具体布局 - mailbox 三栏 */
+.workspace.workspace-mailbox {
+  height: calc(100vh - 52px);
+}
+
+/* Workspace 具体布局 - temp-emails 两栏 */
+.workspace.workspace-temp-emails {
+  height: calc(100vh - 52px);
+}
+
+/* ===== 三栏主布局（账号管理页）- 兼容旧类名（已弃用，仅保留过渡兼容） ===== */
+/* NOTE: 新代码应使用 .workspace.workspace-mailbox，此段将在后续版本移除 */
+.mailbox-layout { display: flex; height: calc(100vh - 52px); gap: 0; }
 
 .groups-column {
   width: 220px; flex-shrink: 0; background: var(--bg-card);
@@ -221,7 +258,7 @@ input, textarea, select { font-family: inherit; }
   flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden;
 }
 
-/* Resize handles */
+/* Resize handles - 兼容旧类名（已弃用，新代码应使用 .workspace-resizer） */
 .resize-handle {
   width: 4px; flex-shrink: 0; cursor: col-resize; background: transparent;
   position: relative; z-index: 5; transition: background 0.2s;
@@ -486,450 +523,6 @@ textarea.form-input {
   display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; flex-wrap: wrap;
 }
 .batch-action-bar .btn { font-size: 0.78rem; padding: 0.3rem 0.6rem; }
-
-/* ===== 账号管理模式切换 ===== */
-.mailbox-view-switcher { display: flex; align-items: center; flex-wrap: wrap; }
-
-.mode-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45);
-}
-.mode-pill {
-  min-width: 88px;
-  height: 34px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 800;
-  cursor: pointer;
-  transition: background var(--transition), color var(--transition), box-shadow var(--transition), transform var(--transition);
-}
-.mode-pill:hover {
-  color: var(--text-secondary);
-  box-shadow: 0 6px 14px rgba(184, 92, 56, 0.08);
-}
-.mode-pill.active {
-  background: var(--clr-primary);
-  color: #fff;
-  box-shadow: 0 8px 16px rgba(184, 92, 56, 0.2);
-}
-
-/* ===== 简洁模式 ===== */
-.mailbox-compact-layout {
-  display: none;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-  overflow: hidden;
-  padding: 1rem;
-}
-.preview-shell {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-}
-.compact-board {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  height: 100%;
-  border: 1px solid var(--border);
-  border-radius: 22px;
-  overflow: hidden;
-  background: rgba(255, 251, 246, 0.92);
-  box-shadow: 0 20px 50px rgba(78, 61, 37, 0.08);
-}
-.board-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--border-light);
-  background: rgba(255, 248, 240, 0.92);
-}
-.toolbar-left,
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.compact-mode-summary,
-.toolbar-meta {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-}
-.view-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: rgba(184, 92, 56, 0.12);
-  color: var(--clr-primary);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-.btn-inline {
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.82);
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-.btn-inline.primary {
-  border-color: transparent;
-  background: var(--clr-primary);
-  color: #fff;
-}
-.btn-inline.ghost { background: rgba(255, 255, 255, 0.56); }
-.group-strip {
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border-light);
-  background: rgba(252, 246, 239, 0.84);
-  overflow-x: auto;
-}
-.group-chip {
-  min-width: 170px;
-  padding: 12px 14px;
-  border: 1px solid rgba(198, 185, 168, 0.42);
-  border-radius: 16px;
-  background: rgba(255, 253, 250, 0.92);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color var(--transition), transform var(--transition), box-shadow var(--transition);
-}
-.group-chip:hover {
-  border-color: rgba(184, 92, 56, 0.24);
-  box-shadow: 0 8px 18px rgba(184, 92, 56, 0.05);
-}
-.group-chip.active {
-  border-color: rgba(184, 92, 56, 0.34);
-  background: rgba(255, 247, 240, 0.98);
-  box-shadow: inset 3px 0 0 var(--clr-primary);
-}
-.group-chip-name {
-  display: block;
-  font-size: 0.86rem;
-  font-weight: 800;
-  color: var(--text);
-}
-.group-chip-meta {
-  display: block;
-  margin-top: 6px;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mail-list-wrap {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-.mail-head,
-.mail-row {
-  display: grid;
-  grid-template-columns: 34px minmax(220px, 1.38fr) 124px minmax(220px, 1fr) minmax(132px, 0.72fr) 82px;
-  align-items: center;
-  column-gap: 12px;
-}
-.mail-head {
-  padding: 12px 18px;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border-light);
-  background: rgba(252, 246, 239, 0.96);
-}
-.compact-header-cell { min-width: 0; }
-.compact-header-cell-selection {
-  display: flex; align-items: center; gap: 0.4rem;
-}
-.compact-header-cell-selection input { cursor: pointer; }
-.compact-header-cell-actions { text-align: right; }
-.mail-rows {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  padding: 10px 12px 24px;
-  gap: 10px;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-.mail-row {
-  min-height: 72px;
-  padding: 12px 14px;
-  border: 1px solid rgba(198, 185, 168, 0.42);
-  border-radius: 16px;
-  background: rgba(255, 253, 250, 0.96);
-  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
-}
-.mail-row:hover {
-  border-color: rgba(184, 92, 56, 0.28);
-  box-shadow: 0 8px 18px rgba(78, 61, 37, 0.045);
-  background: rgba(255, 253, 250, 0.96);
-}
-.mail-row.is-selected {
-  border-color: rgba(184, 92, 56, 0.34);
-  box-shadow: inset 3px 0 0 var(--clr-primary);
-  background: rgba(255, 248, 242, 0.98);
-}
-.mail-row > div { min-width: 0; }
-.select-cell {
-  display: flex; align-items: flex-start; justify-content: center;
-  padding-top: 0.1rem;
-}
-.select-cell input { margin: 0; width: 16px; height: 16px; accent-color: var(--clr-primary); cursor: pointer; }
-.mail-address {
-  cursor: pointer;
-  word-break: break-all;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 1.45;
-}
-.snippet-subject {
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.mail-meta,
-.snippet-meta {
-  margin-top: 0.25rem;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.mail-card,
-.mail-code,
-.mail-snippet {
-  min-width: 0;
-}
-.mail-card-button,
-.code-button {
-  width: 100%;
-  border: none;
-  background: transparent;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-}
-.mail-address {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.92rem;
-  font-weight: 800;
-  color: var(--text);
-}
-.code-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  border-radius: 12px;
-  background: rgba(36, 89, 72, 0.08);
-  color: #245948;
-  font-size: 1.08rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  max-width: 100%;
-}
-.code-button.empty {
-  background: rgba(128, 128, 128, 0.08);
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  letter-spacing: 0;
-  font-weight: 700;
-}
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 2rem;
-  align-items: flex-start;
-}
-.tag-chip {
-  max-width: 100%;
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(184, 92, 56, 0.08);
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-.compact-empty-inline {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-.action-cell {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  position: relative;
-}
-.compact-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  margin-left: auto;
-  flex-wrap: nowrap;
-}
-.pull-button,
-.menu-button {
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.88);
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background var(--transition), border-color var(--transition), color var(--transition), box-shadow var(--transition);
-}
-.pull-button {
-  min-width: 54px;
-  padding: 0 10px;
-  background: rgba(184, 92, 56, 0.08);
-  color: var(--clr-primary);
-  border-color: rgba(184, 92, 56, 0.16);
-}
-.pull-button:hover,
-.menu-button:hover {
-  border-color: rgba(184, 92, 56, 0.26);
-  background: rgba(255, 248, 242, 0.96);
-  color: var(--clr-primary-dark);
-}
-.menu-button {
-  width: 34px;
-  min-width: 34px;
-  padding: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  letter-spacing: 0;
-  line-height: 1;
-}
-details.action-menu { position: relative; }
-summary.menu-button {
-  list-style: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-summary.menu-button::-webkit-details-marker { display: none; }
-details.action-menu > summary.btn-inline {
-  list-style: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-details.action-menu > summary.btn-inline::-webkit-details-marker { display: none; }
-.action-menu[open] .menu-button {
-  border-color: rgba(184, 92, 56, 0.24);
-  background: rgba(255, 247, 240, 0.98);
-  color: var(--clr-primary-dark);
-}
-.action-menu[open] > summary.btn-inline {
-  border-color: rgba(184, 92, 56, 0.24);
-  background: rgba(255, 247, 240, 0.98);
-  color: var(--clr-primary-dark);
-}
-.menu-panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 8px);
-  z-index: 20;
-  min-width: 146px;
-  padding: 8px;
-  background: rgba(255, 253, 250, 0.98);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 18px 30px rgba(58, 44, 21, 0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.menu-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: left;
-}
-.menu-item:hover { background: rgba(184, 92, 56, 0.08); }
-.menu-item.danger { color: #b53737; }
-.empty-state-lite {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 220px;
-  color: var(--text-muted);
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-.compact-state-block { position: static; padding: 2rem 1rem; }
-.batch-bar {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 18px;
-  border-top: 1px solid var(--border-light);
-  background: rgba(255, 248, 240, 0.96);
-  backdrop-filter: blur(12px);
-  z-index: 3;
-}
-.batch-info { font-size: 0.8rem; color: var(--text-secondary); font-weight: 700; }
-.batch-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 /* ===== 邮件列表 ===== */
 .email-tabs {
@@ -1367,12 +960,6 @@ tr:hover td { background: rgba(184,92,56,0.04); }
   .page { padding: 1rem; }
   .groups-column { width: 180px; }
   .accounts-column { width: 240px; }
-  .mail-head,
-  .mail-row {
-    grid-template-columns: 34px minmax(170px, 1.28fr) 112px minmax(160px, 0.92fr) minmax(116px, 0.68fr) 80px;
-    column-gap: 12px;
-  }
-  .group-chip { min-width: 168px; }
 }
 
 /* ===== 响应式：手机（抽屉式侧边栏） ===== */
@@ -1397,70 +984,37 @@ tr:hover td { background: rgba(184,92,56,0.04); }
   .topbar { padding: 0.6rem 0.85rem; gap: 0.4rem; }
   .topbar-title { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .page { padding: 0.85rem; }
-  .page.page-no-padding { overflow: hidden; }
 
+  /* 旧 mailbox-layout 移动端兼容（已弃用） */
   .mailbox-layout { flex-direction: column; height: auto; }
-  .groups-column { width: 100%; height: auto; max-height: 200px; border-right: none; border-bottom: 1px solid var(--border); }
-  .accounts-column { width: 100%; height: auto; max-height: 300px; border-right: none; border-bottom: 1px solid var(--border); }
-  .emails-column { width: 100%; }
-
-  .mailbox-view-switcher { width: 100%; }
-  .mailbox-view-switcher .mode-pill {
-    flex: 1;
-    min-width: 0;
-    justify-content: center;
+  
+  /* 新 workspace 移动端响应式 */
+  .workspace.workspace-mailbox,
+  .workspace.workspace-temp-emails {
+    flex-direction: column;
+    height: auto;
   }
-
-  .mailbox-compact-layout {
-    height: 100%;
-    min-height: 0;
-    padding: 0.85rem;
+  .workspace.workspace-mailbox .workspace-panel.groups-column,
+  .groups-column {
+    width: 100%; height: auto; max-height: 200px;
+    border-right: none; border-bottom: 1px solid var(--border);
   }
-  .compact-board { min-height: 0; height: 100%; border-radius: 18px; }
-  .board-toolbar { align-items: flex-start; }
-  .group-chip { min-width: 150px; }
-  .mail-head { display: none; }
-  .mail-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.8rem;
-    padding: 1rem 0.9rem;
+  .workspace.workspace-mailbox .workspace-panel.accounts-column,
+  .workspace.workspace-temp-emails .workspace-panel.accounts-column,
+  .accounts-column {
+    width: 100%; height: auto; max-height: 300px;
+    border-right: none; border-bottom: 1px solid var(--border);
   }
-  .mail-row > div { min-width: 0; }
-  .mail-row > div:not(.select-cell):not(.action-cell)::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 0.3rem;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--text-muted);
+  .workspace.workspace-mailbox .workspace-panel.emails-column,
+  .workspace.workspace-temp-emails .workspace-panel.emails-column,
+  .emails-column {
+    width: 100%;
   }
-  .select-cell,
-  .mail-card,
-  .action-cell {
-    grid-column: 1 / -1;
+  /* 移动端隐藏 resizer */
+  .workspace-resizer,
+  .resize-handle {
+    display: none;
   }
-  .select-cell {
-    justify-content: flex-start;
-    padding-top: 0;
-  }
-  .action-cell {
-    padding-top: 0.2rem;
-    border-top: 1px solid var(--border-light);
-  }
-  .compact-actions,
-  .action-cell { justify-content: flex-start; width: 100%; }
-  .compact-actions { margin-left: 0; }
-  .menu-panel {
-    right: auto;
-    left: 0;
-    min-width: 180px;
-  }
-  .batch-bar {
-    bottom: 0.35rem;
-    padding: 0.7rem 0.8rem;
-  }
-  .batch-actions { width: 100%; }
-  .batch-actions .btn-inline { flex: 1 1 calc(50% - 0.25rem); justify-content: center; }
 
   .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 0.65rem; }
   .dashboard-grid { grid-template-columns: 1fr; }

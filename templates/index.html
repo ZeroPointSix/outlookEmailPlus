@@ -143,10 +143,10 @@
             </div>
 
             <!-- ===== Page: Mailbox (3-column) ===== -->
-            <div class="page page-hidden page-no-padding" id="page-mailbox">
-                <div class="mailbox-layout">
+            <div class="page page-hidden page-no-padding page-workspace" id="page-mailbox">
+                <div class="workspace workspace-mailbox" data-workspace="mailbox">
                     <!-- Groups Column -->
-                    <div class="groups-column" id="groupPanel">
+                    <div class="workspace-panel groups-column" id="groupPanel">
                         <div class="column-header">
                             <span class="column-title">分组</span>
                             <button class="btn-icon" onclick="showAddGroupModal()" title="添加分组">+</button>
@@ -160,10 +160,10 @@
                     </div>
 
                     <!-- Resize Handle 1 -->
-                    <div class="resize-handle" id="resizeHandle1" data-left="groupPanel" data-right="accountPanel"></div>
+                    <div class="workspace-resizer" id="resizeHandle1" data-left="groupPanel" data-right="accountPanel" data-resize-role="groups-to-accounts"></div>
 
                     <!-- Accounts Column -->
-                    <div class="accounts-column" id="accountPanel">
+                    <div class="workspace-panel accounts-column" id="accountPanel">
                         <div class="column-header">
                             <span class="column-title">
                                 <span class="group-color-dot" id="currentGroupColor" style="background-color:#666;"></span>
@@ -205,10 +205,10 @@
                     </div>
 
                     <!-- Resize Handle 2 -->
-                    <div class="resize-handle" id="resizeHandle2" data-left="accountPanel" data-right="emailListPanel"></div>
+                    <div class="workspace-resizer" id="resizeHandle2" data-left="accountPanel" data-right="emailListPanel" data-resize-role="accounts-to-emails"></div>
 
                     <!-- Emails Column -->
-                    <div class="emails-column" id="emailListPanel">
+                    <div class="workspace-panel emails-column" id="emailListPanel">
                         <div class="column-header">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div class="email-tabs" id="folderTabs" style="display:none;border:none;">
@@ -264,10 +264,10 @@
             </div>
 
             <!-- ===== Page: Temp Emails ===== -->
-            <div class="page page-hidden page-no-padding" id="page-temp-emails">
-                <div class="mailbox-layout">
+            <div class="page page-hidden page-no-padding page-workspace" id="page-temp-emails">
+                <div class="workspace workspace-temp-emails" data-workspace="temp-emails">
                     <!-- Temp Email List Column -->
-                    <div class="accounts-column" id="tempEmailPanel" style="width:300px;">
+                    <div class="workspace-panel accounts-column" id="tempEmailPanel" style="width:300px;">
                         <div class="column-header">
                             <span class="column-title">⚡ 临时邮箱</span>
                             <button class="btn btn-sm btn-primary" onclick="generateTempEmail()">+ 创建</button>
@@ -281,7 +281,7 @@
                         </div>
                     </div>
                     <!-- Temp Email Messages Column -->
-                    <div class="emails-column">
+                    <div class="workspace-panel emails-column" id="tempEmailMessagePanel">
                         <div class="column-header">
                             <span class="column-title" id="tempEmailCurrentName" onclick="copyTempEmailCurrent()" title="点击复制邮箱地址" style="cursor:pointer;">选择一个临时邮箱</span>
                             <div style="display:flex;gap:4px;">
@@ -383,6 +383,44 @@
                                     <span class="form-label" style="margin: 0;">禁用 wait-message（等待新邮件）端点</span>
                                 </label>
                                 <div class="form-hint">公网模式下建议禁用，防止长连接资源耗尽（Slowloris 风险）。</div>
+                            </div>
+                            <div style="border-top: 1px solid var(--border-light); margin-top: 1rem; padding-top: 1rem;">
+                                <h6 style="font-size: 0.82rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-muted);">📦 External Pool</h6>
+                                <div class="form-group">
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="poolExternalEnabled">
+                                        <span class="form-label" style="margin: 0;">启用 external pool 端点</span>
+                                    </label>
+                                    <div class="form-hint">开启后才允许调用 `/api/external/pool/*`。仅设置对外 API Key 不会自动开启邮箱池对外接口。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="externalApiDisablePoolClaimRandom">
+                                        <span class="form-label" style="margin: 0;">禁用 pool claim-random</span>
+                                    </label>
+                                    <div class="form-hint">关闭后可供外部调用随机领取邮箱池账号。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="externalApiDisablePoolClaimRelease">
+                                        <span class="form-label" style="margin: 0;">禁用 pool claim-release</span>
+                                    </label>
+                                    <div class="form-hint">关闭后可供外部调用释放已领取账号。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="externalApiDisablePoolClaimComplete">
+                                        <span class="form-label" style="margin: 0;">禁用 pool claim-complete</span>
+                                    </label>
+                                    <div class="form-hint">关闭后可供外部调用领取完成/回写结果。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="externalApiDisablePoolStats">
+                                        <span class="form-label" style="margin: 0;">禁用 pool stats</span>
+                                    </label>
+                                    <div class="form-hint">关闭后可供外部读取邮箱池统计信息。</div>
+                                </div>
                             </div>
                         </div>
 

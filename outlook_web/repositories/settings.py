@@ -79,7 +79,9 @@ def get_external_api_key_masked(head: int = 4, tail: int = 4) -> str:
     safe_value = str(key)
     if len(safe_value) <= head + tail:
         return "*" * len(safe_value)
-    return safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
+    return (
+        safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
+    )
 
 
 # ── P1：公网模式安全配置 ──────────────────────────────
@@ -126,16 +128,42 @@ def get_pool_external_enabled() -> bool:
 
 
 def get_external_api_disable_pool_claim_random() -> bool:
-    return get_setting("external_api_disable_pool_claim_random", "false").lower() == "true"
+    return (
+        get_setting("external_api_disable_pool_claim_random", "false").lower() == "true"
+    )
 
 
 def get_external_api_disable_pool_claim_release() -> bool:
-    return get_setting("external_api_disable_pool_claim_release", "false").lower() == "true"
+    return (
+        get_setting("external_api_disable_pool_claim_release", "false").lower()
+        == "true"
+    )
 
 
 def get_external_api_disable_pool_claim_complete() -> bool:
-    return get_setting("external_api_disable_pool_claim_complete", "false").lower() == "true"
+    return (
+        get_setting("external_api_disable_pool_claim_complete", "false").lower()
+        == "true"
+    )
 
 
 def get_external_api_disable_pool_stats() -> bool:
     return get_setting("external_api_disable_pool_stats", "false").lower() == "true"
+
+
+def get_ui_layout_v2() -> dict:
+    """读取前端布局状态"""
+    import json
+
+    raw = get_setting("ui_layout_v2", "{}")
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+
+
+def set_ui_layout_v2(layout: dict) -> None:
+    """写入前端布局状态"""
+    import json
+
+    set_setting("ui_layout_v2", json.dumps(layout, ensure_ascii=False))

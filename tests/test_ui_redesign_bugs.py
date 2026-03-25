@@ -64,7 +64,9 @@ class TestUIRedesignBugFixes(unittest.TestCase):
         """BUG-002: accounts.js 中 selectAccount 应操作 currentAccountBar 而非 currentAccount"""
         client = self._get_client()
         _, js = self._get_text(client, "/static/js/features/accounts.js")
-        self.assertIn("currentAccountBar", js, "selectAccount() 应操作 #currentAccountBar 元素")
+        self.assertIn(
+            "currentAccountBar", js, "selectAccount() 应操作 #currentAccountBar 元素"
+        )
 
     # ==================== BUG-003: 设置页面 ====================
 
@@ -72,7 +74,9 @@ class TestUIRedesignBugFixes(unittest.TestCase):
         """BUG-003: 设置页面应有实质性内容，而非仅占位文字"""
         client = self._get_client()
         _, html = self._get_text(client, "/")
-        settings_section = re.search(r'id="page-settings".*?(?=id="page-|$)', html, re.DOTALL)
+        settings_section = re.search(
+            r'id="page-settings".*?(?=id="page-|$)', html, re.DOTALL
+        )
         self.assertIsNotNone(settings_section, "找不到 page-settings 区域")
 
     def test_bug003_navigate_triggers_settings_load(self):
@@ -119,7 +123,9 @@ class TestUIRedesignBugFixes(unittest.TestCase):
     def test_bug005_verification_extract_api_exists(self):
         """BUG-005: 验证码提取 API 端点存在"""
         client = self._get_client()
-        status_code, _ = self._get_json(client, "/api/emails/nonexistent@test.com/extract-verification")
+        status_code, _ = self._get_json(
+            client, "/api/emails/nonexistent@test.com/extract-verification"
+        )
         self.assertIn(status_code, [200, 404], "验证码提取 API 应该返回 200 或 404")
 
     def test_bug005_copy_verification_function_exists(self):
@@ -206,10 +212,11 @@ class TestUIRedesignBugFixes(unittest.TestCase):
         """邮箱管理三栏布局结构完整"""
         client = self._get_client()
         _, html = self._get_text(client, "/")
-        self.assertIn('class="mailbox-layout"', html)
-        self.assertIn('class="groups-column"', html)
-        self.assertIn('class="accounts-column"', html)
-        self.assertIn('class="emails-column"', html)
+        # 新的 workspace 布局系统
+        self.assertIn('class="workspace workspace-mailbox"', html)
+        self.assertIn('class="workspace-panel groups-column"', html)
+        self.assertIn('class="workspace-panel accounts-column"', html)
+        self.assertIn('class="workspace-panel emails-column"', html)
 
     def test_js_files_load_successfully(self):
         """所有 JS 文件可正常加载"""
