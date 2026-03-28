@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from typing import Dict
+import json
+from typing import Any, Dict
 
 from outlook_web import config
 from outlook_web.db import get_db
 from outlook_web.security.crypto import decrypt_data
+
+DEFAULT_TEMP_MAIL_PROVIDER = "custom_domain_temp_mail"
+LEGACY_TEMP_MAIL_PROVIDER = "legacy_bridge"
+LEGACY_TEMP_MAIL_PROVIDER_NAMES = {"legacy_bridge", "legacy_gptmail", "gptmail"}
+SUPPORTED_TEMP_MAIL_PROVIDERS = {
+    DEFAULT_TEMP_MAIL_PROVIDER,
+    LEGACY_TEMP_MAIL_PROVIDER,
+}
 
 
 def get_setting(key: str, default: str = "") -> str:
@@ -47,10 +56,86 @@ def get_login_password() -> str:
     return password if password else config.get_login_password_default()
 
 
+def get_legacy_gptmail_api_key() -> str:
+    """兼容读取 legacy gptmail_api_key。"""
+    return get_setting("gptmail_api_key")
+
+
+def get_temp_mail_api_key() -> str:
+    """获取正式临时邮箱 API Key，并兼容 legacy gptmail_api_key 回退。"""
+    api_key = get_setting("temp_mail_api_key")
+    if api_key:
+        return api_key
+    legacy_api_key = get_legacy_gptmail_api_key()
+    if legacy_api_key:
+        return legacy_api_key
+    return config.get_temp_mail_api_key_default()
+
+
 def get_gptmail_api_key() -> str:
-    """获取 GPTMail API Key（优先从数据库读取）"""
-    api_key = get_setting("gptmail_api_key")
-    return api_key if api_key else config.get_gptmail_api_key_default()
+    """legacy bridge 兼容入口。"""
+    return get_temp_mail_api_key()
+
+
+def normalize_temp_mail_provider_name(value: str | None) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return DEFAULT_TEMP_MAIL_PROVIDER
+    if normalized.lower() in LEGACY_TEMP_MAIL_PROVIDER_NAMES:
+        return LEGACY_TEMP_MAIL_PROVIDER
+    return normalized
+
+
+def get_supported_temp_mail_provider_names() -> set[str]:
+    return set(SUPPORTED_TEMP_MAIL_PROVIDERS)
+
+
+def is_supported_temp_mail_provider_name(value: str | None) -> bool:
+    return normalize_temp_mail_provider_name(value) in SUPPORTED_TEMP_MAIL_PROVIDERS
+
+
+def validate_temp_mail_provider_name(value: str | None) -> str:
+    normalized = normalize_temp_mail_provider_name(value)
+    if normalized not in SUPPORTED_TEMP_MAIL_PROVIDERS:
+        raise ValueError("临时邮箱 Provider 配置无效")
+    return normalized
+
+
+def get_temp_mail_provider() -> str:
+    return normalize_temp_mail_provider_name(get_setting("temp_mail_provider", DEFAULT_TEMP_MAIL_PROVIDER))
+
+
+def get_temp_mail_runtime_provider_name(provider_name: str | None = None) -> str:
+    if provider_name is not None:
+        return normalize_temp_mail_provider_name(provider_name)
+    return get_temp_mail_provider()
+
+
+def get_temp_mail_api_base_url() -> str:
+    base_url = get_setting("temp_mail_api_base_url")
+    return base_url if base_url else config.get_temp_mail_base_url()
+
+
+def get_temp_mail_domains() -> list[dict[str, Any]]:
+    raw = get_setting("temp_mail_domains", "[]")
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return value if isinstance(value, list) else []
+
+
+def get_temp_mail_default_domain() -> str:
+    return get_setting("temp_mail_default_domain", "").strip()
+
+
+def get_temp_mail_prefix_rules() -> dict[str, Any]:
+    raw = get_setting("temp_mail_prefix_rules", "{}")
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def get_external_api_key() -> str:

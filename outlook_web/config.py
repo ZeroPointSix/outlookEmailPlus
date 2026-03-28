@@ -37,6 +37,16 @@ def get_gptmail_api_key_default() -> str:
     return _getenv("GPTMAIL_API_KEY", "gpt-test") or "gpt-test"
 
 
+def get_temp_mail_base_url() -> str:
+    """正式临时邮箱上游地址；环境变量保持兼容旧 GPTMAIL_* 命名。"""
+    return get_gptmail_base_url()
+
+
+def get_temp_mail_api_key_default() -> str:
+    """正式临时邮箱 API Key 默认值；环境变量保持兼容旧 GPTMAIL_* 命名。"""
+    return get_gptmail_api_key_default()
+
+
 def get_oauth_client_id() -> str:
     return _getenv("OAUTH_CLIENT_ID", "24d9a0ed-8787-4584-883c-2fd79308940a") or "24d9a0ed-8787-4584-883c-2fd79308940a"
 
