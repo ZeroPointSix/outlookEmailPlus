@@ -572,6 +572,53 @@ textarea.form-input {
 .accounts-column.is-compact .account-card:hover .account-select-checkbox,
 .accounts-column.is-compact .account-select-checkbox:checked { opacity: 1; }
 
+/* 账号列表分页控件 */
+.account-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.account-pagination .page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.account-pagination .page-btn:hover:not(:disabled) {
+  background: var(--clr-primary);
+  color: #fff;
+  border-color: var(--clr-primary);
+}
+.account-pagination .page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.account-pagination .page-info {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex: 1;
+  text-align: center;
+  min-width: 0;
+}
+
 /* 批量操作栏 */
 .batch-action-bar {
   padding: 0.6rem 1rem; background: var(--bg-card); border-top: 1px solid var(--border);

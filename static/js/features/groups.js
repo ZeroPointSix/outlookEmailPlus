@@ -89,6 +89,7 @@
         // 选择分组
         async function selectGroup(groupId) {
             currentGroupId = groupId;
+            currentAccountPage = 1;  // 切换分组时重置到第 1 页
 
             // 切换分组时停止所有正在运行的轮询（避免跨分组轮询堆积）
             if (typeof stopAllPolls === 'function') {
@@ -276,7 +277,14 @@
                 return;
             }
 
-            // 头像颜色轮转数组 — 8 组渐变色
+            // ===== 分页计算 =====
+            const totalAccounts = accounts.length;
+            const totalPages = Math.ceil(totalAccounts / ACCOUNT_PAGE_SIZE);
+            if (currentAccountPage > totalPages) currentAccountPage = totalPages;
+            if (currentAccountPage < 1) currentAccountPage = 1;
+            const startIdx = (currentAccountPage - 1) * ACCOUNT_PAGE_SIZE;
+            // 只渲染当前页的账号，大幅减少 DOM 节点数
+            const pageAccounts = accounts.slice(startIdx, startIdx + ACCOUNT_PAGE_SIZE);
             const avatarGradients = [
                 ['#B85C38', '#E8734A'],  // 砖红→珊瑚
                 ['#3A7D44', '#5BAF6A'],  // 翠绿→嫩绿
@@ -288,7 +296,7 @@
                 ['#9B6B3E', '#D4A65A'],  // 赭石→沙金
             ];
 
-            container.innerHTML = accounts.map((acc, index) => {
+            container.innerHTML = pageAccounts.map((acc, index) => {
                 const isChecked = selectedAccountIds.has(acc.id);
                 const initial = (acc.email || '?')[0].toUpperCase();
                 const supportsTokenRefresh = isRefreshableOutlookAccount(acc);
@@ -355,6 +363,28 @@
                 </div>
             `}).join('');
 
+            // ===== 分页控件：总账号数超过一页时显示 =====
+            if (totalPages > 1) {
+                const paginationEl = document.createElement('div');
+                paginationEl.className = 'account-pagination';
+                paginationEl.innerHTML = `
+                    <button class="page-btn page-btn-prev"
+                            onclick="goToAccountPage(${currentAccountPage - 1})"
+                            ${currentAccountPage <= 1 ? 'disabled' : ''}>
+                        ◀
+                    </button>
+                    <span class="page-info">
+                        ${currentAccountPage} / ${totalPages} ${translateAppTextLocal('页')} &nbsp;·&nbsp; ${translateAppTextLocal('共')} ${totalAccounts} ${translateAppTextLocal('个账号')}
+                    </span>
+                    <button class="page-btn page-btn-next"
+                            onclick="goToAccountPage(${currentAccountPage + 1})"
+                            ${currentAccountPage >= totalPages ? 'disabled' : ''}>
+                        ▶
+                    </button>
+                `;
+                container.appendChild(paginationEl);
+            }
+
             updateSelectAllCheckbox();
             updateBatchActionBar();
             // 如果有正在运行的轮询，重新显示轮询指示器（账号列表重渲染后会丢失绿点）
@@ -363,9 +393,26 @@
             }
         }
 
+        // 跳转到指定账号分页
+        function goToAccountPage(page) {
+            if (!accountsCache[currentGroupId]) return;
+            const accounts = applyFiltersAndSort(accountsCache[currentGroupId]);
+            const totalPages = Math.ceil(accounts.length / ACCOUNT_PAGE_SIZE);
+            if (page < 1 || page > totalPages) return;
+            currentAccountPage = page;
+            renderAccountList(accounts);
+            // 滚动到账号列表顶部
+            const container = document.getElementById('accountList');
+            if (container) container.scrollTop = 0;
+        }
+
         // 排序相关变量
         let currentSortBy = 'refresh_time';
         let currentSortOrder = 'asc';
+
+        // 账号列表分页状态
+        let currentAccountPage = 1;
+        const ACCOUNT_PAGE_SIZE = 50;
 
         // 排序账号列表
         function sortAccounts(sortBy) {
@@ -389,6 +436,7 @@
 
             // 重新加载并排序账号列表
             if (accountsCache[currentGroupId]) {
+                currentAccountPage = 1;  // 排序时重置到第 1 页
                 const sortedAccounts = applyFiltersAndSort(accountsCache[currentGroupId]);
                 renderAccountList(sortedAccounts);
             }
@@ -431,6 +479,7 @@
         // Tag Filter Change Handler
         function handleTagFilterChange() {
             if (accountsCache[currentGroupId]) {
+                currentAccountPage = 1;  // 标签过滤时重置到第 1 页
                 const filteredAccounts = applyFiltersAndSort(accountsCache[currentGroupId]);
                 renderAccountList(filteredAccounts);
             }
@@ -451,6 +500,7 @@
             const titleElement = document.getElementById('currentGroupName');
 
             if (!query.trim()) {
+                currentAccountPage = 1;  // 清空搜索时重置页码
                 loadAccountsByGroup(currentGroupId);
                 return;
             }
@@ -462,6 +512,7 @@
                 const data = await response.json();
 
                 if (data.success) {
+                    currentAccountPage = 1;  // 搜索结果重置到第 1 页
                     titleElement.textContent = `搜索结果 (${data.accounts.length})`;
                     renderAccountList(data.accounts);
                 } else {
