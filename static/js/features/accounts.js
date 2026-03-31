@@ -61,6 +61,21 @@
                 </div>
             `;
             document.getElementById('emailDetailToolbar').style.display = 'none';
+
+            // 自动加载邮件列表（优先使用缓存，无缓存时自动 fetch）
+            if (typeof loadEmails === 'function') {
+                loadEmails(email);
+            }
+
+            // 标准模式：选中账号后自动启动轮询（如果轮询已启用且该账号尚未在轮询中）
+            var view = typeof mailboxViewMode !== 'undefined' ? mailboxViewMode : 'standard';
+            if (view !== 'compact' && typeof pollEnabled !== 'undefined' && pollEnabled && typeof startPoll === 'function') {
+                // 如果该账号已在轮询中则跳过，避免重复启动和多余 Toast
+                var alreadyPolling = typeof pollMap !== 'undefined' && pollMap.has(email);
+                if (!alreadyPolling) {
+                    startPoll(email);
+                }
+            }
         }
 
         // Provider 下拉缓存

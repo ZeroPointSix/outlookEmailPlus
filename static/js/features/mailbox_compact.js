@@ -54,13 +54,23 @@
         }
 
         function switchMailboxViewMode(mode) {
+            var prevMode = mailboxViewMode;
             mailboxViewMode = mode === 'compact' ? 'compact' : 'standard';
             localStorage.setItem('ol_mailbox_view_mode', mailboxViewMode);
 
-            // 切换离开简洁模式时，停止所有简洁模式轮询（无 toast）
-            if (mailboxViewMode !== 'compact') {
-                if (typeof stopAllCompactAutoPolls === 'function') {
-                    stopAllCompactAutoPolls();
+            // 视图切换时不停止轮询——统一引擎持续运行，UI 回调根据 mailboxViewMode 分发。
+            // 只需在切换后清理旧模式 UI 残留，然后重新应用新模式 UI。
+            if (prevMode === 'compact' && mailboxViewMode !== 'compact') {
+                // 从简洁模式切走：清理简洁模式的轮询 UI（绿点、按钮文字），但不停止轮询
+                if (typeof pollMap !== 'undefined') {
+                    pollMap.forEach(function(state, email) {
+                        updateCompactPollUI(email, 'stopped', null);
+                    });
+                }
+            } else if (prevMode !== 'compact' && mailboxViewMode === 'compact') {
+                // 从标准模式切走：清理标准模式的轮询 UI
+                if (typeof hideStandardPollDot === 'function') {
+                    hideStandardPollDot(); // 无参数 = 清除所有
                 }
             }
 
@@ -84,6 +94,12 @@
             renderCompactAccountList(getCompactVisibleAccounts());
             updateBatchActionBar();
             updateSelectAllCheckbox();
+
+            // 切换完成后重新应用当前模式的轮询 UI（renderAccountList/renderCompactAccountList
+            // 内部已调用 reapplyAllPollUI/reapplyAllCompactPollUI，但模式切换可能需要额外刷新）
+            if (typeof reapplyAllPollUI === 'function') {
+                reapplyAllPollUI();
+            }
         }
 
         function renderCompactGroupStrip(groupItems, activeGroupId) {
@@ -412,12 +428,18 @@
 
         if (typeof registerPollUICallbacks === 'function') {
             registerPollUICallbacks({
-                onPollStart: function(email, maxCount) {
+                onPollStart: function(email, maxCount, opts) {
                     var view = typeof mailboxViewMode !== 'undefined' ? mailboxViewMode : '';
                     if (view === 'compact') {
                         updateCompactPollUI(email, 'polling', maxCount);
                     } else {
                         if (typeof showStandardPollDot === 'function') showStandardPollDot(email);
+                        // 标准模式：仅首次启动且非静默时 Toast 提示
+                        // reapply=true 表示 UI 刷新重绘，silent=true 表示批量启动（不弹单条 Toast）
+                        if (!opts || (!opts.reapply && !opts.silent)) {
+                            var countText = maxCount > 0 ? ('，最多 ' + maxCount + ' 次') : '';
+                            if (typeof showToast === 'function') showToast(translateCompactText('开始监听') + ' ' + email + ' ' + translateCompactText('的新邮件') + countText, 'info');
+                        }
                     }
                 },
                 onPollStop: function(email) {
@@ -484,6 +506,7 @@
             var email = e && e.detail && e.detail.email;
             if (!email) return;
             var enabled = typeof pollEnabled !== 'undefined' ? pollEnabled : false;
+            console.debug('[email-copied] email:', email, 'pollEnabled:', enabled, 'mailboxViewMode:', typeof mailboxViewMode !== 'undefined' ? mailboxViewMode : 'undefined');
             if (!enabled) return;
             // 不限制视图模式：标准模式和简洁模式均触发轮询
             var isTemp = typeof isTempEmailGroup !== 'undefined' ? isTempEmailGroup : false;

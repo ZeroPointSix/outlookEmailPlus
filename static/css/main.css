@@ -1416,17 +1416,39 @@ tr:hover td { background: rgba(184,92,56,0.04); }
 }
 
 /* 标准模式轮询小绿点（嵌入邮箱地址旁） */
+/* 标准模式轮询绿点（嵌入状态行中） */
 .standard-poll-dot {
   display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--clr-success, #52c41a);
-  margin-left: 6px;
+  margin-right: 5px;
   vertical-align: middle;
-  cursor: pointer;
   animation: pulse-dot 1.2s ease-in-out infinite;
   flex-shrink: 0;
+}
+
+/* 标准模式轮询状态行 */
+.standard-poll-status {
+  display: flex;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--clr-success, #52c41a);
+  font-weight: 500;
+  margin-top: 3px;
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* 标准模式轮询激活态卡片 */
+.account-card.standard-poll-active {
+  border-left: 3px solid var(--clr-success, #52c41a) !important;
+  box-shadow: 0 0 8px rgba(82, 196, 26, 0.15);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulse-dot {

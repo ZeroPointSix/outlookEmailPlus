@@ -403,10 +403,10 @@ describe('TC-C10~C13: 超时与错误处理', () => {
     window.dispatchEvent(new CustomEvent('email-copied', {
       detail: { email: 'test@example.com' }
     }));
-    await jest.advanceTimersByTimeAsync(200); // baseline + 首次 poll（2 次请求均失败 → errorCount=1... 但 pollSingleEmail 并行 allSettled，两个 folder 都失败 → hasSuccess=false → errorCount++）
-    // 注意：allSettled 两个请求只算一次 poll，errorCount 按 poll 次数计
+    await jest.advanceTimersByTimeAsync(200); // baseline + 立即首次 poll (150ms) → errorCount=1
+    // 立即首次轮询：callCount 3-4 (fail) → errorCount=1
 
-    // 第二次 poll（errorCount → 2）
+    // 第二次 poll（interval 1000ms → errorCount=2）
     await jest.advanceTimersByTimeAsync(1000);
     expect(pollMap.get('test@example.com').errorCount).toBe(2);
 

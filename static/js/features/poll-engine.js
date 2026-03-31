@@ -220,6 +220,7 @@
 
         function startPoll(email, opts) {
             if (!email) return;
+            console.debug('[poll-engine] startPoll called for:', email, 'pollEnabled:', pollEnabled);
 
             if (pollMap.has(email)) {
                 stopPoll(email, null);
@@ -262,16 +263,18 @@
 
                 if (!pollMap.has(email)) return;
 
-                state.timer = setInterval(function() { pollSingleEmail(email, state); }, state.intervalSec * 1000);
-
+                // 触发 UI 回调和倒计时（先于首次轮询，让用户立即看到状态变化）
                 if (_pollUICallbacks.onPollStart) {
-                    _pollUICallbacks.onPollStart(email, state.maxCount);
+                    _pollUICallbacks.onPollStart(email, state.maxCount, { reapply: false, silent: !!(opts && opts.silent) });
                 }
                 startGlobalCountdown();
 
+                // 立即执行首次轮询（150ms 延迟，确保 baseline 微任务完成），后续按间隔继续
                 setTimeout(function() {
                     if (pollMap.has(email)) pollSingleEmail(email, state);
                 }, POLL_INITIAL_DELAY_MS);
+
+                state.timer = setInterval(function() { pollSingleEmail(email, state); }, state.intervalSec * 1000);
             });
         }
 
@@ -307,9 +310,10 @@
         function reapplyAllPollUI() {
             pollMap.forEach(function(state, email) {
                 if (!state) return;
+                // 调用 onPollStart 重新绘制 UI（兼容标准模式绿点和简洁模式拉取按钮）
                 var remaining = state.maxCount > 0 ? Math.max(0, state.maxCount - state.pollCount) : 0;
-                if (_pollUICallbacks.onPollTick) {
-                    _pollUICallbacks.onPollTick(email, remaining);
+                if (_pollUICallbacks.onPollStart) {
+                    _pollUICallbacks.onPollStart(email, remaining, { reapply: true });
                 }
             });
         }

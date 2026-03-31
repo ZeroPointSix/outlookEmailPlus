@@ -277,8 +277,13 @@ class V190FrontendContractTests(unittest.TestCase):
         self.assertIn(
             "function applyPollingSettings(settings, { restart = false", main_js
         )
+        # [Phase 3 兼容] 使用两个字段的或运算
         self.assertIn(
-            "autoPollingEnabled = isAutoPollingEnabledSetting(settings.enable_auto_polling);",
+            "autoPollingEnabled = isAutoPollingEnabledSetting(settings.enable_auto_polling)",
+            main_js,
+        )
+        self.assertIn(
+            "|| isAutoPollingEnabledSetting(settings.enable_compact_auto_poll);",
             main_js,
         )
         self.assertIn(

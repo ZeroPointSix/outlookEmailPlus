@@ -338,7 +338,11 @@
 
         // 应用标准轮询设置到内部变量（Phase 2: 仅更新变量，实际轮询由统一引擎处理）
         function applyPollingSettings(settings, { restart = false } = {}) {
-            autoPollingEnabled = isAutoPollingEnabledSetting(settings.enable_auto_polling);
+            // [Phase 3 兼容] 任一开关开启即启用轮询：
+            // - enable_auto_polling：合并后的统一开关
+            // - enable_compact_auto_poll：deprecated 旧字段，历史用户可能只设置了这个
+            autoPollingEnabled = isAutoPollingEnabledSetting(settings.enable_auto_polling)
+                || isAutoPollingEnabledSetting(settings.enable_compact_auto_poll);
             maxPollingCount = parseIntegerSetting(settings.polling_count, 5);
             pollingInterval = parseIntegerSetting(settings.polling_interval, 10);
             // [Phase 3] 合并后统一由标准字段驱动引擎
@@ -361,12 +365,16 @@
             allCards.forEach(function(card) {
                 var emailEl = card.querySelector('.account-email');
                 if (emailEl && emailEl.textContent.trim() === email) {
-                    if (!emailEl.querySelector('.standard-poll-dot')) {
-                        var dot = document.createElement('span');
-                        dot.className = 'standard-poll-dot';
-                        dot.title = translateAppTextLocal('轮询中');
-                        emailEl.appendChild(dot);
+                    // 在 .account-info 容器中添加状态行（避免 .account-email 的 overflow:hidden 裁剪）
+                    var infoEl = card.querySelector('.account-info');
+                    if (infoEl && !infoEl.querySelector('.standard-poll-status')) {
+                        var statusEl = document.createElement('div');
+                        statusEl.className = 'standard-poll-status';
+                        statusEl.innerHTML = '<span class="standard-poll-dot"></span>' + translateAppTextLocal('轮询监听中…');
+                        infoEl.appendChild(statusEl);
                     }
+                    // 给卡片加上边框高亮
+                    card.classList.add('standard-poll-active');
                 }
             });
         }
@@ -377,12 +385,18 @@
                 allCards.forEach(function(card) {
                     var emailEl = card.querySelector('.account-email');
                     if (emailEl && emailEl.textContent.trim() === email) {
-                        var dot = emailEl.querySelector('.standard-poll-dot');
-                        if (dot) dot.remove();
+                        var infoEl = card.querySelector('.account-info');
+                        if (infoEl) {
+                            var statusEl = infoEl.querySelector('.standard-poll-status');
+                            if (statusEl) statusEl.remove();
+                        }
+                        card.classList.remove('standard-poll-active');
                     }
                 });
             } else {
-                document.querySelectorAll('.standard-poll-dot').forEach(function(d) { d.remove(); });
+                // 无参数时清除所有
+                document.querySelectorAll('.standard-poll-status').forEach(function(el) { el.remove(); });
+                document.querySelectorAll('.standard-poll-active').forEach(function(el) { el.classList.remove('standard-poll-active'); });
             }
         }
 
@@ -1816,7 +1830,9 @@ ${details}
                     toggleRefreshStrategy();
 
                     // 加载轮询设置（后端返回 boolean，兼容处理）
-                    const enablePolling = isAutoPollingEnabledSetting(data.settings.enable_auto_polling);
+                    // [Phase 3 兼容] 任一开关开启，设置面板复选框就显示为勾选状态
+                    const enablePolling = isAutoPollingEnabledSetting(data.settings.enable_auto_polling)
+                        || isAutoPollingEnabledSetting(data.settings.enable_compact_auto_poll);
                     document.getElementById('enableAutoPolling').checked = enablePolling;
                     document.getElementById('pollingInterval').value = String(parseIntegerSetting(data.settings.polling_interval, 10));
                     document.getElementById('pollingCount').value = String(parseIntegerSetting(data.settings.polling_count, 5));

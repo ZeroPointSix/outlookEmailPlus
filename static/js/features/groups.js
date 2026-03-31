@@ -90,6 +90,11 @@
         async function selectGroup(groupId) {
             currentGroupId = groupId;
 
+            // 切换分组时停止所有正在运行的轮询（避免跨分组轮询堆积）
+            if (typeof stopAllPolls === 'function') {
+                stopAllPolls();
+            }
+
             // 清空搜索框
             const searchInput = document.getElementById('globalSearch');
             if (searchInput) {
@@ -172,6 +177,20 @@
                 if (typeof renderCompactAccountList === 'function') {
                     renderCompactAccountList(accountsCache[groupId]);
                 }
+                // 标准模式：为缓存中的所有账号启动轮询（跳过已在轮询中的）
+                var viewC = typeof mailboxViewMode !== 'undefined' ? mailboxViewMode : 'standard';
+                if (viewC !== 'compact' && typeof pollEnabled !== 'undefined' && pollEnabled && typeof startPoll === 'function') {
+                    var pollCount = 0;
+                    var hasPollMap = typeof pollMap !== 'undefined';
+                    (accountsCache[groupId] || []).forEach(function(acc) {
+                        if (acc && acc.email && !(hasPollMap && pollMap.has(acc.email))) {
+                            startPoll(acc.email, { silent: true }); pollCount++;
+                        }
+                    });
+                    if (pollCount > 0 && typeof showToast === 'function') {
+                        showToast(translateAppTextLocal('已为 ' + pollCount + ' 个账号启动轮询监听'), 'info');
+                    }
+                }
                 return;
             }
 
@@ -197,6 +216,20 @@
                     // 恢复滚动位置
                     if (forceRefresh) {
                         requestAnimationFrame(() => { container.scrollTop = savedScrollTop; });
+                    }
+                    // 标准模式：加载分组后，为所有账号启动轮询（跳过已在轮询中的）
+                    var view = typeof mailboxViewMode !== 'undefined' ? mailboxViewMode : 'standard';
+                    if (view !== 'compact' && typeof pollEnabled !== 'undefined' && pollEnabled && typeof startPoll === 'function') {
+                        var pollCount2 = 0;
+                        var hasPollMap2 = typeof pollMap !== 'undefined';
+                        (data.accounts || []).forEach(function(acc) {
+                            if (acc && acc.email && !(hasPollMap2 && pollMap.has(acc.email))) {
+                                startPoll(acc.email, { silent: true }); pollCount2++;
+                            }
+                        });
+                        if (pollCount2 > 0 && typeof showToast === 'function') {
+                            showToast(translateAppTextLocal('已为 ' + pollCount2 + ' 个账号启动轮询监听'), 'info');
+                        }
                     }
                 }
             } catch (error) {
