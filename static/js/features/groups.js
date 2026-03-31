@@ -1,5 +1,8 @@
         // ==================== 分组相关 ====================
 
+        // 首次加载标志：首次进入时不自动启动批量轮询，避免瞬间并发大量邮件拉取请求
+        let _initialLoadComplete = false;
+
         // 加载分组列表
         async function loadGroups() {
             const container = document.getElementById('groupList');
@@ -32,9 +35,10 @@
                             if (currentGroupId === tempEmailGroupId) {
                                 loadTempEmails(true);
                             } else {
-                                loadAccountsByGroup(currentGroupId, true);
+                                await loadAccountsByGroup(currentGroupId, true);
                             }
                         }
+                        _initialLoadComplete = true;
                     } else {
                         // 首次进入：自动选中第一个非临时邮箱分组
                         const firstNormalGroup = groups.find(g => !isTempMailboxGroup(g));
@@ -148,9 +152,11 @@
             if (isTempEmailGroup) {
                 // 临时邮箱已有独立页面，跳转到专属页面管理
                 navigate('temp-emails');
+                _initialLoadComplete = true;
                 return;
             } else {
                 await loadAccountsByGroup(groupId);
+                _initialLoadComplete = true;
             }
         }
 
@@ -173,8 +179,9 @@
                     renderCompactAccountList(accountsCache[groupId]);
                 }
                 // 标准模式：为缓存中的所有账号启动轮询（跳过已在轮询中的）
+                // 首次加载时不启动轮询，避免瞬间并发大量邮件拉取请求
                 var viewC = typeof mailboxViewMode !== 'undefined' ? mailboxViewMode : 'standard';
-                if (viewC !== 'compact' && typeof pollEnabled !== 'undefined' && pollEnabled && typeof startPoll === 'function') {
+                if (_initialLoadComplete && viewC !== 'compact' && typeof pollEnabled !== 'undefined' && pollEnabled && typeof startPoll === 'function') {
                     var pollCount = 0;
                     var hasPollMap = typeof pollMap !== 'undefined';
                     (accountsCache[groupId] || []).forEach(function(acc) {
@@ -213,8 +220,9 @@
                         requestAnimationFrame(() => { container.scrollTop = savedScrollTop; });
                     }
                     // 标准模式：加载分组后，为所有账号启动轮询（跳过已在轮询中的）
+                    // 首次加载时不启动轮询，避免瞬间并发大量邮件拉取请求
                     var view = typeof mailboxViewMode !== 'undefined' ? mailboxViewMode : 'standard';
-                    if (view !== 'compact' && typeof pollEnabled !== 'undefined' && pollEnabled && typeof startPoll === 'function') {
+                    if (_initialLoadComplete && view !== 'compact' && typeof pollEnabled !== 'undefined' && pollEnabled && typeof startPoll === 'function') {
                         var pollCount2 = 0;
                         var hasPollMap2 = typeof pollMap !== 'undefined';
                         (data.accounts || []).forEach(function(acc) {
