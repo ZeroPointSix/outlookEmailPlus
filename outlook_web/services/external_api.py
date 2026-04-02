@@ -20,6 +20,7 @@ from outlook_web.services.imap_generic import (
     get_emails_imap_generic,
 )
 from outlook_web.services.verification_extractor import (
+    apply_confidence_gate,
     extract_email_text,
     extract_verification_info_with_options,
 )
@@ -912,21 +913,8 @@ def get_verification_result(
         code_source=code_source,
     )
 
-    # ── 可信度门控：非高置信度结果不作为 external API 成功输出 ──
-    if extracted.get("code_confidence") != "high":
-        extracted["verification_code"] = None
-    if extracted.get("link_confidence") != "high":
-        extracted["verification_link"] = None
-    # 重算 formatted（与清零后的值保持一致）
-    parts = [
-        v
-        for v in (
-            extracted.get("verification_code"),
-            extracted.get("verification_link"),
-        )
-        if v
-    ]
-    extracted["formatted"] = " ".join(parts) if parts else None
+    # ── 可信度门控：与临时邮箱提取路径使用统一逻辑 ──
+    extracted = apply_confidence_gate(extracted)
 
     extracted["email"] = email_addr
     extracted["matched_email_id"] = message_id

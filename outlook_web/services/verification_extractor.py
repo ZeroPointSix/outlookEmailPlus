@@ -431,7 +431,9 @@ def _build_code_regex(*, code_regex: str | None, code_length: str | None) -> re.
     return re.compile(r"\b\d{4,8}\b")
 
 
-def _smart_extract_code_by_keywords(email_content: str, code_re: re.Pattern) -> Optional[str]:
+def _smart_extract_code_by_keywords(
+    email_content: str, code_re: re.Pattern
+) -> Optional[str]:
     if not email_content:
         return None
 
@@ -487,7 +489,9 @@ def _fallback_extract_code(email_content: str, code_re: re.Pattern) -> Optional[
     return candidates[0] if candidates else None
 
 
-def _pick_preferred_link(links: List[str], prefer_link_keywords: List[str]) -> Optional[str]:
+def _pick_preferred_link(
+    links: List[str], prefer_link_keywords: List[str]
+) -> Optional[str]:
     if not links:
         return None
 
@@ -530,7 +534,9 @@ def extract_verification_info_with_options(
     """
     subject = str(email.get("subject") or "").strip()
     content = _extract_content_text_without_subject(email)
-    html_content = str(email.get("body_html") or email.get("html_content") or "").strip()
+    html_content = str(
+        email.get("body_html") or email.get("html_content") or ""
+    ).strip()
 
     source = str(code_source or "all").strip().lower()
     if source == "subject":
@@ -580,7 +586,9 @@ def extract_verification_info_with_options(
                     break
 
     # 总 confidence 向后兼容：取 code / link 中较高者
-    confidence = "high" if code_confidence == "high" or link_confidence == "high" else "low"
+    confidence = (
+        "high" if code_confidence == "high" or link_confidence == "high" else "low"
+    )
 
     parts: List[str] = []
     if verification_code:
@@ -599,3 +607,43 @@ def extract_verification_info_with_options(
         "code_confidence": code_confidence,
         "link_confidence": link_confidence,
     }
+
+
+def apply_confidence_gate(extracted: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    对 extract_verification_info_with_options() 的返回结果应用置信度门控。
+
+    规则：
+    - code_confidence != "high"  → verification_code 置 None
+    - link_confidence != "high"  → verification_link 置 None
+    - 重算 formatted 与 confidence 以保持一致
+
+    用途：外部 API 和临时邮箱验证码提取均应调用此函数，
+    确保两条路径使用完全相同的门控标准，避免逻辑漂移。
+
+    Args:
+        extracted: extract_verification_info_with_options() 的返回值（原地修改一份拷贝）
+
+    Returns:
+        门控后的字典（不修改原始 extracted，返回新字典）
+    """
+    result = dict(extracted)
+
+    if result.get("code_confidence") != "high":
+        result["verification_code"] = None
+    if result.get("link_confidence") != "high":
+        result["verification_link"] = None
+
+    parts = [
+        v
+        for v in (result.get("verification_code"), result.get("verification_link"))
+        if v
+    ]
+    result["formatted"] = " ".join(parts) if parts else None
+    result["confidence"] = (
+        "high"
+        if result.get("code_confidence") == "high"
+        or result.get("link_confidence") == "high"
+        else "low"
+    )
+    return result

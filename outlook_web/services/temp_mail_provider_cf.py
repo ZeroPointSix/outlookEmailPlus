@@ -25,6 +25,8 @@ import email as _email_lib
 import email.policy
 import json
 import logging
+import secrets
+import string
 from datetime import datetime, timezone
 from typing import Any
 
@@ -376,9 +378,20 @@ class CloudflareTempMailProvider(TempMailProviderBase):
                 "error_code": "TEMP_MAIL_PROVIDER_NOT_CONFIGURED",
             }
 
+        # 注意：部分 CF Worker 部署版本（如 zerodotsix.top）不支持显式 domain 字段，
+        # 传入 domain 字段会导致 400 "Required field is missing"。
+        # 解决方案：始终省略 domain 字段，让 CF Worker 使用其内置默认域名。
+        # 当配置的 target_domain 与 CF Worker 实际默认域名一致时，结果相同。
+
+        # CF Worker 要求 name 不能为空字符串（空串会返回 400 "Required field is missing"）。
+        # 当调用方未指定 prefix 时，在 Python 侧生成随机 8 字符前缀。
+        effective_name = (prefix or "").strip()
+        if not effective_name:
+            alphabet = string.ascii_lowercase + string.digits
+            effective_name = "".join(secrets.choice(alphabet) for _ in range(8))
+
         payload: dict[str, Any] = {
-            "name": prefix or "",
-            "domain": target_domain,
+            "name": effective_name,
             "enablePrefix": False,  # BUG-CF-06：禁止 CF 自动加前缀
         }
 
@@ -437,27 +450,48 @@ class CloudflareTempMailProvider(TempMailProviderBase):
         }
 
     def delete_mailbox(self, mailbox: dict[str, Any]) -> bool:
-        """调用 DELETE /admin/{address} 删除邮箱。"""
-        email_addr = self._coerce_email(mailbox)
-        if not email_addr:
+        """调用 DELETE /admin/delete_address/:id 删除邮箱（按数字 address_id）。
+
+        CF Worker 正确路由为 DELETE /admin/delete_address/{id}，
+        id 是创建邮箱时返回的数字 address_id，存储在 meta["provider_mailbox_id"] 中。
+        """
+        address_id = ""
+        if isinstance(mailbox, dict):
+            meta_raw = mailbox.get("meta") or {}
+            if isinstance(meta_raw, str):
+                try:
+                    meta_raw = json.loads(meta_raw)
+                except Exception:
+                    meta_raw = {}
+            address_id = str(meta_raw.get("provider_mailbox_id") or "").strip()
+
+        if not address_id:
+            email_addr = self._coerce_email(mailbox)
+            logger.warning(
+                "[cf_provider] delete_mailbox: no address_id in meta for %s, cannot delete",
+                email_addr,
+            )
             return False
+
         base_url = self._base_url()
         try:
             resp = requests.delete(
-                f"{base_url}/admin/{email_addr}",
+                f"{base_url}/admin/delete_address/{address_id}",
                 headers=self._admin_headers(),
                 timeout=_CF_REQUEST_TIMEOUT,
             )
             return resp.ok
         except requests.RequestException as exc:
             logger.warning(
-                "[cf_provider] delete_mailbox failed addr=%s err=%s", email_addr, exc
+                "[cf_provider] delete_mailbox failed id=%s err=%s", address_id, exc
             )
             return False
 
     def list_messages(self, mailbox: dict[str, Any] | str) -> list[dict[str, Any]]:
         """
-        调用 GET /mails 获取邮件列表，解析每封邮件的 raw MIME。
+        调用 GET /api/mails?limit=100&offset=0 获取邮件列表，解析每封邮件的 raw MIME。
+
+        注意：正确路由为 /api/mails（不是 /mails，后者返回 HTML 前端页面）。
 
         返回列表中每项的字段符合平台标准（供 save_temp_email_messages 使用）：
         - id, message_id, from_address, subject, content, html_content, has_html, timestamp
@@ -475,7 +509,8 @@ class CloudflareTempMailProvider(TempMailProviderBase):
         base_url = self._base_url()
         try:
             resp = requests.get(
-                f"{base_url}/mails",
+                f"{base_url}/api/mails",
+                params={"limit": 100, "offset": 0},
                 headers=self._user_headers(jwt),
                 timeout=_CF_REQUEST_TIMEOUT,
             )
@@ -591,9 +626,10 @@ class CloudflareTempMailProvider(TempMailProviderBase):
 
     def delete_message(self, mailbox: dict[str, Any] | str, message_id: str) -> bool:
         """
-        调用 DELETE /mails/{id} 删除单封邮件。
+        调用 DELETE /api/mails/{id} 删除单封邮件。
 
-        注意：message_id 为平台格式 ``cf_<int>``，需还原为 CF 整数 ID。
+        注意：正确路由为 /api/mails/{id}（不是 /mails/{id}，后者返回 405）。
+        message_id 为平台格式 ``cf_<int>``，需还原为 CF 整数 ID。
         """
         jwt = self._get_jwt(mailbox) if isinstance(mailbox, dict) else ""
         if not jwt:
@@ -611,7 +647,7 @@ class CloudflareTempMailProvider(TempMailProviderBase):
         base_url = self._base_url()
         try:
             resp = requests.delete(
-                f"{base_url}/mails/{cf_id}",
+                f"{base_url}/api/mails/{cf_id}",
                 headers=self._user_headers(jwt),
                 timeout=_CF_REQUEST_TIMEOUT,
             )
@@ -623,11 +659,24 @@ class CloudflareTempMailProvider(TempMailProviderBase):
             return False
 
     def clear_messages(self, mailbox: dict[str, Any] | str) -> bool:
-        """调用 DELETE /mails 清空邮箱所有邮件。"""
-        jwt = self._get_jwt(mailbox) if isinstance(mailbox, dict) else ""
-        if not jwt:
+        """调用 DELETE /admin/clear_inbox/{addr_id} 清空邮箱所有邮件（Admin 接口）。
+
+        注意：用户侧没有 clear_messages 路由，需用 Admin 接口 /admin/clear_inbox/{id}，
+        id 为 meta["provider_mailbox_id"]（数字 address_id）。
+        """
+        address_id = ""
+        if isinstance(mailbox, dict):
+            meta_raw = mailbox.get("meta") or {}
+            if isinstance(meta_raw, str):
+                try:
+                    meta_raw = json.loads(meta_raw)
+                except Exception:
+                    meta_raw = {}
+            address_id = str(meta_raw.get("provider_mailbox_id") or "").strip()
+
+        if not address_id:
             logger.warning(
-                "[cf_provider] clear_messages: no jwt for %s",
+                "[cf_provider] clear_messages: no address_id for %s",
                 self._coerce_email(mailbox),
             )
             return False
@@ -635,8 +684,8 @@ class CloudflareTempMailProvider(TempMailProviderBase):
         base_url = self._base_url()
         try:
             resp = requests.delete(
-                f"{base_url}/mails",
-                headers=self._user_headers(jwt),
+                f"{base_url}/admin/clear_inbox/{address_id}",
+                headers=self._admin_headers(),
                 timeout=_CF_REQUEST_TIMEOUT,
             )
             return resp.ok

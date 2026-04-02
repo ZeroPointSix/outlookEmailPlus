@@ -12,6 +12,7 @@ from outlook_web.services.temp_mail_provider_factory import (
 )
 from outlook_web.services.temp_mail_provider_custom import TempMailProviderReadError
 from outlook_web.services.verification_extractor import (
+    apply_confidence_gate,
     extract_verification_info_with_options,
 )
 
@@ -664,7 +665,12 @@ class TempMailService:
         return True
 
     def extract_verification(
-        self, email_or_mailbox: str | dict[str, Any]
+        self,
+        email_or_mailbox: str | dict[str, Any],
+        *,
+        code_regex: str | None = None,
+        code_length: str | None = None,
+        code_source: str = "all",
     ) -> dict[str, Any]:
         mailbox = self._get_mailbox_descriptor(email_or_mailbox)
         email_addr = str(mailbox.get("email") or "")
@@ -681,8 +687,13 @@ class TempMailService:
                 "body": detail.get("content") or "",
                 "body_html": detail.get("html_content") or "",
                 "body_preview": latest.get("content_preview") or "",
-            }
+            },
+            code_regex=code_regex,
+            code_length=code_length,
+            code_source=code_source,
         )
+        # 与外部 API 保持一致：应用置信度门控
+        extracted = apply_confidence_gate(extracted)
         extracted["matched_email_id"] = latest["id"]
         extracted["from"] = (
             detail.get("from_address") or latest.get("from_address") or ""

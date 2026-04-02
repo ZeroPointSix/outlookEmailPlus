@@ -127,6 +127,7 @@ def deserialize_temp_email_meta(
         ).strip()
         or _default_provider_name_for_source(source),
         "provider_mailbox_id": str(meta.get("provider_mailbox_id") or "").strip(),
+        "provider_jwt": str(meta.get("provider_jwt") or "").strip(),
         "provider_cursor": str(meta.get("provider_cursor") or "").strip(),
         "provider_labels": [
             str(item).strip() for item in provider_labels if str(item or "").strip()
