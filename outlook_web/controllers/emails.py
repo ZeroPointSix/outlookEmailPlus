@@ -709,10 +709,15 @@ def api_extract_verification(email_addr: str) -> Any:
 
 def _parse_external_common_args(*, default_since_minutes: int | None = None) -> dict:
     """解析 external API 通用 query 参数（按 TDD-00008 做基础校验）。"""
+    claim_token = (request.args.get("claim_token") or "").strip()
     email_addr = (request.args.get("email") or "").strip()
-    if not email_addr or "@" not in email_addr:
-        raise external_api_service.InvalidParamError("email 参数无效")
-    external_api_service.ensure_external_email_access(email_addr)
+    scope = external_api_service.resolve_external_mail_scope(
+        email_addr=email_addr or None,
+        claim_token=claim_token or None,
+    )
+    resolved_email = scope["email"]
+    claim_context = scope.get("claim_context")
+    baseline_timestamp = external_api_service.claimed_at_to_timestamp(scope.get("claimed_at"))
 
     folder = (request.args.get("folder") or "inbox").strip().lower() or "inbox"
     if folder not in {"inbox", "junkemail", "deleteditems"}:
@@ -745,7 +750,10 @@ def _parse_external_common_args(*, default_since_minutes: int | None = None) -> 
             raise external_api_service.InvalidParamError("since_minutes 参数无效")
 
     return {
-        "email": email_addr,
+        "email": resolved_email,
+        "claim_token": claim_token,
+        "claim_context": claim_context,
+        "baseline_timestamp": baseline_timestamp,
         "folder": folder,
         "skip": skip,
         "top": top,
@@ -802,6 +810,7 @@ def api_external_get_messages() -> Any:
             from_contains=args["from_contains"],
             subject_contains=args["subject_contains"],
             since_minutes=args["since_minutes"],
+            baseline_timestamp=args["baseline_timestamp"],
         )
 
         external_api_service.audit_external_api_access(
@@ -844,6 +853,7 @@ def api_external_get_latest_message() -> Any:
             from_contains=args["from_contains"],
             subject_contains=args["subject_contains"],
             since_minutes=args["since_minutes"],
+            baseline_timestamp=args["baseline_timestamp"],
         )
         external_api_service.audit_external_api_access(
             action="external_api_access",
@@ -977,12 +987,24 @@ def api_external_get_verification_code() -> Any:
             from_contains=args["from_contains"],
             subject_contains=args["subject_contains"],
             since_minutes=args["since_minutes"],
+            baseline_timestamp=args["baseline_timestamp"],
+            claim_token=args["claim_token"] or None,
             code_regex=code_regex,
             code_length=code_length,
             code_source=code_source,
         )
         if not result.get("verification_code"):
             raise external_api_service.VerificationCodeNotFoundError("未找到符合条件的验证码邮件")
+
+        external_api_service.record_claim_read_context(
+            claim_token=args["claim_token"] or None,
+            action="claim",
+            payload={
+                "last_read_action": "verification-code",
+                "matched_email_id": result.get("matched_email_id"),
+                "received_at": result.get("received_at"),
+            },
+        )
 
         external_api_service.audit_external_api_access(
             action="external_api_access",
@@ -1032,9 +1054,21 @@ def api_external_get_verification_link() -> Any:
             from_contains=args["from_contains"],
             subject_contains=args["subject_contains"],
             since_minutes=args["since_minutes"],
+            baseline_timestamp=args["baseline_timestamp"],
+            claim_token=args["claim_token"] or None,
         )
         if not result.get("verification_link"):
             raise external_api_service.VerificationLinkNotFoundError("未找到符合条件的验证链接邮件")
+
+        external_api_service.record_claim_read_context(
+            claim_token=args["claim_token"] or None,
+            action="claim",
+            payload={
+                "last_read_action": "verification-link",
+                "matched_email_id": result.get("matched_email_id"),
+                "received_at": result.get("received_at"),
+            },
+        )
 
         external_api_service.audit_external_api_access(
             action="external_api_access",
@@ -1083,6 +1117,8 @@ def api_external_wait_message() -> Any:
                 from_contains=args["from_contains"],
                 subject_contains=args["subject_contains"],
                 since_minutes=args["since_minutes"],
+                baseline_timestamp=args["baseline_timestamp"],
+                claim_token=args["claim_token"] or None,
             )
             external_api_service.audit_external_api_access(
                 action="external_api_access",
@@ -1102,6 +1138,17 @@ def api_external_wait_message() -> Any:
                 from_contains=args["from_contains"],
                 subject_contains=args["subject_contains"],
                 since_minutes=args["since_minutes"],
+                baseline_timestamp=args["baseline_timestamp"],
+                claim_token=args["claim_token"] or None,
+            )
+            external_api_service.record_claim_read_context(
+                claim_token=args["claim_token"] or None,
+                action="claim",
+                payload={
+                    "last_read_action": "wait-message",
+                    "matched_email_id": result.get("id"),
+                    "received_at": result.get("created_at"),
+                },
             )
             external_api_service.audit_external_api_access(
                 action="external_api_access",

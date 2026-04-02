@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 # 对齐：PRD-00005 / FD-00005 / TDD-00005 / PRD-00006 / FD-00006
-# 职责：集中维护“邮箱提供商”元数据与 IMAP 文件夹映射，避免前后端重复维护默认 host/port 与 folder 兼容策略。
+# 职责：集中维护邮箱提供商元数据、邮箱域名归一化规则，以及 provider/domain 一致性校验。
 
-# 邮箱提供商配置（用于前端选择与默认 IMAP host/port）
 MAIL_PROVIDERS: Dict[str, Dict[str, Any]] = {
     "outlook": {
         "label": "Outlook",
@@ -65,33 +64,24 @@ MAIL_PROVIDERS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# FD-00006: 域名 → provider 反向映射（用于 auto 模式域名推断）
 DOMAIN_PROVIDER_MAP: Dict[str, str] = {
-    # Gmail
     "gmail.com": "gmail",
     "googlemail.com": "gmail",
-    # QQ
     "qq.com": "qq",
     "foxmail.com": "qq",
-    # 163
     "163.com": "163",
-    # 126
     "126.com": "126",
-    # Yahoo
     "yahoo.com": "yahoo",
     "yahoo.co.jp": "yahoo",
     "yahoo.co.uk": "yahoo",
-    # 阿里云
     "aliyun.com": "aliyun",
     "alimail.com": "aliyun",
-    # 微软（2段格式按 IMAP 兜底处理，OAuth 至少4段）
     "outlook.com": "outlook",
     "hotmail.com": "outlook",
     "live.com": "outlook",
     "live.cn": "outlook",
 }
 
-# FD-00006: provider → 自动分组名映射
 PROVIDER_GROUP_NAME: Dict[str, str] = {
     "outlook": "Outlook",
     "gmail": "Gmail",
@@ -104,19 +94,59 @@ PROVIDER_GROUP_NAME: Dict[str, str] = {
     "gptmail": "临时邮箱",
 }
 
-# FD-00006: 已知 provider key 集合（用于 3 段格式校验）
-KNOWN_PROVIDER_KEYS: set = set(MAIL_PROVIDERS.keys())
+KNOWN_PROVIDER_KEYS: set[str] = set(MAIL_PROVIDERS.keys())
+
+PROVIDER_FAMILY_DOMAINS: Dict[str, set[str]] = {}
+for domain_name, provider_key in DOMAIN_PROVIDER_MAP.items():
+    PROVIDER_FAMILY_DOMAINS.setdefault(provider_key, set()).add(domain_name)
 
 
-def infer_provider_from_email(email: str) -> Optional[str]:
-    """从邮箱地址推断 provider。返回 provider key 或 None。"""
-    if not email or "@" not in email:
+def normalize_email_domain(value: str | None) -> str:
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    if "@" in text:
+        text = text.rsplit("@", 1)[-1]
+    return text.strip().strip(".")
+
+
+def extract_email_domain(email: str | None) -> str:
+    text = str(email or "").strip().lower()
+    if "@" not in text:
+        return ""
+    return normalize_email_domain(text.rsplit("@", 1)[-1])
+
+
+def infer_provider_from_email(email: str | None) -> Optional[str]:
+    domain = extract_email_domain(email)
+    if not domain:
         return None
-    domain = email.rsplit("@", 1)[-1].strip().lower()
     return DOMAIN_PROVIDER_MAP.get(domain)
 
 
-# provider -> 逻辑文件夹名（inbox/junkemail/deleteditems）-> 候选 IMAP 文件夹名列表
+def infer_provider_from_domain(domain: str | None) -> Optional[str]:
+    normalized = normalize_email_domain(domain)
+    if not normalized:
+        return None
+    return DOMAIN_PROVIDER_MAP.get(normalized)
+
+
+def provider_supports_email_domain(provider: str | None, email_domain: str | None) -> bool:
+    provider_key = str(provider or "").strip().lower()
+    normalized_domain = normalize_email_domain(email_domain)
+    if not provider_key or not normalized_domain:
+        return False
+    inferred_provider = infer_provider_from_domain(normalized_domain)
+    if inferred_provider is not None:
+        return inferred_provider == provider_key
+    return provider_key == "custom"
+
+
+def get_provider_domains(provider: str | None) -> set[str]:
+    provider_key = str(provider or "").strip().lower()
+    return set(PROVIDER_FAMILY_DOMAINS.get(provider_key, set()))
+
+
 PROVIDER_FOLDER_MAP: Dict[str, Dict[str, List[str]]] = {
     "gmail": {
         "inbox": ["INBOX"],
@@ -147,20 +177,13 @@ PROVIDER_FOLDER_MAP: Dict[str, Dict[str, List[str]]] = {
 
 
 def get_imap_folder_candidates(provider: str, folder: str) -> List[str]:
-    """
-    根据 provider 和逻辑文件夹名（inbox/junkemail/deleteditems），
-    返回候选 IMAP 文件夹名列表（按优先级排序）。
-    不存在的 provider 退回 _default。
-    """
     provider_key = (provider or "").strip() or "_default"
     folder_key = (folder or "").strip().lower() or "inbox"
-
     folder_map = PROVIDER_FOLDER_MAP.get(provider_key, PROVIDER_FOLDER_MAP["_default"])
     return folder_map.get(folder_key, PROVIDER_FOLDER_MAP["_default"].get(folder_key, ["INBOX"]))
 
 
 def get_provider_list() -> List[Dict[str, Any]]:
-    """返回供前端展示的 provider 列表（auto 在最前，outlook 其次，custom 在后）"""
     result: List[Dict[str, Any]] = [
         {
             "key": "auto",
@@ -173,13 +196,13 @@ def get_provider_list() -> List[Dict[str, Any]]:
     for key in order:
         if key not in MAIL_PROVIDERS:
             continue
-        p = MAIL_PROVIDERS[key]
+        provider = MAIL_PROVIDERS[key]
         result.append(
             {
                 "key": key,
-                "label": p.get("label", key),
-                "account_type": p.get("account_type", "imap" if key != "outlook" else "outlook"),
-                "note": p.get("note", ""),
+                "label": provider.get("label", key),
+                "account_type": provider.get("account_type", "imap" if key != "outlook" else "outlook"),
+                "note": provider.get("note", ""),
             }
         )
     return result

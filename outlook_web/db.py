@@ -15,6 +15,7 @@ from outlook_web.security.crypto import (
     is_encrypted,
     is_password_hashed,
 )
+from outlook_web.services.providers import extract_email_domain
 
 # 数据库 Schema 版本（用于升级可验证/可诊断）
 # v3：对齐 PRD-00005 / FD-00005 / TDD-00005（accounts 表新增多邮箱字段：account_type/provider/imap_host/imap_port/imap_password）
@@ -28,7 +29,8 @@ from outlook_web.security.crypto import (
 # v12：PRD-00009 P2 — external_api_keys 新增 pool_access 布尔权限
 # v13：PRD-00010 V1.90 — 邮件通知设置 + 统一通知游标/投递日志表
 # v14：PRD-00011 V1.91 — accounts 表新增简洁模式摘要字段，/api/accounts 只读持久化摘要
-DB_SCHEMA_VERSION = 14
+# v15：OpenSpec project-scoped-pool-reuse — email_domain + account_project_usage + claim context 扩展
+DB_SCHEMA_VERSION = 15
 DB_SCHEMA_VERSION_KEY = "db_schema_version"
 DB_SCHEMA_LAST_UPGRADE_TRACE_ID_KEY = "db_schema_last_upgrade_trace_id"
 DB_SCHEMA_LAST_UPGRADE_ERROR_KEY = "db_schema_last_upgrade_error"
@@ -175,6 +177,7 @@ def init_db(database_path: Optional[str] = None):
             CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE NOT NULL,
+                email_domain TEXT DEFAULT '',
                 password TEXT,
                 client_id TEXT NOT NULL,
                 refresh_token TEXT NOT NULL,
@@ -360,6 +363,8 @@ def init_db(database_path: Optional[str] = None):
             cursor.execute("ALTER TABLE accounts ADD COLUMN account_type TEXT DEFAULT 'outlook'")
         if "provider" not in columns:
             cursor.execute("ALTER TABLE accounts ADD COLUMN provider TEXT DEFAULT 'outlook'")
+        if "email_domain" not in columns:
+            cursor.execute("ALTER TABLE accounts ADD COLUMN email_domain TEXT DEFAULT ''")
         if "imap_host" not in columns:
             cursor.execute("ALTER TABLE accounts ADD COLUMN imap_host TEXT")
         if "imap_port" not in columns:
@@ -738,15 +743,27 @@ def init_db(database_path: Optional[str] = None):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 account_id INTEGER NOT NULL,
                 claim_token TEXT NOT NULL,
+                consumer_key TEXT NOT NULL DEFAULT '',
+                project_key TEXT NOT NULL DEFAULT '',
                 caller_id TEXT NOT NULL,
                 task_id TEXT NOT NULL,
                 action TEXT NOT NULL,
                 result TEXT DEFAULT NULL,
                 detail TEXT DEFAULT NULL,
+                claim_read_context TEXT DEFAULT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (account_id) REFERENCES accounts(id)
             )
             """)
+        cursor.execute("PRAGMA table_info(account_claim_logs)")
+        claim_log_columns = [col[1] for col in cursor.fetchall()]
+        for col_def in [
+            ("consumer_key", "TEXT NOT NULL DEFAULT ''"),
+            ("project_key", "TEXT NOT NULL DEFAULT ''"),
+            ("claim_read_context", "TEXT DEFAULT NULL"),
+        ]:
+            if col_def[0] not in claim_log_columns:
+                cursor.execute(f"ALTER TABLE account_claim_logs ADD COLUMN {col_def[0]} {col_def[1]}")
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_claim_logs_account_id
             ON account_claim_logs(account_id)
@@ -760,9 +777,47 @@ def init_db(database_path: Optional[str] = None):
             ON account_claim_logs(claim_token)
             """)
         cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_claim_logs_consumer_project
+            ON account_claim_logs(consumer_key, project_key, action)
+            """)
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_accounts_pool_status
             ON accounts(pool_status)
             """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_accounts_email_domain
+            ON accounts(email_domain)
+            """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS account_project_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                consumer_key TEXT NOT NULL,
+                project_key TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(account_id, consumer_key, project_key),
+                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+            )
+            """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_account_project_usage_lookup
+            ON account_project_usage(consumer_key, project_key, account_id)
+            """)
+
+        rows_missing_domain = cursor.execute(
+            """
+            SELECT id, email
+            FROM accounts
+            WHERE COALESCE(email_domain, '') = ''
+            """
+        ).fetchall()
+        for row in rows_missing_domain:
+            normalized_domain = extract_email_domain(row["email"])
+            cursor.execute(
+                "UPDATE accounts SET email_domain = ? WHERE id = ?",
+                (normalized_domain, row["id"]),
+            )
 
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pool_cooldown_seconds', '86400')")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pool_default_lease_seconds', '600')")

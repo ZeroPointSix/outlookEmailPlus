@@ -398,6 +398,7 @@ def api_external_account_status() -> Any:
         "exists": True,
         "account_type": account_type,
         "provider": provider,
+        "email_domain": account.get("email_domain") or "",
         "group_id": account.get("group_id"),
         "status": account.get("status"),
         "last_refresh_at": account.get("last_refresh_at"),
