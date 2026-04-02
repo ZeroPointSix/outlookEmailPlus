@@ -14,6 +14,7 @@ from outlook_web.security.auth import get_external_api_consumer
 from outlook_web.services import graph as graph_service
 from outlook_web.services import imap as imap_service
 from outlook_web.services.imap_generic import get_email_detail_imap_generic_result, get_emails_imap_generic
+from outlook_web.services import pool as pool_service
 from outlook_web.services.verification_extractor import extract_email_text, extract_verification_info_with_options
 
 # Outlook IMAP 回退服务器（保持与内部接口一致）
@@ -77,6 +78,16 @@ class EmailScopeForbiddenError(ExternalApiError):
 class AccountAccessForbiddenError(ExternalApiError):
     code = "ACCOUNT_ACCESS_FORBIDDEN"
     status = 403
+
+
+class ClaimContextMismatchError(ExternalApiError):
+    code = "CLAIM_CONTEXT_MISMATCH"
+    status = 400
+
+
+class ClaimTokenNotFoundError(ExternalApiError):
+    code = "CLAIM_TOKEN_NOT_FOUND"
+    status = 404
 
 
 def ok(data: Any = None, *, message: str = "success") -> Dict[str, Any]:
@@ -155,6 +166,88 @@ def ensure_external_email_access(email_addr: str) -> None:
                 "consumer_name": consumer.get("name"),
             },
         )
+
+
+def _normalize_email_addr(email_addr: str | None) -> str:
+    return str(email_addr or "").strip().lower()
+
+
+def resolve_claim_context(*, claim_token: str, email_addr: str | None = None) -> Dict[str, Any]:
+    try:
+        claim_context = pool_service.get_claim_context(claim_token=claim_token)
+    except pool_service.PoolServiceError as exc:
+        error_code = str(exc.error_code or "").strip().lower()
+        if error_code == "claim_token_not_found":
+            raise ClaimTokenNotFoundError(str(exc)) from exc
+        raise InvalidParamError(str(exc)) from exc
+
+    claim_email = _normalize_email_addr(claim_context.get("email"))
+    if not claim_email:
+        raise ClaimTokenNotFoundError("claim_token 对应的邮箱上下文不存在")
+    ensure_external_email_access(claim_email)
+
+    requested_email = _normalize_email_addr(email_addr)
+    if requested_email and requested_email != claim_email:
+        raise ClaimContextMismatchError(
+            "claim_token 与 email 不匹配",
+            data={"email": requested_email, "claim_email": claim_email},
+        )
+
+    return {
+        "account_id": claim_context.get("account_id"),
+        "claim_token": claim_context.get("claim_token") or str(claim_token or "").strip(),
+        "email": claim_email,
+        "email_domain": claim_context.get("email_domain") or "",
+        "provider": claim_context.get("provider") or "",
+        "consumer_key": claim_context.get("consumer_key") or "",
+        "project_key": claim_context.get("project_key") or "",
+        "caller_id": claim_context.get("caller_id") or "",
+        "task_id": claim_context.get("task_id") or "",
+        "claimed_at": claim_context.get("claimed_at") or "",
+        "pool_status": claim_context.get("pool_status") or "",
+    }
+
+
+def resolve_external_mail_scope(*, email_addr: str | None = None, claim_token: str | None = None) -> Dict[str, Any]:
+    normalized_claim_token = str(claim_token or "").strip()
+    normalized_email = _normalize_email_addr(email_addr)
+
+    if normalized_claim_token:
+        claim_context = resolve_claim_context(claim_token=normalized_claim_token, email_addr=normalized_email or None)
+        return {
+            "email": claim_context["email"],
+            "claim_context": claim_context,
+            "claimed_at": claim_context.get("claimed_at") or "",
+        }
+
+    if not normalized_email:
+        raise InvalidParamError("email 参数无效")
+    ensure_external_email_access(normalized_email)
+    return {"email": normalized_email, "claim_context": None, "claimed_at": ""}
+
+
+def claimed_at_to_timestamp(claimed_at: str | None) -> Optional[int]:
+    dt = _parse_datetime(str(claimed_at or ""))
+    if not dt:
+        return None
+    try:
+        return int(dt.timestamp())
+    except Exception:
+        return None
+
+
+def record_claim_read_context(*, claim_token: str | None, action: str, payload: Dict[str, Any]) -> None:
+    normalized_token = str(claim_token or "").strip()
+    if not normalized_token:
+        return
+    try:
+        pool_service.append_claim_read_context(
+            claim_token=normalized_token,
+            action=action,
+            payload=payload,
+        )
+    except Exception:
+        pass
 
 
 def _build_message_summary(email_addr: str, item: Dict[str, Any], *, method: str) -> Dict[str, Any]:
@@ -504,6 +597,7 @@ def filter_messages(
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     from_contains = (from_contains or "").strip().lower()
     subject_contains = (subject_contains or "").strip().lower()
@@ -531,6 +625,13 @@ def filter_messages(
             if dt and dt < since_dt:
                 continue
 
+        if baseline_timestamp is not None:
+            try:
+                if int(e.get("timestamp") or 0) < int(baseline_timestamp):
+                    continue
+            except Exception:
+                continue
+
         filtered.append(e)
     return filtered
 
@@ -542,6 +643,7 @@ def get_latest_message_for_external(
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
 ) -> Dict[str, Any]:
     emails = list_messages_for_external(email_addr=email_addr, folder=folder, skip=0, top=20)[0]
     filtered = filter_messages(
@@ -549,6 +651,7 @@ def get_latest_message_for_external(
         from_contains=from_contains,
         subject_contains=subject_contains,
         since_minutes=since_minutes,
+        baseline_timestamp=baseline_timestamp,
     )
     if not filtered:
         raise MailNotFoundError("未找到匹配邮件", data={"email": email_addr})
@@ -700,6 +803,8 @@ def get_verification_result(
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
+    claim_token: str | None = None,
     code_regex: str | None = None,
     code_length: str | None = None,
     code_source: str = "all",
@@ -710,6 +815,7 @@ def get_verification_result(
         from_contains=from_contains,
         subject_contains=subject_contains,
         since_minutes=since_minutes,
+        baseline_timestamp=baseline_timestamp,
     )
     message_id = str(latest_summary.get("id") or "")
     method = str(latest_summary.get("method") or "")
@@ -744,6 +850,8 @@ def get_verification_result(
     extracted["subject"] = detail.get("subject") or latest_summary.get("subject") or ""
     extracted["received_at"] = detail.get("created_at") or latest_summary.get("created_at") or ""
     extracted["method"] = detail.get("method") or method
+    if claim_token:
+        extracted["claim_token"] = claim_token
     return extracted
 
 
@@ -756,6 +864,8 @@ def wait_for_message(
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
+    claim_token: str | None = None,
 ) -> Dict[str, Any]:
     try:
         timeout_seconds = int(timeout_seconds)
@@ -769,7 +879,7 @@ def wait_for_message(
         raise InvalidParamError("poll_interval 参数无效")
 
     # 记录进入等待接口时的时间戳，避免把请求开始前已存在的旧邮件误判成“新到达”。
-    baseline_timestamp = int(time.time())
+    effective_baseline = int(baseline_timestamp or 0) or int(time.time())
     start = time.time()
     last_error: Optional[ExternalApiError] = None
     while True:
@@ -780,8 +890,11 @@ def wait_for_message(
                 from_contains=from_contains,
                 subject_contains=subject_contains,
                 since_minutes=since_minutes,
+                baseline_timestamp=effective_baseline,
             )
-            if int(latest_message.get("timestamp") or 0) >= baseline_timestamp:
+            if int(latest_message.get("timestamp") or 0) >= effective_baseline:
+                if claim_token:
+                    latest_message["claim_token"] = claim_token
                 return latest_message
         except MailNotFoundError as exc:
             last_error = exc
@@ -823,6 +936,8 @@ def create_probe(
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
+    claim_token: str | None = None,
 ) -> Dict[str, Any]:
     """
     创建一个异步探测请求，后台 worker 会定期轮询直到匹配或超时。
@@ -859,7 +974,7 @@ def create_probe(
             int(timeout_seconds),
             int(poll_interval),
             expires_at.isoformat(),
-            now.isoformat(),
+            (datetime.fromtimestamp(int(baseline_timestamp), timezone.utc).isoformat() if baseline_timestamp else now.isoformat()),
             now.isoformat(),
         ),
     )
@@ -868,6 +983,7 @@ def create_probe(
     return {
         "probe_id": probe_id,
         "status": "pending",
+        "claim_token": str(claim_token or "").strip(),
         "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
         "poll_url": f"/api/external/probe/{probe_id}",
     }

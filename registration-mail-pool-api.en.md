@@ -116,8 +116,8 @@ Time fields use ISO 8601, for example:
 1. `GET /api/external/health`
 2. `GET /api/external/capabilities`
 3. `POST /api/external/pool/claim-random`
-4. read the returned `email`
-5. call `verification-code` / `verification-link` / `wait-message`
+4. read the returned `email`, `provider`, `email_domain`, and `claim_token`
+5. for pool-issued mail reads, prefer `claim_token` when calling `verification-code` / `verification-link` / `wait-message`
 6. call `claim-complete` on success
 7. call `claim-release` if the task is abandoned
 
@@ -179,6 +179,7 @@ Important response fields:
 - `exists`
 - `account_type`
 - `provider`
+- `email_domain`
 - `group_id`
 - `status`
 - `last_refresh_at`
@@ -197,7 +198,8 @@ These parameters apply to most mail-reading endpoints:
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `email` | string | Yes | mailbox address |
+| `email` | string | Conditionally | mailbox address, required when `claim_token` is not provided |
+| `claim_token` | string | Conditionally | preferred for pool-issued reads; resolves mailbox context from the active claim |
 | `folder` | string | No | `inbox` / `junkemail` / `deleteditems`, default `inbox` |
 | `skip` | integer | No | default `0` |
 | `top` | integer | No | range `1-50`, default `20` |
@@ -207,8 +209,9 @@ These parameters apply to most mail-reading endpoints:
 
 Notes:
 
-- if the mailbox came from the pool, use the `email` returned by `claim-random`
-- the current external read API is email-based, not claim-based
+- if the mailbox came from the pool, prefer `claim_token`; `email` remains available for non-pool flows
+- when both `claim_token` and `email` are sent, they must refer to the same mailbox
+- claim-scoped reads use the claim `claimed_at` timestamp as a hard baseline to block historical mail leakage
 
 ---
 
@@ -322,19 +325,18 @@ Request body:
 | --- | --- | --- | --- |
 | `caller_id` | string | Yes | caller instance, node, or worker identity |
 | `task_id` | string | Yes | unique task ID |
+| `project_key` | string | Yes | business project identifier under the current authenticated consumer |
 | `provider` | string | No | provider filter, for example `outlook` |
-
-Current implementation notes:
-
-- the current pool API supports filtering only by `provider`
-- `outlook.com`, `hotmail.com`, `live.com`, and `live.cn` all map to `provider=outlook`
-- the current external pool API does not support extra filtering by domain, group, or tags
+| `email_domain` | string | No | exact normalized domain filter, for example `hotmail.com` |
 
 Success response fields:
 
 - `account_id`
 - `email`
+- `provider`
+- `email_domain`
 - `claim_token`
+- `claimed_at`
 - `lease_expires_at`
 
 When no mailbox is available, the current implementation returns:
@@ -351,6 +353,7 @@ Request body:
 | --- | --- | --- | --- |
 | `account_id` | integer | Yes | account ID returned by the claim operation |
 | `claim_token` | string | Yes | token returned by the claim operation |
+| `project_key` | string | Yes | must exactly match the original claim |
 | `caller_id` | string | Yes | must exactly match the claim request |
 | `task_id` | string | Yes | must exactly match the claim request |
 | `reason` | string | No | release reason |
@@ -363,6 +366,7 @@ Request body:
 | --- | --- | --- | --- |
 | `account_id` | integer | Yes | account ID returned by the claim operation |
 | `claim_token` | string | Yes | token returned by the claim operation |
+| `project_key` | string | Yes | must exactly match the original claim |
 | `caller_id` | string | Yes | must exactly match the claim request |
 | `task_id` | string | Yes | must exactly match the claim request |
 | `result` | string | Yes | result enum, see table below |
@@ -372,16 +376,11 @@ Request body:
 
 | `result` | Meaning | Final `pool_status` |
 | --- | --- | --- |
-| `success` | registration succeeded and the mailbox was consumed | `used` |
+| `success` | registration succeeded and the mailbox enters short cooldown | `cooldown` |
 | `verification_timeout` | no verification code arrived in time | `cooldown` |
 | `provider_blocked` | provider-side block or restriction | `frozen` |
 | `credential_invalid` | invalid credentials | `retired` |
 | `network_error` | temporary network issue, safe to retry quickly | `available` |
-
-Current implementation notes:
-
-- `success` marks the mailbox as globally `used`
-- the current version does not support project-scoped reuse of the same mailbox
 
 ### `GET /api/external/pool/stats`
 
@@ -420,12 +419,26 @@ For `claim-release` and `claim-complete`, the following fields must exactly matc
 
 - `account_id`
 - `claim_token`
+- `project_key`
 - `caller_id`
 - `task_id`
 
 ### `wait-message` Only Returns New Mail
 
 The sync `wait-message` endpoint returns only a matching message that appears after the request begins. Older matching messages are not treated as new arrivals.
+
+### Claim-Scoped Reads
+
+- when a pool integration already holds a `claim_token`, use that token as the authoritative read context
+- `verification-code`, `verification-link`, and `wait-message` resolve mailbox context from `claim_token`
+- the claim `claimed_at` timestamp is enforced as the read baseline, so older matching mail is ignored
+- if both `claim_token` and `email` are provided, they must match exactly or the request fails with `CLAIM_CONTEXT_MISMATCH`
+
+### Compatibility Window And Legacy `used`
+
+- `project_key` is now required by the runtime contract; do not rely on `caller_id` or `task_id` as a project substitute
+- if you still have legacy callers, upgrade them during the current rollout window before enforcing the new contract everywhere
+- legacy mailboxes already stuck in global `used` remain frozen for manual review; they are not automatically remapped to project-scoped history
 
 ---
 
@@ -449,6 +462,10 @@ The sync `wait-message` endpoint returns only a matching message that appears af
 | `UPSTREAM_READ_FAILED` | Graph / IMAP read failed |
 | `PROXY_ERROR` | proxy connection failed |
 | `NO_AVAILABLE_ACCOUNT` | no eligible mailbox is currently available in the pool |
+| `PROJECT_KEY_EMPTY` | `project_key` is missing |
+| `PROVIDER_EMAIL_DOMAIN_MISMATCH` | `provider` and `email_domain` do not belong to the same family |
+| `CLAIM_TOKEN_NOT_FOUND` | `claim_token` is missing, expired, or no longer active |
+| `CLAIM_CONTEXT_MISMATCH` | `claim_token` and `email` point to different mailboxes |
 | `TOKEN_MISMATCH` | `claim_token` does not match |
 | `CALLER_MISMATCH` | `caller_id` or `task_id` does not match the claim record |
 | `NOT_CLAIMED` | the mailbox is not currently in `claimed` state |

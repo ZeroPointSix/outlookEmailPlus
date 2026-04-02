@@ -59,6 +59,20 @@ class TestDomainProviderMap(unittest.TestCase):
         self.assertIsNone(infer_provider_from_email(None))
         self.assertIsNone(infer_provider_from_email("no-at-sign"))
 
+    def test_extract_and_normalize_email_domain(self):
+        from outlook_web.services.providers import extract_email_domain, normalize_email_domain
+
+        self.assertEqual(extract_email_domain("User@HotMail.COM"), "hotmail.com")
+        self.assertEqual(normalize_email_domain(" HotMail.COM "), "hotmail.com")
+        self.assertEqual(normalize_email_domain("user@live.com"), "live.com")
+
+    def test_provider_supports_email_domain(self):
+        from outlook_web.services.providers import provider_supports_email_domain
+
+        self.assertTrue(provider_supports_email_domain("outlook", "hotmail.com"))
+        self.assertTrue(provider_supports_email_domain("outlook", "HotMail.COM"))
+        self.assertFalse(provider_supports_email_domain("gmail", "hotmail.com"))
+
     def test_known_provider_keys(self):
         from outlook_web.services.providers import KNOWN_PROVIDER_KEYS, MAIL_PROVIDERS
 

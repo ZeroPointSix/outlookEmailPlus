@@ -69,6 +69,52 @@ class ExternalApiBaseTest(unittest.TestCase):
             db.commit()
         return email_addr
 
+    def _insert_claimed_pool_account(
+        self,
+        *,
+        email_addr: str | None = None,
+        project_key: str = "register",
+        consumer_key: str = "legacy:settings.external_api_key",
+        caller_id: str = "pool-worker",
+        task_id: str = "pool-task",
+        claim_token: str = "clm_test_token",
+        claimed_at: str | None = None,
+    ) -> str:
+        email_addr = email_addr or f"{uuid.uuid4().hex}@extapi.test"
+        claimed_at = claimed_at or self._utc_iso()
+        claimed_by = f"{consumer_key}||{project_key}||{caller_id}||{task_id}"
+        with self.app.app_context():
+            from outlook_web.db import get_db
+
+            db = get_db()
+            db.execute(
+                """
+                INSERT INTO accounts (
+                    email, email_domain, password, client_id, refresh_token, group_id,
+                    status, account_type, provider, pool_status, claimed_by, claimed_at,
+                    lease_expires_at, claim_token
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'claimed', ?, ?, ?, ?)
+                """,
+                (
+                    email_addr,
+                    email_addr.rsplit("@", 1)[-1].lower(),
+                    "pw",
+                    "cid-test",
+                    "rt-test",
+                    1,
+                    "active",
+                    "outlook",
+                    "outlook",
+                    claimed_by,
+                    claimed_at,
+                    self._utc_iso(minutes_delta=10),
+                    claim_token,
+                ),
+            )
+            db.commit()
+        return email_addr
+
     def _insert_imap_account(self, email_addr: str | None = None) -> str:
         email_addr = email_addr or f"{uuid.uuid4().hex}@extapi.test"
         with self.app.app_context():
@@ -561,6 +607,65 @@ class ExternalApiVerificationTests(ExternalApiBaseTest):
         self.assertEqual(resp.status_code, 404)
         self.assertEqual(resp.get_json().get("code"), "MAIL_NOT_FOUND")
 
+    @patch("outlook_web.services.graph.get_email_raw_graph")
+    @patch("outlook_web.services.graph.get_email_detail_graph")
+    @patch("outlook_web.services.graph.get_emails_graph")
+    def test_external_verification_code_supports_claim_token_baseline(
+        self,
+        mock_get_emails_graph,
+        mock_get_email_detail_graph,
+        mock_get_email_raw_graph,
+    ):
+        claimed_at = "2026-03-08T12:00:00Z"
+        claim_email = self._insert_claimed_pool_account(
+            email_addr=f"{uuid.uuid4().hex}@extapi.test",
+            claim_token="clm_claim_read_001",
+            claimed_at=claimed_at,
+        )
+        self._set_external_api_key("abc123")
+        mock_get_emails_graph.return_value = {
+            "success": True,
+            "emails": [
+                self._graph_email(message_id="old-msg", received_at="2026-03-08T11:59:00Z"),
+                self._graph_email(message_id="new-msg", received_at="2026-03-08T12:01:00Z"),
+            ],
+        }
+        mock_get_email_detail_graph.return_value = self._graph_detail(
+            message_id="new-msg",
+            body_text="Your code is 123456",
+            received_at="2026-03-08T12:01:00Z",
+        )
+        mock_get_email_raw_graph.return_value = "RAW MIME CONTENT"
+
+        client = self.app.test_client()
+        resp = client.get(
+            "/api/external/verification-code?claim_token=clm_claim_read_001",
+            headers=self._auth_headers(),
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data.get("success"))
+        self.assertEqual(data.get("data", {}).get("email"), claim_email)
+        self.assertEqual(data.get("data", {}).get("matched_email_id"), "new-msg")
+        self.assertEqual(data.get("data", {}).get("claim_token"), "clm_claim_read_001")
+
+    def test_external_verification_code_rejects_claim_email_mismatch(self):
+        self._insert_claimed_pool_account(
+            email_addr=f"{uuid.uuid4().hex}@extapi.test",
+            claim_token="clm_claim_mismatch_001",
+        )
+        self._set_external_api_key("abc123")
+        client = self.app.test_client()
+
+        resp = client.get(
+            "/api/external/verification-code?claim_token=clm_claim_mismatch_001&email=other@extapi.test",
+            headers=self._auth_headers(),
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.get_json().get("code"), "CLAIM_CONTEXT_MISMATCH")
+
     @patch("outlook_web.services.external_api.time.sleep")
     @patch("outlook_web.services.external_api.time.time")
     @patch("outlook_web.services.external_api.get_latest_message_for_external")
@@ -986,6 +1091,34 @@ class ExternalApiWaitMessageHttpTests(ExternalApiBaseTest):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.get_json().get("code"), "INVALID_PARAM")
+
+    @patch("outlook_web.services.external_api.time.sleep")
+    @patch("outlook_web.services.external_api.time.time")
+    @patch("outlook_web.services.graph.get_emails_graph")
+    def test_wait_message_http_supports_claim_token_baseline(self, mock_get_emails_graph, mock_time, mock_sleep):
+        self._insert_claimed_pool_account(
+            email_addr=f"{uuid.uuid4().hex}@extapi.test",
+            claim_token="clm_wait_claim_001",
+            claimed_at="2026-03-08T12:00:00Z",
+        )
+        self._set_external_api_key("abc123")
+        mock_time.side_effect = [2000000000, 2000000000, 2000000000]
+        mock_get_emails_graph.side_effect = [
+            {"success": True, "emails": [self._graph_email(message_id="old-msg", received_at="2026-03-08T11:59:00Z")]},
+            {"success": True, "emails": [self._graph_email(message_id="new-msg", received_at="2026-03-08T12:01:00Z")]},
+        ]
+
+        client = self.app.test_client()
+        resp = client.get(
+            "/api/external/wait-message?claim_token=clm_wait_claim_001&timeout_seconds=30&poll_interval=5",
+            headers=self._auth_headers(),
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data.get("success"))
+        self.assertEqual(data.get("data", {}).get("id"), "new-msg")
+        self.assertEqual(data.get("data", {}).get("claim_token"), "clm_wait_claim_001")
 
     @patch("outlook_web.services.external_api.wait_for_message")
     def test_wait_message_http_unexpected_error_logs_audit(self, mock_wait_for_message):
