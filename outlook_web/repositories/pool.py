@@ -65,9 +65,7 @@ def claim_atomic(
             params.append(tag_name)
 
     if exclude_recent_minutes and exclude_recent_minutes > 0:
-        cutoff = (
-            _utcnow() - timedelta(minutes=exclude_recent_minutes)
-        ).isoformat() + "Z"
+        cutoff = (_utcnow() - timedelta(minutes=exclude_recent_minutes)).isoformat() + "Z"
         sql += " AND (a.last_claimed_at IS NULL OR a.last_claimed_at < ?)"
         params.append(cutoff)
 
@@ -99,9 +97,7 @@ def claim_atomic(
         return None
 
     now_str = _utcnow().isoformat() + "Z"
-    lease_expires_at_str = (
-        _utcnow() + timedelta(seconds=lease_seconds)
-    ).isoformat() + "Z"
+    lease_expires_at_str = (_utcnow() + timedelta(seconds=lease_seconds)).isoformat() + "Z"
     token = "clm_" + secrets.token_urlsafe(9)
 
     conn.execute(
