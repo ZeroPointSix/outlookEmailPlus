@@ -1,0 +1,18 @@
+{
+  // 项目名称，用来生成 Worker / D1 / Pages 名称
+  // 例如: "my-tempmail" → Worker: my-tempmail-api, D1: my-tempmail-db, Pages: my-tempmail-frontend
+  "projectName": "my-tempmail",
+
+  // 收件主域名（必须已托管到 Cloudflare）
+  // 例如: "example.com"
+  "mailDomain": "openshare.tech",
+
+  // 前端域名前缀，最终为 mail.example.com
+  "frontendSubdomain": "mail",
+
+  // API 域名前缀，最终为 email-api.example.com
+  "apiSubdomain": "email-api",
+
+  // 后台 /admin 密码（强烈建议修改！）
+  "adminPassword": "0987654321-="
+}

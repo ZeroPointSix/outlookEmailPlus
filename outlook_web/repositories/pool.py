@@ -65,7 +65,9 @@ def claim_atomic(
             params.append(tag_name)
 
     if exclude_recent_minutes and exclude_recent_minutes > 0:
-        cutoff = (_utcnow() - timedelta(minutes=exclude_recent_minutes)).isoformat() + "Z"
+        cutoff = (
+            _utcnow() - timedelta(minutes=exclude_recent_minutes)
+        ).isoformat() + "Z"
         sql += " AND (a.last_claimed_at IS NULL OR a.last_claimed_at < ?)"
         params.append(cutoff)
 
@@ -97,7 +99,9 @@ def claim_atomic(
         return None
 
     now_str = _utcnow().isoformat() + "Z"
-    lease_expires_at_str = (_utcnow() + timedelta(seconds=lease_seconds)).isoformat() + "Z"
+    lease_expires_at_str = (
+        _utcnow() + timedelta(seconds=lease_seconds)
+    ).isoformat() + "Z"
     token = "clm_" + secrets.token_urlsafe(9)
 
     conn.execute(
@@ -226,6 +230,16 @@ def release(
         WHERE id = ?
         """,
         (now_str, account_id),
+    )
+    # Bug #28 fix: release 意味着本次领取被放弃（未成功注册），
+    # 需要同步清理 account_project_usage 里该账号由此 caller 产生的记录，
+    # 否则下次使用相同 project_key 的 claim-random 会被 NOT EXISTS 子查询错误排除。
+    conn.execute(
+        """
+        DELETE FROM account_project_usage
+        WHERE account_id = ? AND consumer_key = ?
+        """,
+        (account_id, caller_id),
     )
     conn.execute(
         """

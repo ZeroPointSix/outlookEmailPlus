@@ -38,21 +38,27 @@ def _validate_caller_id(caller_id: str) -> None:
     if not caller_id or not caller_id.strip():
         raise PoolServiceError("caller_id 不能为空", "caller_id_empty")
     if len(caller_id) > CALLER_ID_MAX_LEN:
-        raise PoolServiceError(f"caller_id 超过最大长度 {CALLER_ID_MAX_LEN}", "caller_id_too_long")
+        raise PoolServiceError(
+            f"caller_id 超过最大长度 {CALLER_ID_MAX_LEN}", "caller_id_too_long"
+        )
 
 
 def _validate_task_id(task_id: str) -> None:
     if not task_id or not task_id.strip():
         raise PoolServiceError("task_id 不能为空", "task_id_empty")
     if len(task_id) > TASK_ID_MAX_LEN:
-        raise PoolServiceError(f"task_id 超过最大长度 {TASK_ID_MAX_LEN}", "task_id_too_long")
+        raise PoolServiceError(
+            f"task_id 超过最大长度 {TASK_ID_MAX_LEN}", "task_id_too_long"
+        )
 
 
 def _validate_lease_seconds(lease_seconds: int, max_lease: int = 3600) -> None:
     if lease_seconds <= 0:
         raise PoolServiceError("lease_seconds 必须大于 0", "lease_seconds_invalid")
     if lease_seconds > max_lease:
-        raise PoolServiceError(f"lease_seconds 不能超过 {max_lease} 秒", "lease_seconds_too_large")
+        raise PoolServiceError(
+            f"lease_seconds 不能超过 {max_lease} 秒", "lease_seconds_too_large"
+        )
 
 
 def _validate_project_key(project_key: Optional[str]) -> Optional[str]:
@@ -62,7 +68,9 @@ def _validate_project_key(project_key: Optional[str]) -> Optional[str]:
     if not pk:
         return None
     if len(pk) > PROJECT_KEY_MAX_LEN:
-        raise PoolServiceError(f"project_key 超过最大长度 {PROJECT_KEY_MAX_LEN}", "project_key_too_long")
+        raise PoolServiceError(
+            f"project_key 超过最大长度 {PROJECT_KEY_MAX_LEN}", "project_key_too_long"
+        )
     return pk
 
 
@@ -73,7 +81,9 @@ def _validate_email_domain(email_domain: Optional[str]) -> Optional[str]:
     if not d:
         return None
     if len(d) > EMAIL_DOMAIN_MAX_LEN:
-        raise PoolServiceError(f"email_domain 超过最大长度 {EMAIL_DOMAIN_MAX_LEN}", "email_domain_too_long")
+        raise PoolServiceError(
+            f"email_domain 超过最大长度 {EMAIL_DOMAIN_MAX_LEN}", "email_domain_too_long"
+        )
     return d
 
 
@@ -121,7 +131,9 @@ def claim_random(
             email_domain=email_domain,
         )
         if account is None:
-            raise PoolServiceError("池中没有符合条件的可用邮箱", "no_available_account", http_status=200)
+            raise PoolServiceError(
+                "池中没有符合条件的可用邮箱", "no_available_account", http_status=200
+            )
         return account
     finally:
         conn.close()
@@ -141,7 +153,9 @@ def release_claim(
     if not claim_token or not claim_token.strip():
         raise PoolServiceError("claim_token 不能为空", "claim_token_empty")
     if reason and len(reason) > REASON_MAX_LEN:
-        raise PoolServiceError(f"reason 超过最大长度 {REASON_MAX_LEN}", "reason_too_long")
+        raise PoolServiceError(
+            f"reason 超过最大长度 {REASON_MAX_LEN}", "reason_too_long"
+        )
 
     conn = create_sqlite_connection()
     try:
@@ -158,7 +172,9 @@ def release_claim(
                 http_status=409,
             )
         if row["claim_token"] != claim_token:
-            raise PoolServiceError("claim_token 不匹配", "token_mismatch", http_status=403)
+            raise PoolServiceError(
+                "claim_token 不匹配", "token_mismatch", http_status=403
+            )
         expected_claimed_by = f"{caller_id}:{task_id}"
         if row["claimed_by"] != expected_claimed_by:
             raise PoolServiceError(
@@ -196,7 +212,9 @@ def complete_claim(
             "invalid_result",
         )
     if detail and len(detail) > DETAIL_MAX_LEN:
-        raise PoolServiceError(f"detail 超过最大长度 {DETAIL_MAX_LEN}", "detail_too_long")
+        raise PoolServiceError(
+            f"detail 超过最大长度 {DETAIL_MAX_LEN}", "detail_too_long"
+        )
 
     conn = create_sqlite_connection()
     try:
@@ -213,7 +231,9 @@ def complete_claim(
                 http_status=409,
             )
         if row["claim_token"] != claim_token:
-            raise PoolServiceError("claim_token 不匹配", "token_mismatch", http_status=403)
+            raise PoolServiceError(
+                "claim_token 不匹配", "token_mismatch", http_status=403
+            )
         expected_claimed_by = f"{caller_id}:{task_id}"
         if row["claimed_by"] != expected_claimed_by:
             raise PoolServiceError(
@@ -222,7 +242,9 @@ def complete_claim(
                 http_status=403,
             )
 
-        new_status = pool_repo.complete(conn, account_id, claim_token, caller_id, task_id, result, detail)
+        new_status = pool_repo.complete(
+            conn, account_id, claim_token, caller_id, task_id, result, detail
+        )
         return new_status
     finally:
         conn.close()
@@ -257,7 +279,9 @@ def append_claim_read_context(
         return
     conn = create_sqlite_connection()
     try:
-        pool_repo.append_claim_read_context(conn, account_id, claim_token, caller_id, task_id, detail)
+        pool_repo.append_claim_read_context(
+            conn, account_id, claim_token, caller_id, task_id, detail
+        )
     finally:
         conn.close()
 
@@ -269,48 +293,3 @@ def get_pool_stats() -> dict:
         return pool_repo.get_stats(conn)
     finally:
         conn.close()
-
-
-class PoolServiceError(Exception):
-    """业务错误，包含 HTTP 状态码和错误码。"""
-
-    def __init__(self, message: str, error_code: str, http_status: int = 400):
-        super().__init__(message)
-        self.error_code = error_code
-        self.http_status = http_status
-
-
-def _validate_caller_id(caller_id: str) -> None:
-    if not caller_id or not caller_id.strip():
-        raise PoolServiceError("caller_id 不能为空", "caller_id_empty")
-    if len(caller_id) > CALLER_ID_MAX_LEN:
-        raise PoolServiceError(f"caller_id 超过最大长度 {CALLER_ID_MAX_LEN}", "caller_id_too_long")
-
-
-def _validate_task_id(task_id: str) -> None:
-    if not task_id or not task_id.strip():
-        raise PoolServiceError("task_id 不能为空", "task_id_empty")
-    if len(task_id) > TASK_ID_MAX_LEN:
-        raise PoolServiceError(f"task_id 超过最大长度 {TASK_ID_MAX_LEN}", "task_id_too_long")
-
-
-def _validate_lease_seconds(lease_seconds: int, max_lease: int = 3600) -> None:
-    if lease_seconds <= 0:
-        raise PoolServiceError("lease_seconds 必须大于 0", "lease_seconds_invalid")
-    if lease_seconds > max_lease:
-        raise PoolServiceError(f"lease_seconds 不能超过 {max_lease} 秒", "lease_seconds_too_large")
-
-
-def _read_settings_via_conn(conn) -> dict:
-    """在独立连接场景下直接从 settings 表读取池相关配置。"""
-    rows = conn.execute(
-        "SELECT key, value FROM settings WHERE key IN (?, ?)",
-        ("pool_cooldown_seconds", "pool_default_lease_seconds"),
-    ).fetchall()
-    result = {"pool_cooldown_seconds": 86400, "pool_default_lease_seconds": 600}
-    for row in rows:
-        try:
-            result[row["key"]] = int(row["value"])
-        except (TypeError, ValueError):
-            pass
-    return result
