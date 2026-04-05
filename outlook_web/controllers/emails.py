@@ -465,6 +465,7 @@ def api_get_email_detail(email_addr: str, message_id: str) -> Any:
         account["refresh_token"],
         message_id,
         folder,
+        proxy_url,
     )
     if detail:
         return jsonify({"success": True, "email": detail})
@@ -778,6 +779,7 @@ def api_extract_verification(email_addr: str) -> Any:
                 account["refresh_token"],
                 latest_email.get("id"),
                 "inbox",
+                proxy_url,
             )
         except Exception:
             pass
