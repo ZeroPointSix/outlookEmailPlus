@@ -60,12 +60,8 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
         settings = resp.get_json().get("settings", {})
 
         # 域名列表默认为空列表
-        self.assertIn(
-            "cf_worker_domains", settings, "settings 应包含 cf_worker_domains 字段"
-        )
-        self.assertEqual(
-            settings.get("cf_worker_domains"), [], "cf_worker_domains 默认值应为空列表"
-        )
+        self.assertIn("cf_worker_domains", settings, "settings 应包含 cf_worker_domains 字段")
+        self.assertEqual(settings.get("cf_worker_domains"), [], "cf_worker_domains 默认值应为空列表")
 
         # 默认域名默认为空字符串
         self.assertIn(
@@ -86,9 +82,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
             "settings 应包含 cf_worker_prefix_rules 字段",
         )
         prefix_rules = settings.get("cf_worker_prefix_rules")
-        self.assertIsInstance(
-            prefix_rules, dict, "cf_worker_prefix_rules 应为 dict 类型"
-        )
+        self.assertIsInstance(prefix_rules, dict, "cf_worker_prefix_rules 应为 dict 类型")
         self.assertIn("min_length", prefix_rules)
         self.assertIn("max_length", prefix_rules)
         self.assertIn("pattern", prefix_rules)
@@ -108,9 +102,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
         self.assertTrue(resp.get_json().get("success"))
 
         resp2 = client.get("/api/settings")
-        prefix_rules = (
-            resp2.get_json().get("settings", {}).get("cf_worker_prefix_rules")
-        )
+        prefix_rules = resp2.get_json().get("settings", {}).get("cf_worker_prefix_rules")
         self.assertIsNotNone(prefix_rules)
         self.assertEqual(prefix_rules.get("min_length"), 3)
         self.assertEqual(prefix_rules.get("max_length"), 20)
@@ -174,9 +166,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
 
         # 设置 GPTMail 前缀规则
         gptmail_rules = {"min_length": 5, "max_length": 30, "pattern": "^[a-z]+$"}
-        resp1 = client.put(
-            "/api/settings", json={"temp_mail_prefix_rules": gptmail_rules}
-        )
+        resp1 = client.put("/api/settings", json={"temp_mail_prefix_rules": gptmail_rules})
         self.assertTrue(resp1.get_json().get("success"), "GPTMail 前缀规则保存失败")
 
         # 设置 CF Worker 前缀规则
@@ -191,9 +181,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
         temp_rules = settings.get("temp_mail_prefix_rules", {})
         cf_rules_result = settings.get("cf_worker_prefix_rules", {})
 
-        self.assertEqual(
-            temp_rules.get("min_length"), 5, "GPTMail 前缀规则的 min_length 不应被修改"
-        )
+        self.assertEqual(temp_rules.get("min_length"), 5, "GPTMail 前缀规则的 min_length 不应被修改")
         self.assertEqual(
             cf_rules_result.get("min_length"),
             2,
@@ -210,9 +198,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
             from outlook_web.repositories import settings as settings_repo
 
             cf_domains = [{"name": "preserved.example.com", "enabled": True}]
-            settings_repo.set_setting(
-                "cf_worker_domains", json.dumps(cf_domains), commit=True
-            )
+            settings_repo.set_setting("cf_worker_domains", json.dumps(cf_domains), commit=True)
 
         client = self.app.test_client()
         self._login(client)
@@ -278,13 +264,9 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
 
-            settings_repo.set_setting(
-                "cf_worker_domains", "not-valid-json", commit=True
-            )
+            settings_repo.set_setting("cf_worker_domains", "not-valid-json", commit=True)
             result = settings_repo.get_cf_worker_domains()
-            self.assertEqual(
-                result, [], "非法 JSON 时 get_cf_worker_domains() 应返回空列表"
-            )
+            self.assertEqual(result, [], "非法 JSON 时 get_cf_worker_domains() 应返回空列表")
 
     # ──────────────────────────────────────────────────────
     # TC-A09：Repository getter — 损坏 JSON 时返回默认值 dict
@@ -312,24 +294,16 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
         不应覆盖 temp_mail_domains / temp_mail_default_domain。
         使用 unittest.mock 模拟 CF Worker Admin API 响应。
         """
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
 
         # 预设 GPTMail 域名（用于验证不被覆盖）
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
 
-            original_gptmail_domains = [
-                {"name": "gptmail.example.com", "enabled": True}
-            ]
-            settings_repo.set_setting(
-                "temp_mail_domains", json.dumps(original_gptmail_domains), commit=True
-            )
-            settings_repo.set_setting(
-                "cf_worker_base_url", "https://worker.example.com", commit=True
-            )
-            settings_repo.set_setting(
-                "cf_worker_admin_key", "test-admin-key", commit=True
-            )
+            original_gptmail_domains = [{"name": "gptmail.example.com", "enabled": True}]
+            settings_repo.set_setting("temp_mail_domains", json.dumps(original_gptmail_domains), commit=True)
+            settings_repo.set_setting("cf_worker_base_url", "https://worker.example.com", commit=True)
+            settings_repo.set_setting("cf_worker_admin_key", "test-admin-key", commit=True)
 
         client = self.app.test_client()
         self._login(client)
@@ -352,9 +326,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
             return
 
         if resp.status_code not in (200, 400, 500):
-            self.skipTest(
-                f"同步接口路由未找到（状态码 {resp.status_code}），跳过本 case"
-            )
+            self.skipTest(f"同步接口路由未找到（状态码 {resp.status_code}），跳过本 case")
             return
 
         if resp.status_code == 200:
@@ -365,16 +337,13 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
                 cf_domains = settings_repo.get_cf_worker_domains()
                 cf_domain_names = [d.get("name") for d in cf_domains]
                 self.assertTrue(
-                    "cf1.example.com" in cf_domain_names
-                    or "cf2.example.com" in cf_domain_names,
+                    "cf1.example.com" in cf_domain_names or "cf2.example.com" in cf_domain_names,
                     "cf_worker_domains 应包含同步到的域名",
                 )
 
             # 验证 temp_mail_domains 未被覆盖
             resp2 = client.get("/api/settings")
-            temp_domains = (
-                resp2.get_json().get("settings", {}).get("temp_mail_domains", [])
-            )
+            temp_domains = resp2.get_json().get("settings", {}).get("temp_mail_domains", [])
             self.assertTrue(
                 any(d.get("name") == "gptmail.example.com" for d in temp_domains),
                 "temp_mail_domains 不应被 CF Worker 同步覆盖",
@@ -389,9 +358,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
         client = self.app.test_client()
         self._login(client)
 
-        resp = client.put(
-            "/api/settings", json={"cf_worker_prefix_rules": "not-a-dict"}
-        )
+        resp = client.put("/api/settings", json={"cf_worker_prefix_rules": "not-a-dict"})
         data = resp.get_json()
         # 应该报错或 errors 列表非空
         errors = data.get("errors", [])
@@ -411,9 +378,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
 
         # 先设置 temp_mail 相关字段
         original_url = "https://gptmail.original.com"
-        resp_setup = client.put(
-            "/api/settings", json={"temp_mail_api_base_url": original_url}
-        )
+        resp_setup = client.put("/api/settings", json={"temp_mail_api_base_url": original_url})
         self.assertTrue(resp_setup.get_json().get("success"))
 
         # 只更新 CF Worker 字段
@@ -447,9 +412,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
         resp = client.get("/api/settings")
         settings = resp.get_json().get("settings", {})
 
-        self.assertIn(
-            "temp_mail_provider", settings, "settings 应包含 temp_mail_provider 字段"
-        )
+        self.assertIn("temp_mail_provider", settings, "settings 应包含 temp_mail_provider 字段")
 
     # ──────────────────────────────────────────────────────
     # TC-A14：未登录时 GET 返回认证错误
@@ -459,9 +422,7 @@ class SettingsTabRefactorBackendTests(unittest.TestCase):
         """未登录时 GET /api/settings 应返回认证错误"""
         client = self.app.test_client()
         resp = client.get("/api/settings")
-        self.assertNotEqual(
-            resp.status_code, 200, "未登录时 GET /api/settings 不应返回 200"
-        )
+        self.assertNotEqual(resp.status_code, 200, "未登录时 GET /api/settings 不应返回 200")
 
 
 if __name__ == "__main__":

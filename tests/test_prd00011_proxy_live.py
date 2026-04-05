@@ -17,13 +17,13 @@ PRD-00011 代理支持补全 — 集成测试（基于 Flask TestClient，无需
 from __future__ import annotations
 
 import os
-import unittest
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 应用初始化（复用项目标准 _import_app 辅助）
 # ──────────────────────────────────────────────────────────────────────────────
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 
 import requests
@@ -114,9 +114,7 @@ class TestPRD00011Settings(unittest.TestCase):
         self.assertTrue(resp.get_json().get("success"))
 
         resp2 = self.client.get("/api/settings")
-        saved = (
-            resp2.get_json().get("settings", {}).get("telegram_proxy_url", "MISSING")
-        )
+        saved = resp2.get_json().get("settings", {}).get("telegram_proxy_url", "MISSING")
         self.assertEqual(saved, "", f"清空后期望空字符串，实际 {saved!r}")
 
 
@@ -211,9 +209,7 @@ class TestPRD00011DirectProxyConnectivity(unittest.TestCase):
         for proxy_url, ok, detail in results:
             status = "✅" if ok else "❌"
             print(f"  {status} {proxy_url}  →  {detail}")
-        print(
-            f"\n  可用代理数量: {sum(1 for _, ok, _ in results if ok)}/{len(results)}"
-        )
+        print(f"\n  可用代理数量: {sum(1 for _, ok, _ in results if ok)}/{len(results)}")
         # 不强制要求代理可用（网络环境可能不稳定），仅打印结果
 
 

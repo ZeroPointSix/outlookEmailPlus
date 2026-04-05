@@ -49,9 +49,7 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
         html = self._get_text(client)
 
         # Tab 导航栏容器
-        self.assertIn(
-            'class="settings-tab-nav"', html, "应包含 .settings-tab-nav 导航栏"
-        )
+        self.assertIn('class="settings-tab-nav"', html, "应包含 .settings-tab-nav 导航栏")
 
         # 4 个 Tab 的 data-tab 属性
         self.assertIn('data-tab="basic"', html, "应包含基础 Tab 按钮")
@@ -71,9 +69,7 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
 
         self.assertIn('id="settings-tab-basic"', html, "应包含基础 Tab 面板")
         self.assertIn('id="settings-tab-temp-mail"', html, "应包含临时邮箱 Tab 面板")
-        self.assertIn(
-            'id="settings-tab-api-security"', html, "应包含 API 安全 Tab 面板"
-        )
+        self.assertIn('id="settings-tab-api-security"', html, "应包含 API 安全 Tab 面板")
         self.assertIn('id="settings-tab-automation"', html, "应包含自动化 Tab 面板")
 
     # ──────────────────────────────────────────────────────
@@ -87,13 +83,9 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
         html = self._get_text(client)
 
         # 存在 radio 类型的 Provider 选择
-        self.assertIn(
-            'name="tempMailProvider"', html, "应包含 tempMailProvider 单选按钮组"
-        )
+        self.assertIn('name="tempMailProvider"', html, "应包含 tempMailProvider 单选按钮组")
         self.assertIn('value="legacy_bridge"', html, "应包含 legacy_bridge 选项")
-        self.assertIn(
-            'value="cloudflare_temp_mail"', html, "应包含 cloudflare_temp_mail 选项"
-        )
+        self.assertIn('value="cloudflare_temp_mail"', html, "应包含 cloudflare_temp_mail 选项")
 
         # 不应再有旧的 Provider 下拉框
         self.assertNotIn(
@@ -117,21 +109,11 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
             html,
             "应包含 GPTMail 配置面板 #gptmailConfigPanel",
         )
-        self.assertIn(
-            'id="settingsTempMailApiBaseUrl"', html, "应包含 GPTMail API Base URL 字段"
-        )
-        self.assertIn(
-            'id="settingsTempMailApiKey"', html, "应包含 GPTMail API Key 字段"
-        )
-        self.assertIn(
-            'id="settingsTempMailDomains"', html, "应包含 GPTMail 可用域名字段"
-        )
-        self.assertIn(
-            'id="settingsTempMailDefaultDomain"', html, "应包含 GPTMail 默认域名字段"
-        )
-        self.assertIn(
-            'id="settingsTempMailPrefixRules"', html, "应包含 GPTMail 前缀规则字段"
-        )
+        self.assertIn('id="settingsTempMailApiBaseUrl"', html, "应包含 GPTMail API Base URL 字段")
+        self.assertIn('id="settingsTempMailApiKey"', html, "应包含 GPTMail API Key 字段")
+        self.assertIn('id="settingsTempMailDomains"', html, "应包含 GPTMail 可用域名字段")
+        self.assertIn('id="settingsTempMailDefaultDomain"', html, "应包含 GPTMail 默认域名字段")
+        self.assertIn('id="settingsTempMailPrefixRules"', html, "应包含 GPTMail 前缀规则字段")
 
     # ──────────────────────────────────────────────────────
     # TC-B05：index.html 包含 CF Worker 配置面板及只读字段
@@ -148,12 +130,8 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
             html,
             "应包含 CF Worker 配置面板 #cfWorkerConfigPanel",
         )
-        self.assertIn(
-            'id="settingsCfWorkerBaseUrl"', html, "应包含 CF Worker 部署地址字段"
-        )
-        self.assertIn(
-            'id="settingsCfWorkerAdminKey"', html, "应包含 CF Worker Admin 密码字段"
-        )
+        self.assertIn('id="settingsCfWorkerBaseUrl"', html, "应包含 CF Worker 部署地址字段")
+        self.assertIn('id="settingsCfWorkerAdminKey"', html, "应包含 CF Worker Admin 密码字段")
         self.assertIn(
             'id="settingsCfWorkerDomains"',
             html,
@@ -189,9 +167,7 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
         tag_end = html.find(">", idx_domains)
         if tag_start != -1 and tag_end != -1:
             tag_html = html[tag_start : tag_end + 1]
-            self.assertIn(
-                "readonly", tag_html, "settingsCfWorkerDomains 元素应有 readonly 属性"
-            )
+            self.assertIn("readonly", tag_html, "settingsCfWorkerDomains 元素应有 readonly 属性")
 
         # 检查 settingsCfWorkerDefaultDomain 元素有 readonly 属性
         idx_domain = html.find('id="settingsCfWorkerDefaultDomain"')
@@ -248,9 +224,7 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
         resp = client.get("/static/js/main.js")
         js_text = resp.data.decode("utf-8")
 
-        self.assertIn(
-            "function autoSaveSettings", js_text, "main.js 应包含 autoSaveSettings 函数"
-        )
+        self.assertIn("function autoSaveSettings", js_text, "main.js 应包含 autoSaveSettings 函数")
 
     # ──────────────────────────────────────────────────────
     # TC-B10：main.css 包含 Tab 相关样式类
@@ -262,13 +236,9 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
         resp = client.get("/static/css/main.css")
         css_text = resp.data.decode("utf-8")
 
-        self.assertIn(
-            ".settings-tab-nav", css_text, "main.css 应包含 .settings-tab-nav 样式"
-        )
+        self.assertIn(".settings-tab-nav", css_text, "main.css 应包含 .settings-tab-nav 样式")
         self.assertIn(".settings-tab", css_text, "main.css 应包含 .settings-tab 样式")
-        self.assertIn(
-            ".settings-tab-pane", css_text, "main.css 应包含 .settings-tab-pane 样式"
-        )
+        self.assertIn(".settings-tab-pane", css_text, "main.css 应包含 .settings-tab-pane 样式")
 
     # ──────────────────────────────────────────────────────
     # TC-B11：main.css 包含 Provider 单选按钮样式
@@ -285,9 +255,7 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
             css_text,
             "main.css 应包含 .provider-radio-group 样式",
         )
-        self.assertIn(
-            ".provider-radio", css_text, "main.css 应包含 .provider-radio 样式"
-        )
+        self.assertIn(".provider-radio", css_text, "main.css 应包含 .provider-radio 样式")
 
     # ──────────────────────────────────────────────────────
     # TC-B12：main.css 包含只读字段样式
@@ -299,9 +267,7 @@ class SettingsTabRefactorFrontendTests(unittest.TestCase):
         resp = client.get("/static/css/main.css")
         css_text = resp.data.decode("utf-8")
 
-        self.assertIn(
-            ".readonly-field", css_text, "main.css 应包含 .readonly-field 样式"
-        )
+        self.assertIn(".readonly-field", css_text, "main.css 应包含 .readonly-field 样式")
 
 
 if __name__ == "__main__":

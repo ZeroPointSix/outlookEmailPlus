@@ -9,6 +9,7 @@ Phase 6 手动验收自动化脚本 - 设置页面 Tab 重构 UI 验收
 
 import sys
 import time
+
 from playwright.sync_api import sync_playwright
 
 BASE_URL = "http://localhost:5000"
@@ -59,16 +60,12 @@ def main():
             time.sleep(2)
 
         # 确认登录成功
-        page.wait_for_selector(
-            "#page-dashboard, .sidebar, .main-content", timeout=10000
-        )
+        page.wait_for_selector("#page-dashboard, .sidebar, .main-content", timeout=10000)
         print("✅ 登录成功")
 
         # === Step 2: 导航到设置页面 ===
         print("\n=== Step 2: 导航到设置页面 ===")
-        settings_nav = page.locator(
-            '[data-page="settings"], [onclick*="settings"], a[href*="settings"]'
-        )
+        settings_nav = page.locator('[data-page="settings"], [onclick*="settings"], a[href*="settings"]')
         if settings_nav.count() > 0:
             settings_nav.first.click()
             time.sleep(0.5)
@@ -82,9 +79,7 @@ def main():
         print("\n=== 验收 4.2.1: 设置页面显示 4 个 Tab ===")
         tabs = page.locator(".settings-tab-nav .settings-tab")
         tab_count = tabs.count()
-        log_result(
-            "4.2.1 设置页面显示 4 个 Tab", tab_count == 4, f"找到 {tab_count} 个 Tab"
-        )
+        log_result("4.2.1 设置页面显示 4 个 Tab", tab_count == 4, f"找到 {tab_count} 个 Tab")
 
         # 检查 Tab 名称
         tab_texts = [tabs.nth(i).inner_text().strip() for i in range(tab_count)]
@@ -112,16 +107,12 @@ def main():
             f"临时邮箱面板可见: {temp_mail_visible}, 基础面板隐藏: {basic_hidden}",
         )
 
-        page.screenshot(
-            path="tests/screenshots/settings_temp_mail_tab.png", full_page=True
-        )
+        page.screenshot(path="tests/screenshots/settings_temp_mail_tab.png", full_page=True)
 
         # === 验收 4.2.3: 当前 Tab 有蓝色下划线视觉标识 ===
         print("\n=== 验收 4.2.3: 当前 Tab 视觉标识 ===")
         active_tab = page.locator(".settings-tab.active")
-        active_tab_text = (
-            active_tab.inner_text().strip() if active_tab.count() > 0 else ""
-        )
+        active_tab_text = active_tab.inner_text().strip() if active_tab.count() > 0 else ""
         has_active_class = active_tab.count() == 1 and active_tab_text == "临时邮箱"
         log_result(
             "4.2.3 当前 Tab 有 active 类标识",
@@ -154,9 +145,7 @@ def main():
             f"找到 {radio_count} 个 radio button",
         )
 
-        radio_values = [
-            provider_radios.nth(i).get_attribute("value") for i in range(radio_count)
-        ]
+        radio_values = [provider_radios.nth(i).get_attribute("value") for i in range(radio_count)]
         expected_values = ["legacy_bridge", "cloudflare_temp_mail"]
         log_result(
             "4.2.4a Provider 值正确",
@@ -166,9 +155,7 @@ def main():
 
         # 检查 Provider radio label 是否可见
         provider_labels = page.locator(".provider-radio-label")
-        labels_visible = all(
-            provider_labels.nth(i).is_visible() for i in range(provider_labels.count())
-        )
+        labels_visible = all(provider_labels.nth(i).is_visible() for i in range(provider_labels.count()))
         log_result(
             "4.2.4b Provider 单选按钮卡片可见",
             labels_visible and provider_labels.count() == 2,
@@ -191,9 +178,7 @@ def main():
             f"GPTMail 可见: {gptmail_visible}, CF Worker 隐藏: {cf_hidden}",
         )
 
-        page.screenshot(
-            path="tests/screenshots/settings_gptmail_selected.png", full_page=True
-        )
+        page.screenshot(path="tests/screenshots/settings_gptmail_selected.png", full_page=True)
 
         # === 验收 4.2.6: 选中 CF Worker 时 CF Worker 面板可见，GPTMail 面板隐藏 ===
         print("\n=== 验收 4.2.6: CF Worker 面板切换 ===")
@@ -208,9 +193,7 @@ def main():
             f"GPTMail 隐藏: {gptmail_hidden}, CF Worker 可见: {cf_visible}",
         )
 
-        page.screenshot(
-            path="tests/screenshots/settings_cfworker_selected.png", full_page=True
-        )
+        page.screenshot(path="tests/screenshots/settings_cfworker_selected.png", full_page=True)
 
         # === 验收 4.2.7: 切换 Provider 立即响应，无需保存 ===
         print("\n=== 验收 4.2.7: Provider 切换立即响应 ===")
@@ -236,15 +219,9 @@ def main():
         cf_default_domain_field = page.locator("#settingsCfWorkerDefaultDomain")
 
         domains_readonly = cf_domains_field.get_attribute("readonly") is not None
-        default_domain_readonly = (
-            cf_default_domain_field.get_attribute("readonly") is not None
-        )
-        has_readonly_class_domains = "readonly-field" in (
-            cf_domains_field.get_attribute("class") or ""
-        )
-        has_readonly_class_default = "readonly-field" in (
-            cf_default_domain_field.get_attribute("class") or ""
-        )
+        default_domain_readonly = cf_default_domain_field.get_attribute("readonly") is not None
+        has_readonly_class_domains = "readonly-field" in (cf_domains_field.get_attribute("class") or "")
+        has_readonly_class_default = "readonly-field" in (cf_default_domain_field.get_attribute("class") or "")
 
         log_result(
             "4.2.8 CF Worker 域名字段为只读",
@@ -295,9 +272,7 @@ def main():
         log_result(
             "4.2.9 切换 Tab 时触发自动保存 PUT /api/settings",
             save_triggered["value"],
-            "监听到 PUT /api/settings 请求"
-            if save_triggered["value"]
-            else "未检测到保存请求",
+            "监听到 PUT /api/settings 请求" if save_triggered["value"] else "未检测到保存请求",
         )
 
         page.remove_listener("request", on_request)

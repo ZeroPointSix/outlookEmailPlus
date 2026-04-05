@@ -142,9 +142,7 @@ class TestTaskTokenReuseBug(unittest.TestCase):
 
         with self.app.app_context():
             db = get_db()
-            indexes = db.execute(
-                "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE '%task_token%'"
-            ).fetchall()
+            indexes = db.execute("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE '%task_token%'").fetchall()
 
         index_names = [row["name"] for row in indexes]
         self.assertIn(
@@ -187,7 +185,7 @@ class TestTaskTokenReuseBug(unittest.TestCase):
         self.assertIsNone(before["finished_at"])
         self.assertEqual(before["status"], "active")
 
-        self.assertIsNotNone(after["task_token"])   # ← BUG：finish 没有清空
+        self.assertIsNotNone(after["task_token"])  # ← BUG：finish 没有清空
         self.assertIsNotNone(after["finished_at"])
         self.assertEqual(after["status"], "finished")
         self.assertEqual(after["task_token"], before["task_token"])  # 完全没变

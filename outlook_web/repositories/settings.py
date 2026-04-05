@@ -104,9 +104,7 @@ def validate_temp_mail_provider_name(value: str | None) -> str:
 
 
 def get_temp_mail_provider() -> str:
-    return normalize_temp_mail_provider_name(
-        get_setting("temp_mail_provider", DEFAULT_TEMP_MAIL_PROVIDER)
-    )
+    return normalize_temp_mail_provider_name(get_setting("temp_mail_provider", DEFAULT_TEMP_MAIL_PROVIDER))
 
 
 def get_temp_mail_runtime_provider_name(provider_name: str | None = None) -> str:
@@ -217,9 +215,7 @@ def get_external_api_key_masked(head: int = 4, tail: int = 4) -> str:
     safe_value = str(key)
     if len(safe_value) <= head + tail:
         return "*" * len(safe_value)
-    return (
-        safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
-    )
+    return safe_value[:head] + ("*" * (len(safe_value) - head - tail)) + safe_value[-tail:]
 
 
 # ── P1：公网模式安全配置 ──────────────────────────────
@@ -266,23 +262,15 @@ def get_pool_external_enabled() -> bool:
 
 
 def get_external_api_disable_pool_claim_random() -> bool:
-    return (
-        get_setting("external_api_disable_pool_claim_random", "false").lower() == "true"
-    )
+    return get_setting("external_api_disable_pool_claim_random", "false").lower() == "true"
 
 
 def get_external_api_disable_pool_claim_release() -> bool:
-    return (
-        get_setting("external_api_disable_pool_claim_release", "false").lower()
-        == "true"
-    )
+    return get_setting("external_api_disable_pool_claim_release", "false").lower() == "true"
 
 
 def get_external_api_disable_pool_claim_complete() -> bool:
-    return (
-        get_setting("external_api_disable_pool_claim_complete", "false").lower()
-        == "true"
-    )
+    return get_setting("external_api_disable_pool_claim_complete", "false").lower() == "true"
 
 
 def get_external_api_disable_pool_stats() -> bool:

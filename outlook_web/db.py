@@ -131,9 +131,7 @@ def init_db(database_path: Optional[str] = None):
             """)
 
         # 在锁内读取当前 schema 版本（保证一致性）
-        row = cursor.execute(
-            "SELECT value FROM settings WHERE key = ?", (DB_SCHEMA_VERSION_KEY,)
-        ).fetchone()
+        row = cursor.execute("SELECT value FROM settings WHERE key = ?", (DB_SCHEMA_VERSION_KEY,)).fetchone()
         current_version = int(row["value"]) if row and row["value"] is not None else 0
 
         upgrading = current_version < DB_SCHEMA_VERSION
@@ -142,9 +140,7 @@ def init_db(database_path: Optional[str] = None):
             if db_existed:
                 try:
                     print("=" * 60)
-                    print(
-                        f"[升级提示] 检测到数据库需要升级：v{current_version} -> v{DB_SCHEMA_VERSION}"
-                    )
+                    print(f"[升级提示] 检测到数据库需要升级：v{current_version} -> v{DB_SCHEMA_VERSION}")
                     print(f"[升级提示] 强烈建议先备份数据库文件：{path}")
                     print(f'[升级提示] 示例：cp "{path}" "{path}.backup"')
                     print(f"[升级提示] trace_id={migration_trace_id}")
@@ -370,67 +366,39 @@ def init_db(database_path: Optional[str] = None):
         if "remark" not in columns:
             cursor.execute("ALTER TABLE accounts ADD COLUMN remark TEXT")
         if "status" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN status TEXT DEFAULT 'active'"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN status TEXT DEFAULT 'active'")
         if "updated_at" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
         if "last_refresh_at" not in columns:
             cursor.execute("ALTER TABLE accounts ADD COLUMN last_refresh_at TIMESTAMP")
         if "account_type" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN account_type TEXT DEFAULT 'outlook'"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN account_type TEXT DEFAULT 'outlook'")
         if "provider" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN provider TEXT DEFAULT 'outlook'"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN provider TEXT DEFAULT 'outlook'")
         if "imap_host" not in columns:
             cursor.execute("ALTER TABLE accounts ADD COLUMN imap_host TEXT")
         if "imap_port" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN imap_port INTEGER DEFAULT 993"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN imap_port INTEGER DEFAULT 993")
         if "imap_password" not in columns:
             cursor.execute("ALTER TABLE accounts ADD COLUMN imap_password TEXT")
         if "telegram_push_enabled" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN telegram_push_enabled INTEGER NOT NULL DEFAULT 0"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN telegram_push_enabled INTEGER NOT NULL DEFAULT 0")
         if "telegram_last_checked_at" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN telegram_last_checked_at TEXT DEFAULT NULL"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN telegram_last_checked_at TEXT DEFAULT NULL")
         if "latest_email_subject" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN latest_email_subject TEXT DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN latest_email_subject TEXT DEFAULT ''")
         if "latest_email_from" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN latest_email_from TEXT DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN latest_email_from TEXT DEFAULT ''")
         if "latest_email_folder" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN latest_email_folder TEXT DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN latest_email_folder TEXT DEFAULT ''")
         if "latest_email_received_at" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN latest_email_received_at TEXT DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN latest_email_received_at TEXT DEFAULT ''")
         if "latest_verification_code" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN latest_verification_code TEXT DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN latest_verification_code TEXT DEFAULT ''")
         if "latest_verification_folder" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN latest_verification_folder TEXT DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN latest_verification_folder TEXT DEFAULT ''")
         if "latest_verification_received_at" not in columns:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN latest_verification_received_at TEXT DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN latest_verification_received_at TEXT DEFAULT ''")
 
         cursor.execute("PRAGMA table_info(groups)")
         group_columns = [col[1] for col in cursor.fetchall()]
@@ -460,18 +428,14 @@ def init_db(database_path: Optional[str] = None):
             ("meta_json", "TEXT"),
         ]:
             if col_def[0] not in temp_email_columns:
-                cursor.execute(
-                    f"ALTER TABLE temp_emails ADD COLUMN {col_def[0]} {col_def[1]}"
-                )
+                cursor.execute(f"ALTER TABLE temp_emails ADD COLUMN {col_def[0]} {col_def[1]}")
 
         # P0: task_token 需要唯一约束；旧库通过 ADD COLUMN 无法携带 UNIQUE
         # - 先把空字符串规范为 NULL（避免 '' 触发唯一冲突）
         # - 若存在重复 token：中止升级并给出可执行 SQL 指引（不自动修复）
         # - 无重复：补齐唯一索引
         try:
-            cursor.execute(
-                "UPDATE temp_emails SET task_token = NULL WHERE task_token IS NOT NULL AND TRIM(task_token) = ''"
-            )
+            cursor.execute("UPDATE temp_emails SET task_token = NULL WHERE task_token IS NOT NULL AND TRIM(task_token) = ''")
         except Exception:
             pass
         duplicate_sample = cursor.execute("""
@@ -493,11 +457,7 @@ def init_db(database_path: Optional[str] = None):
                     HAVING COUNT(*) > 1
                 )
                 """).fetchone()
-            dup_count = int(
-                dup_count_row["c"]
-                if dup_count_row and dup_count_row["c"] is not None
-                else 0
-            )
+            dup_count = int(dup_count_row["c"] if dup_count_row and dup_count_row["c"] is not None else 0)
             trace_text = str(migration_trace_id or "").strip()
             sql_hint = (
                 "-- 1) 找出重复 task_token\n"
@@ -539,15 +499,9 @@ def init_db(database_path: Optional[str] = None):
             CREATE UNIQUE INDEX IF NOT EXISTS idx_temp_emails_task_token_unique
             ON temp_emails(task_token)
             """)
-        cursor.execute(
-            "UPDATE temp_emails SET mailbox_type = 'user' WHERE mailbox_type IS NULL OR TRIM(mailbox_type) = ''"
-        )
-        cursor.execute(
-            "UPDATE temp_emails SET visible_in_ui = 1 WHERE visible_in_ui IS NULL"
-        )
-        cursor.execute(
-            "UPDATE temp_emails SET source = 'legacy_gptmail' WHERE source IS NULL OR TRIM(source) = ''"
-        )
+        cursor.execute("UPDATE temp_emails SET mailbox_type = 'user' WHERE mailbox_type IS NULL OR TRIM(mailbox_type) = ''")
+        cursor.execute("UPDATE temp_emails SET visible_in_ui = 1 WHERE visible_in_ui IS NULL")
+        cursor.execute("UPDATE temp_emails SET source = 'legacy_gptmail' WHERE source IS NULL OR TRIM(source) = ''")
         cursor.execute("""
             UPDATE temp_emails
             SET prefix = substr(email, 1, instr(email, '@') - 1)
@@ -564,18 +518,12 @@ def init_db(database_path: Optional[str] = None):
         cursor.execute("PRAGMA table_info(temp_email_messages)")
         temp_email_message_columns = [col[1] for col in cursor.fetchall()]
         if "raw_content" not in temp_email_message_columns:
-            cursor.execute(
-                "ALTER TABLE temp_email_messages ADD COLUMN raw_content TEXT"
-            )
+            cursor.execute("ALTER TABLE temp_email_messages ADD COLUMN raw_content TEXT")
         temp_message_create_sql_row = cursor.execute(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'temp_email_messages'"
         ).fetchone()
-        temp_message_create_sql = str(
-            temp_message_create_sql_row[0] if temp_message_create_sql_row else ""
-        )
-        needs_temp_email_message_rebuild = (
-            "UNIQUE(email_address, message_id)" not in temp_message_create_sql
-        )
+        temp_message_create_sql = str(temp_message_create_sql_row[0] if temp_message_create_sql_row else "")
+        needs_temp_email_message_rebuild = "UNIQUE(email_address, message_id)" not in temp_message_create_sql
         if needs_temp_email_message_rebuild:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS temp_email_messages_v2 (
@@ -614,9 +562,7 @@ def init_db(database_path: Optional[str] = None):
                 ORDER BY id ASC
             """)
             cursor.execute("DROP TABLE temp_email_messages")
-            cursor.execute(
-                "ALTER TABLE temp_email_messages_v2 RENAME TO temp_email_messages"
-            )
+            cursor.execute("ALTER TABLE temp_email_messages_v2 RENAME TO temp_email_messages")
 
         cursor.execute("PRAGMA table_info(audit_logs)")
         audit_columns = [col[1] for col in cursor.fetchall()]
@@ -947,9 +893,7 @@ def init_db(database_path: Optional[str] = None):
         cursor.execute("PRAGMA table_info(external_api_keys)")
         external_api_keys_columns = [col[1] for col in cursor.fetchall()]
         if "pool_access" not in external_api_keys_columns:
-            cursor.execute(
-                "ALTER TABLE external_api_keys ADD COLUMN pool_access INTEGER NOT NULL DEFAULT 0"
-            )
+            cursor.execute("ALTER TABLE external_api_keys ADD COLUMN pool_access INTEGER NOT NULL DEFAULT 0")
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_external_api_keys_enabled
             ON external_api_keys(enabled, updated_at)
@@ -998,9 +942,7 @@ def init_db(database_path: Optional[str] = None):
             ("fail_count", "INTEGER DEFAULT 0"),
         ]:
             if col_def[0] not in accounts_columns_v11:
-                cursor.execute(
-                    f"ALTER TABLE accounts ADD COLUMN {col_def[0]} {col_def[1]}"
-                )
+                cursor.execute(f"ALTER TABLE accounts ADD COLUMN {col_def[0]} {col_def[1]}")
 
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS account_claim_logs (
@@ -1033,20 +975,14 @@ def init_db(database_path: Optional[str] = None):
             ON accounts(pool_status)
             """)
 
-        cursor.execute(
-            "INSERT OR IGNORE INTO settings (key, value) VALUES ('pool_cooldown_seconds', '86400')"
-        )
-        cursor.execute(
-            "INSERT OR IGNORE INTO settings (key, value) VALUES ('pool_default_lease_seconds', '600')"
-        )
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pool_cooldown_seconds', '86400')")
+        cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pool_default_lease_seconds', '600')")
 
         # v17: project-scoped pool reuse — email_domain 列 + account_project_usage 表
         cursor.execute("PRAGMA table_info(accounts)")
         accounts_columns_v17 = [col[1] for col in cursor.fetchall()]
         if "email_domain" not in accounts_columns_v17:
-            cursor.execute(
-                "ALTER TABLE accounts ADD COLUMN email_domain TEXT DEFAULT NULL"
-            )
+            cursor.execute("ALTER TABLE accounts ADD COLUMN email_domain TEXT DEFAULT NULL")
         # 回填 email_domain（从 email 列提取域名部分）
         cursor.execute("""
             UPDATE accounts
@@ -1084,9 +1020,7 @@ def init_db(database_path: Optional[str] = None):
         cursor.execute("PRAGMA table_info(external_probe_cache)")
         probe_columns_v17 = [col[1] for col in cursor.fetchall()]
         if "baseline_timestamp" not in probe_columns_v17:
-            cursor.execute(
-                "ALTER TABLE external_probe_cache ADD COLUMN baseline_timestamp INTEGER DEFAULT NULL"
-            )
+            cursor.execute("ALTER TABLE external_probe_cache ADD COLUMN baseline_timestamp INTEGER DEFAULT NULL")
 
         # 迁移现有明文数据为加密数据
         migrate_sensitive_data(conn)
@@ -1226,9 +1160,7 @@ def migrate_sensitive_data(conn: sqlite3.Connection):
     # 迁移 settings 表中明文存储的 cf_worker_admin_key
     _SETTINGS_SENSITIVE_KEYS = ["cf_worker_admin_key"]
     for key in _SETTINGS_SENSITIVE_KEYS:
-        row = cursor.execute(
-            "SELECT value FROM settings WHERE key = ?", (key,)
-        ).fetchone()
+        row = cursor.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if row and row[0] and not is_encrypted(row[0]):
             encrypted_value = encrypt_data(row[0])
             cursor.execute(

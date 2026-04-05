@@ -117,9 +117,7 @@ def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> bool:
             proxies=proxies,
         )
         if not resp.ok:
-            logger.warning(
-                "[telegram_push] send HTTP %s: %s", resp.status_code, resp.text[:200]
-            )
+            logger.warning("[telegram_push] send HTTP %s: %s", resp.status_code, resp.text[:200])
         return resp.ok
     except Exception as e:
         logger.warning("[telegram_push] send failed: %s", e)
@@ -134,9 +132,7 @@ def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> bool:
 def _resolve_imap_folder(account: dict, folder: str) -> list[str]:
     provider = str(account.get("provider") or "").strip().lower()
     if provider in {"", "imap"}:
-        provider = (
-            infer_provider_from_email(str(account.get("email") or "")) or provider
-        )
+        provider = infer_provider_from_email(str(account.get("email") or "")) or provider
     candidates = get_imap_folder_candidates(provider, folder)
     resolved: list[str] = []
     for candidate in candidates:
@@ -151,9 +147,7 @@ def _should_fetch_account_via_graph(account: dict) -> bool:
     return str(account.get("provider") or "").strip().lower() == "outlook"
 
 
-def _call_fetcher_with_folder(
-    fetcher, account: dict, since: str, folder: str
-) -> List[dict]:
+def _call_fetcher_with_folder(fetcher, account: dict, since: str, folder: str) -> List[dict]:
     try:
         return fetcher(account, since, folder=folder)
     except TypeError as exc:
@@ -165,9 +159,7 @@ def _call_fetcher_with_folder(
 def _deduplicate_emails_for_source(account: dict, emails: List[dict]) -> List[dict]:
     source = {
         "source_type": notification_dispatch.SOURCE_ACCOUNT,
-        "source_key": notification_dispatch.build_source_key(
-            notification_dispatch.SOURCE_ACCOUNT, account.get("email", "")
-        ),
+        "source_key": notification_dispatch.build_source_key(notification_dispatch.SOURCE_ACCOUNT, account.get("email", "")),
     }
     deduped: list[dict] = []
     seen: set[str] = set()
@@ -187,9 +179,7 @@ def _should_fetch_account_via_graph(account: dict) -> bool:
     return str(account.get("provider") or "").strip().lower() == "outlook"
 
 
-def _fetch_new_emails_imap(
-    account: dict, since: str, folder: str = "inbox"
-) -> List[dict]:
+def _fetch_new_emails_imap(account: dict, since: str, folder: str = "inbox") -> List[dict]:
     """通过 IMAP 获取 received_at > since 的邮件，最多返回 50 封。
 
     两步策略：先用 INTERNALDATE 快速过滤，再对命中的邮件下载正文。
@@ -219,12 +209,8 @@ def _fetch_new_emails_imap(
         except imaplib.IMAP4.error as exc:
             raw_message = str(exc or "")
             lowered = raw_message.lower()
-            if (
-                account.get("provider") or ""
-            ).strip().lower() == "outlook" and "basicauthblocked" in lowered:
-                raise RuntimeError(
-                    "Outlook.com 已阻止 Basic Auth（账号密码直连）；请将该账号改为 Outlook OAuth 导入"
-                ) from exc
+            if (account.get("provider") or "").strip().lower() == "outlook" and "basicauthblocked" in lowered:
+                raise RuntimeError("Outlook.com 已阻止 Basic Auth（账号密码直连）；请将该账号改为 Outlook OAuth 导入") from exc
             raise
         selected = False
         last_select_error = None
@@ -298,8 +284,7 @@ def _fetch_new_emails_imap(
 
                 subject_parts = email.header.decode_header(msg.get("Subject", ""))
                 subject = "".join(
-                    part.decode(charset or "utf-8") if isinstance(part, bytes) else part
-                    for part, charset in subject_parts
+                    part.decode(charset or "utf-8") if isinstance(part, bytes) else part for part, charset in subject_parts
                 )
 
                 sender = msg.get("From", "")
@@ -369,9 +354,7 @@ def _fetch_new_emails_imap(
                 continue
 
     except Exception as e:
-        logger.warning(
-            "[telegram_push] IMAP fetch error for %s: %s", account.get("email"), e
-        )
+        logger.warning("[telegram_push] IMAP fetch error for %s: %s", account.get("email"), e)
         raise
     finally:
         if conn:
@@ -383,9 +366,7 @@ def _fetch_new_emails_imap(
     return results[:MAX_EMAILS_PER_FETCH]
 
 
-def _fetch_new_emails_graph(
-    account: dict, since: str, folder: str = "inbox"
-) -> List[dict]:
+def _fetch_new_emails_graph(account: dict, since: str, folder: str = "inbox") -> List[dict]:
     """通过 Microsoft Graph API 获取 received_at > since 的邮件，最多返回 50 封。"""
     from outlook_web.security.crypto import decrypt_data
     from outlook_web.services.graph import build_proxies, get_access_token_graph
@@ -413,9 +394,7 @@ def _fetch_new_emails_graph(
 
     results: List[dict] = []
     try:
-        resp = requests.get(
-            url, headers=headers, params=params, timeout=15, proxies=proxies
-        )
+        resp = requests.get(url, headers=headers, params=params, timeout=15, proxies=proxies)
         if not resp.ok:
             return []
         data = resp.json()
@@ -423,9 +402,7 @@ def _fetch_new_emails_graph(
             sender_info = item.get("from", {}).get("emailAddress", {})
             sender = sender_info.get("address", sender_info.get("name", ""))
             received_raw = item.get("receivedDateTime", "")
-            received_iso = (
-                received_raw.replace("Z", "").split(".")[0] if received_raw else ""
-            )
+            received_iso = received_raw.replace("Z", "").split(".")[0] if received_raw else ""
             preview = (item.get("bodyPreview", "") or "")[:MAX_PREVIEW_LENGTH]
             body = ""
             body_info = item.get("body") or {}
@@ -447,9 +424,7 @@ def _fetch_new_emails_graph(
                 }
             )
     except Exception as e:
-        logger.warning(
-            "[telegram_push] Graph fetch error for %s: %s", account.get("email"), e
-        )
+        logger.warning("[telegram_push] Graph fetch error for %s: %s", account.get("email"), e)
         raise
 
     return results
@@ -492,9 +467,7 @@ def _cleanup_push_log(db) -> None:
     try:
         from datetime import timedelta
 
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(days=PUSH_LOG_RETENTION_DAYS)
-        ).strftime("%Y-%m-%dT%H:%M:%S")
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=PUSH_LOG_RETENTION_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
         db.execute("DELETE FROM telegram_push_log WHERE pushed_at < ?", (cutoff,))
         db.commit()
     except Exception:
@@ -538,9 +511,7 @@ def _record_sent_message(source: dict, message_key: str) -> None:
         _record_pushed_message(get_db(), int(source["account_id"]), message_key)
 
 
-def _record_failed_message(
-    source: dict, message_key: str, error: Exception | str
-) -> None:
+def _record_failed_message(source: dict, message_key: str, error: Exception | str) -> None:
     notification_state_repo.complete_delivery_attempt(
         notification_dispatch.CHANNEL_TELEGRAM,
         source["source_type"],
@@ -559,9 +530,7 @@ def _record_failed_message(
 
 def _fetch_account_emails(account: dict) -> tuple:
     """并行获取单个账号新邮件，返回 (account, emails_list, error)。"""
-    last_checked = account.get("notification_cursor") or account.get(
-        "telegram_last_checked_at"
-    )
+    last_checked = account.get("notification_cursor") or account.get("telegram_last_checked_at")
     if last_checked is None:
         return (account, None, None)  # 首次运行，仅设置游标
 
@@ -569,19 +538,11 @@ def _fetch_account_emails(account: dict) -> tuple:
         if _should_fetch_account_via_graph(account):
             emails: List[dict] = []
             for folder in notification_dispatch.ACCOUNT_INCLUDED_FOLDERS:
-                emails.extend(
-                    _call_fetcher_with_folder(
-                        _fetch_new_emails_graph, account, last_checked, folder
-                    )
-                )
+                emails.extend(_call_fetcher_with_folder(_fetch_new_emails_graph, account, last_checked, folder))
         else:
             emails = []
             for folder in notification_dispatch.ACCOUNT_INCLUDED_FOLDERS:
-                emails.extend(
-                    _call_fetcher_with_folder(
-                        _fetch_new_emails_imap, account, last_checked, folder
-                    )
-                )
+                emails.extend(_call_fetcher_with_folder(_fetch_new_emails_imap, account, last_checked, folder))
 
         emails = _deduplicate_emails_for_source(account, emails)
 
@@ -616,11 +577,7 @@ def run_telegram_push_job(app) -> None:
         from outlook_web.security.crypto import decrypt_data, is_encrypted
 
         bot_token_raw = get_setting("telegram_bot_token", "")
-        bot_token = (
-            decrypt_data(bot_token_raw)
-            if bot_token_raw and is_encrypted(bot_token_raw)
-            else bot_token_raw
-        )
+        bot_token = decrypt_data(bot_token_raw) if bot_token_raw and is_encrypted(bot_token_raw) else bot_token_raw
         chat_id = get_setting("telegram_chat_id", "")
 
         if not bot_token or not chat_id:
@@ -634,9 +591,7 @@ def run_telegram_push_job(app) -> None:
 
         normalized_accounts = []
         for account in accounts:
-            source_key = notification_dispatch.build_source_key(
-                notification_dispatch.SOURCE_ACCOUNT, account.get("email", "")
-            )
+            source_key = notification_dispatch.build_source_key(notification_dispatch.SOURCE_ACCOUNT, account.get("email", ""))
             notification_cursor = notification_state_repo.get_cursor(
                 notification_dispatch.CHANNEL_TELEGRAM,
                 notification_dispatch.SOURCE_ACCOUNT,
@@ -657,23 +612,14 @@ def run_telegram_push_job(app) -> None:
 
         # 并行获取所有账号邮件
         fetch_results = []
-        with ThreadPoolExecutor(
-            max_workers=min(len(normalized_accounts), 10)
-        ) as executor:
-            futures = {
-                executor.submit(_fetch_account_emails, acc): acc
-                for acc in normalized_accounts
-            }
+        with ThreadPoolExecutor(max_workers=min(len(normalized_accounts), 10)) as executor:
+            futures = {executor.submit(_fetch_account_emails, acc): acc for acc in normalized_accounts}
             for future in as_completed(futures):
                 fetch_results.append(future.result())
 
         # 顺序推送 + 更新游标
         for account, emails, error in fetch_results:
-            current_cursor = (
-                account.get("notification_cursor")
-                or account.get("telegram_last_checked_at")
-                or ""
-            )
+            current_cursor = account.get("notification_cursor") or account.get("telegram_last_checked_at") or ""
             if emails is None and error is None:
                 # 首次运行，仅设置游标
                 update_telegram_cursor(account["id"], job_start_time)
@@ -720,9 +666,7 @@ def run_telegram_push_job(app) -> None:
                 if claim_result == "sent":
                     dedup_skipped += 1
                     if message_received_at:
-                        safe_cursor = notification_dispatch._max_cursor_value(
-                            safe_cursor, message_received_at
-                        )
+                        safe_cursor = notification_dispatch._max_cursor_value(safe_cursor, message_received_at)
                     continue
                 if _has_message_been_sent(source_meta, message_key):
                     notification_state_repo.complete_delivery_attempt(
@@ -734,9 +678,7 @@ def run_telegram_push_job(app) -> None:
                     )
                     dedup_skipped += 1
                     if message_received_at:
-                        safe_cursor = notification_dispatch._max_cursor_value(
-                            safe_cursor, message_received_at
-                        )
+                        safe_cursor = notification_dispatch._max_cursor_value(safe_cursor, message_received_at)
                     continue
                 if claim_result != "acquired":
                     logger.info(
@@ -759,9 +701,7 @@ def run_telegram_push_job(app) -> None:
                         message_key,
                     )
                     if message_received_at:
-                        safe_cursor = notification_dispatch._max_cursor_value(
-                            safe_cursor, message_received_at
-                        )
+                        safe_cursor = notification_dispatch._max_cursor_value(safe_cursor, message_received_at)
                     # 消息间延迟，防止 Telegram API 限流
                     if TELEGRAM_PUSH_DELAY_SEC > 0:
                         time.sleep(TELEGRAM_PUSH_DELAY_SEC)

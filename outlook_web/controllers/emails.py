@@ -52,13 +52,7 @@ def _build_account_credential_decrypt_failed_response(account: dict[str, Any]):
     if not credential_errors:
         return None
 
-    fields = sorted(
-        {
-            str(item.get("field") or "").strip()
-            for item in credential_errors
-            if item.get("field")
-        }
-    )
+    fields = sorted({str(item.get("field") or "").strip() for item in credential_errors if item.get("field")})
     details = {
         "fields": fields,
         "errors": credential_errors,
@@ -99,9 +93,7 @@ def api_get_emails(email_addr: str) -> Any:
     # PRD-00005 / FD-00005 / TDD-00005：按 account_type 路由分发（Outlook 链路保持原样，IMAP 走通用 IMAP 服务）
     account_type = (account.get("account_type") or "outlook").strip().lower()
     if account_type != "imap":
-        decrypt_error_response = _build_account_credential_decrypt_failed_response(
-            account
-        )
+        decrypt_error_response = _build_account_credential_decrypt_failed_response(account)
         if decrypt_error_response:
             return decrypt_error_response
 
@@ -117,12 +109,10 @@ def api_get_emails(email_addr: str) -> Any:
             top=top,
         )
         if result.get("success"):
-            result["account_summary"] = (
-                compact_summary_service.update_summary_from_message_list(
-                    int(account["id"]),
-                    result.get("emails") or [],
-                    folder=folder,
-                )
+            result["account_summary"] = compact_summary_service.update_summary_from_message_list(
+                int(account["id"]),
+                result.get("emails") or [],
+                folder=folder,
             )
         return jsonify(result)
 
@@ -137,9 +127,7 @@ def api_get_emails(email_addr: str) -> Any:
     all_errors = {}
 
     # 1. 尝试 Graph API
-    graph_result = graph_service.get_emails_graph(
-        account["client_id"], account["refresh_token"], folder, skip, top, proxy_url
-    )
+    graph_result = graph_service.get_emails_graph(account["client_id"], account["refresh_token"], folder, skip, top, proxy_url)
     if graph_result.get("success"):
         emails = graph_result.get("emails", [])
         account_summary = compact_summary_service.update_summary_from_message_list(
@@ -181,9 +169,7 @@ def api_get_emails(email_addr: str) -> Any:
                 {
                     "id": e.get("id"),
                     "subject": e.get("subject", "无主题"),
-                    "from": e.get("from", {})
-                    .get("emailAddress", {})
-                    .get("address", "未知"),
+                    "from": e.get("from", {}).get("emailAddress", {}).get("address", "未知"),
                     "date": e.get("receivedDateTime", ""),
                     "is_read": e.get("isRead", False),
                     "has_attachments": e.get("hasAttachments", False),
@@ -305,9 +291,7 @@ def api_delete_emails() -> Any:
     message_ids = data.get("ids", [])
 
     if not email_addr or not message_ids:
-        return build_error_response(
-            "INVALID_PARAM", "参数不完整", message_en="Missing required parameters"
-        )
+        return build_error_response("INVALID_PARAM", "参数不完整", message_en="Missing required parameters")
 
     account = accounts_repo.get_account_by_email(email_addr)
     if not account:
@@ -357,13 +341,9 @@ def api_delete_emails() -> Any:
             f"删除邮件 {len(message_ids)} 封（Graph API）",
         )
     elif method_used == "imap_new":
-        log_audit(
-            "delete", "email", email_addr, f"删除邮件 {len(message_ids)} 封（IMAP New）"
-        )
+        log_audit("delete", "email", email_addr, f"删除邮件 {len(message_ids)} 封（IMAP New）")
     elif method_used == "imap_old":
-        log_audit(
-            "delete", "email", email_addr, f"删除邮件 {len(message_ids)} 封（IMAP Old）"
-        )
+        log_audit("delete", "email", email_addr, f"删除邮件 {len(message_ids)} 封（IMAP Old）")
 
     return jsonify(response_data)
 
@@ -411,9 +391,7 @@ def api_get_email_detail(email_addr: str, message_id: str) -> Any:
             )
             return jsonify({"success": True, "email": detail})
         error_payload = detail_result.get("error") or {}
-        _LOGGER.warning(
-            "email_detail_imap_failed email=%s message_id=%s", email_addr, message_id
-        )
+        _LOGGER.warning("email_detail_imap_failed email=%s message_id=%s", email_addr, message_id)
         return _build_response_from_error_payload(error_payload)
 
     method = request.args.get("method", "graph")
@@ -426,9 +404,7 @@ def api_get_email_detail(email_addr: str, message_id: str) -> Any:
             if group:
                 proxy_url = group.get("proxy_url", "") or ""
 
-        detail = graph_service.get_email_detail_graph(
-            account["client_id"], account["refresh_token"], message_id, proxy_url
-        )
+        detail = graph_service.get_email_detail_graph(account["client_id"], account["refresh_token"], message_id, proxy_url)
         if detail:
             return jsonify(
                 {
@@ -436,20 +412,12 @@ def api_get_email_detail(email_addr: str, message_id: str) -> Any:
                     "email": {
                         "id": detail.get("id"),
                         "subject": detail.get("subject", "无主题"),
-                        "from": detail.get("from", {})
-                        .get("emailAddress", {})
-                        .get("address", "未知"),
+                        "from": detail.get("from", {}).get("emailAddress", {}).get("address", "未知"),
                         "to": ", ".join(
-                            [
-                                r.get("emailAddress", {}).get("address", "")
-                                for r in detail.get("toRecipients", [])
-                            ]
+                            [r.get("emailAddress", {}).get("address", "") for r in detail.get("toRecipients", [])]
                         ),
                         "cc": ", ".join(
-                            [
-                                r.get("emailAddress", {}).get("address", "")
-                                for r in detail.get("ccRecipients", [])
-                            ]
+                            [r.get("emailAddress", {}).get("address", "") for r in detail.get("ccRecipients", [])]
                         ),
                         "date": detail.get("receivedDateTime", ""),
                         "body": detail.get("body", {}).get("content", ""),
@@ -510,9 +478,7 @@ def api_extract_verification(email_addr: str) -> Any:
     # PRD-00005：IMAP 账号验证码提取走 IMAP（Generic）→ 详情 → extractor；Outlook 保持原 Graph→IMAP XOAUTH2 回退链
     account_type = (account.get("account_type") or "outlook").strip().lower()
     if account_type != "imap":
-        decrypt_error_response = _build_account_credential_decrypt_failed_response(
-            account
-        )
+        decrypt_error_response = _build_account_credential_decrypt_failed_response(account)
         if decrypt_error_response:
             return decrypt_error_response
 
@@ -610,9 +576,7 @@ def api_extract_verification(email_addr: str) -> Any:
             )
             return jsonify({"success": False, "error": error_payload}), 404
         except Exception as e:
-            error_payload = build_error_payload(
-                "EXTRACT_ERROR", "提取失败", "ExtractError", 500, str(e)
-            )
+            error_payload = build_error_payload("EXTRACT_ERROR", "提取失败", "ExtractError", 500, str(e))
             return jsonify({"success": False, "error": error_payload}), 500
 
     # 获取分组代理设置
@@ -625,9 +589,7 @@ def api_extract_verification(email_addr: str) -> Any:
     # 收集邮件（同时从收件箱和垃圾邮件获取）
     emails = []
     graph_success = False
-    current_refresh_token = account[
-        "refresh_token"
-    ]  # 保持可能因 Token Rotation 更新的 token
+    current_refresh_token = account["refresh_token"]  # 保持可能因 Token Rotation 更新的 token
 
     # 1. 尝试 Graph API 从收件箱获取最新邮件
     try:
@@ -745,15 +707,11 @@ def api_extract_verification(email_addr: str) -> Any:
             pass
 
     if not emails:
-        error_payload = build_error_payload(
-            "EMAIL_NOT_FOUND", "未找到邮件", "NotFoundError", 404, f"email={email_addr}"
-        )
+        error_payload = build_error_payload("EMAIL_NOT_FOUND", "未找到邮件", "NotFoundError", 404, f"email={email_addr}")
         return jsonify({"success": False, "error": error_payload}), 404
 
     # 按时间排序，取最新的一封
-    emails.sort(
-        key=lambda x: x.get("receivedDateTime", "") or x.get("date", ""), reverse=True
-    )
+    emails.sort(key=lambda x: x.get("receivedDateTime", "") or x.get("date", ""), reverse=True)
     latest_email = emails[0]
 
     # 获取邮件详情以获取完整内容
@@ -787,24 +745,15 @@ def api_extract_verification(email_addr: str) -> Any:
     # 构建邮件对象用于提取
     email_obj = {
         "subject": latest_email.get("subject", ""),
-        "body_preview": latest_email.get("bodyPreview", "")
-        or latest_email.get("body_preview", ""),
+        "body_preview": latest_email.get("bodyPreview", "") or latest_email.get("body_preview", ""),
     }
 
     if email_detail:
         # Graph API 格式
         if "body" in email_detail:
             body_content = email_detail.get("body", {})
-            email_obj["body"] = (
-                body_content.get("content", "")
-                if body_content.get("contentType") == "text"
-                else ""
-            )
-            email_obj["body_html"] = (
-                body_content.get("content", "")
-                if body_content.get("contentType") == "html"
-                else ""
-            )
+            email_obj["body"] = body_content.get("content", "") if body_content.get("contentType") == "text" else ""
+            email_obj["body_html"] = body_content.get("content", "") if body_content.get("contentType") == "html" else ""
             email_obj["bodyContent"] = body_content.get("content", "")
             email_obj["bodyContentType"] = body_content.get("contentType", "text")
         # IMAP 格式
@@ -816,16 +765,10 @@ def api_extract_verification(email_addr: str) -> Any:
         # 尝试从邮件详情提取验证信息
         result = extract_verification_info(email_obj)
         matched_folder = latest_email.get("folder", "inbox")
-        received_at = latest_email.get("receivedDateTime", "") or latest_email.get(
-            "date", ""
-        )
+        received_at = latest_email.get("receivedDateTime", "") or latest_email.get("date", "")
         sender = latest_email.get("from", {})
         if isinstance(sender, dict):
-            sender = (
-                sender.get("emailAddress", {}).get("address", "")
-                or sender.get("address", "")
-                or ""
-            )
+            sender = sender.get("emailAddress", {}).get("address", "") or sender.get("address", "") or ""
 
         account_summary = compact_summary_service.update_summary_from_verification(
             int(account["id"]),
@@ -865,9 +808,7 @@ def api_extract_verification(email_addr: str) -> Any:
 
     except Exception as e:
         # 其他错误
-        error_payload = build_error_payload(
-            "EXTRACT_ERROR", "提取失败", "ExtractError", 500, str(e)
-        )
+        error_payload = build_error_payload("EXTRACT_ERROR", "提取失败", "ExtractError", 500, str(e))
         return jsonify({"success": False, "error": error_payload}), 500
 
 
@@ -915,9 +856,7 @@ def _parse_external_common_args(*, default_since_minutes: int | None = None) -> 
         try:
             since_minutes = int(since_minutes_raw)
         except Exception as exc:
-            raise external_api_service.InvalidParamError(
-                "since_minutes 参数无效"
-            ) from exc
+            raise external_api_service.InvalidParamError("since_minutes 参数无效") from exc
         if since_minutes < 1:
             raise external_api_service.InvalidParamError("since_minutes 参数无效")
 
@@ -942,11 +881,7 @@ def _resolve_external_error(
     resolved_status = int(exc.status)
 
     nested_error = exc.data if isinstance(exc.data, dict) else None
-    if (
-        allow_nested_upstream
-        and isinstance(exc, external_api_service.UpstreamReadFailedError)
-        and nested_error
-    ):
+    if allow_nested_upstream and isinstance(exc, external_api_service.UpstreamReadFailedError) and nested_error:
         nested_code = str(nested_error.get("code") or "").strip().upper()
         if nested_code in _EXTERNAL_NESTED_UPSTREAM_CODES:
             resolved_code = nested_code
@@ -964,15 +899,9 @@ def _resolve_external_error(
     }
 
 
-def _external_error_response(
-    exc: external_api_service.ExternalApiError, *, allow_nested_upstream: bool = False
-):
+def _external_error_response(exc: external_api_service.ExternalApiError, *, allow_nested_upstream: bool = False):
     resolved = _resolve_external_error(exc, allow_nested_upstream=allow_nested_upstream)
-    return jsonify(
-        external_api_service.fail(
-            resolved["code"], resolved["message"], data=resolved["data"]
-        )
-    ), resolved["status"]
+    return jsonify(external_api_service.fail(resolved["code"], resolved["message"], data=resolved["data"])), resolved["status"]
 
 
 @api_key_required
@@ -1006,11 +935,7 @@ def api_external_get_messages() -> Any:
             details={"method": method, "count": len(filtered)},
         )
 
-        return jsonify(
-            external_api_service.ok(
-                {"emails": filtered, "count": len(filtered), "has_more": False}
-            )
-        )
+        return jsonify(external_api_service.ok({"emails": filtered, "count": len(filtered), "has_more": False}))
     except external_api_service.ExternalApiError as exc:
         external_api_service.audit_external_api_access(
             action="external_api_access",
@@ -1186,9 +1111,7 @@ def api_external_get_verification_code() -> Any:
             baseline_timestamp=args.get("baseline_timestamp"),
         )
         if not result.get("verification_code"):
-            raise external_api_service.VerificationCodeNotFoundError(
-                "未找到符合条件的验证码邮件"
-            )
+            raise external_api_service.VerificationCodeNotFoundError("未找到符合条件的验证码邮件")
 
         external_api_service.audit_external_api_access(
             action="external_api_access",
@@ -1244,9 +1167,7 @@ def api_external_get_verification_link() -> Any:
             baseline_timestamp=args.get("baseline_timestamp"),
         )
         if not result.get("verification_link"):
-            raise external_api_service.VerificationLinkNotFoundError(
-                "未找到符合条件的验证链接邮件"
-            )
+            raise external_api_service.VerificationLinkNotFoundError("未找到符合条件的验证链接邮件")
 
         external_api_service.audit_external_api_access(
             action="external_api_access",
@@ -1357,9 +1278,7 @@ def api_external_get_probe_status(probe_id: str) -> Any:
     """P2: 查询异步探测状态与结果"""
     try:
         result = external_api_service.get_probe_status(probe_id)
-        external_api_service.ensure_external_email_access(
-            result.get("email") or "", allow_finished=True
-        )
+        external_api_service.ensure_external_email_access(result.get("email") or "", allow_finished=True)
         if result.get("status") == "cancelled":
             external_api_service.audit_external_api_access(
                 action="external_api_access",
