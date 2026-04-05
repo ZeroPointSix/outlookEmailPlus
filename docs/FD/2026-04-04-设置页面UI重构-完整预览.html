@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设置页面 UI 重构完整预览 — PRD v0.4 / FD v0.3 / TD v0.2</title>
+<style>
+/* ============================================================
+   设计系统：复刻项目真实 CSS 变量
+   ============================================================ */
+:root {
+  --clr-primary:        #B85C38;
+  --clr-primary-dark:   #8E3E22;
+  --clr-primary-light:  #D4795A;
+  --clr-accent:         #C8963E;
+  --clr-jade:           #3A7D44;
+  --clr-danger:         #C0392B;
+  --clr-success:        #27AE60;
+  --clr-warn:           #E67E22;
+
+  --bg:                 #F5EDE0;
+  --bg-card:            #FDFAF5;
+  --bg-sidebar:         #2C1A0E;
+  --bg-secondary:       #F0E8D8;
+  --text:               #2C1810;
+  --text-secondary:     #6B4226;
+  --text-muted:         #9E7A5A;
+  --border:             #D9C4A8;
+  --border-light:       #EDE0CE;
+  --bg-hover:           rgba(184,92,56,0.06);
+  --shadow:             rgba(44, 24, 16, 0.12);
+
+  --font-sans: 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  --radius:     10px;
+  --radius-sm:  6px;
+  --transition: 0.22s ease;
+
+  --sidebar-width: 220px;
+  --topbar-height: 56px;
+}
+
+[data-theme="dark"] {
+  --bg:             #1A1208;
+  --bg-card:        #241A0F;
+  --bg-secondary:   #1E1609;
+  --text:           #EDD9BE;
+  --text-secondary: #C9A97A;
+  --text-muted:     #8C7058;
+  --border:         #3D2C1E;
+  --border-light:   #2E2014;
+  --bg-hover:       rgba(184,92,56,0.1);
+  --shadow:         rgba(0,0,0,0.4);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+  transition: background 0.3s, color 0.3s;
+}
+
+/* ============================================================
+   预览工具栏
+   ============================================================ */
+.preview-notice {
+  background: var(--bg-sidebar);
+  color: #EDD9BE;
+  padding: 0.55rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+}
+.preview-notice strong { color: var(--clr-accent); }
+.preview-notice-right { display: flex; gap: 0.6rem; align-items: center; }
+.btn-toggle-theme {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.22);
+  color: #EDD9BE;
+  padding: 0.28rem 0.75rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+.btn-toggle-theme:hover { background: rgba(255,255,255,0.2); }
+
+/* ============================================================
+   应用外壳（模拟 #app）
+   ============================================================ */
+#app {
+  display: flex;
+  height: calc(100vh - 36px);
+  overflow: hidden;
+}
+
+/* ============================================================
+   侧边栏
+   ============================================================ */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1.1rem 1.2rem 0.9rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  color: #EDD9BE;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+.sidebar-logo .logo-mark { font-size: 1.4rem; }
+.sidebar-logo small { display: block; font-size: 0.7rem; color: rgba(237,217,190,0.5); font-weight: 400; }
+.sidebar-nav { flex: 1; padding: 0.75rem 0; }
+.nav-section {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: rgba(237,217,190,0.35);
+  padding: 0.9rem 1.2rem 0.35rem;
+  text-transform: uppercase;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.58rem 1.2rem;
+  background: none;
+  border: none;
+  color: rgba(237,217,190,0.7);
+  font-family: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.18s, color 0.18s;
+  border-radius: 0;
+}
+.nav-item:hover { background: rgba(255,255,255,0.07); color: #EDD9BE; }
+.nav-item.active {
+  background: rgba(184,92,56,0.22);
+  color: var(--clr-primary-light);
+  font-weight: 600;
+}
+.nav-icon { font-size: 1rem; width: 1.25rem; text-align: center; }
+.sidebar-bottom {
+  padding: 0.75rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  background: rgba(255,255,255,0.06);
+  border-radius: var(--radius-sm);
+}
+.user-avatar {
+  width: 30px; height: 30px;
+  background: var(--clr-primary);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; font-weight: 700; color: #fff;
+  flex-shrink: 0;
+}
+.user-chip-name { font-size: 0.82rem; font-weight: 600; color: #EDD9BE; }
+.user-chip-role { font-size: 0.7rem; color: rgba(237,217,190,0.5); }
+.btn-sidebar-action {
+  display: flex; align-items: center; gap: 0.45rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem; font-family: inherit;
+  cursor: pointer; border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06); color: rgba(237,217,190,0.75);
+  transition: all 0.18s;
+}
+.btn-sidebar-action:hover { background: rgba(255,255,255,0.12); color: #EDD9BE; }
+.btn-logout { background: rgba(192,57,43,0.15); border-color: rgba(192,57,43,0.3); color: #E88A7D; }
+.btn-logout:hover { background: rgba(192,57,43,0.25); }
+
+/* ============================================================
+   主内容区
+   ============================================================ */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+.topbar {
+  height: var(--topbar-height);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px var(--shadow);
+}
+.topbar-left { display: flex; align-items: center; gap: 0.75rem; }
+.topbar-title { font-size: 1rem; font-weight: 700; color: var(--text); }
+.topbar-subtitle { font-size: 0.75rem; color: var(--text-muted); }
+.page-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+/* ============================================================
+   Card
+   ============================================================ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 12px var(--shadow);
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+.card-header {
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-title { font-size: 0.93rem; font-weight: 700; color: var(--text); }
+.card-subtitle { font-size: 0.78rem; color: var(--text-muted); }
+.card-body { padding: 1.4rem; }
+
+/* ============================================================
+   设置页面整体容器
+   ============================================================ */
+.settings-page {
+  max-width: 720px;
+}
+
+/* ============================================================
+   Tab 导航 — 作为内容卡片的头部（文件夹标签隐喻）
+   ============================================================ */
+
+/* 外层容器：Tab导航 + 内容区 合为一个卡片 */
+.settings-card-shell {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 12px var(--shadow);
+  overflow: hidden;
+}
+
+/* Tab 导航栏（卡片头部） */
+.settings-tab-nav {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;   /* 修复：防止出现垂直滚动条 */
+  gap: 0;
+  background: var(--bg-secondary);
+  padding: 0 0.75rem;
+  /* 不设置固定高度，由内容自然撑开 */
+}
+/* 隐藏水平滚动条（保留功能） */
+.settings-tab-nav::-webkit-scrollbar { height: 0; }
+
+.settings-tab {
+  padding: 0.88rem 1.4rem;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;   /* 盖住下方边框线，制造连通感 */
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+.settings-tab:hover {
+  color: var(--text);
+  background: rgba(184,92,56,0.05);
+}
+.settings-tab.active {
+  color: var(--clr-primary);
+  font-weight: 700;
+  border-bottom-color: var(--clr-primary);
+  background: var(--bg-card);   /* 激活时背景与内容区一致，制造"翻开"效果 */
+}
+
+/* 保存中小圆点 — 明显的黄色，有含义 */
+.settings-tab .saving-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--clr-warn);
+  display: none;
+  animation: pulse-dot 0.8s ease infinite;
+  flex-shrink: 0;
+}
+.settings-tab.saving .saving-dot { display: inline-block; }
+/* 保存成功圆点 — 绿色短暂闪烁 */
+.settings-tab .saving-dot.done {
+  background: var(--clr-success);
+  animation: none;
+  display: inline-block;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1.1); }
+  50%  { opacity: 0.45; transform: scale(0.65); }
+}
+
+/* Tab 内容区（在 shell 内，无额外 padding，由 card-body 控制） */
+.settings-tab-body {
+  padding: 0;
+}
+
+/* ============================================================
+   Tab 内容（在 shell 内部）
+   ============================================================ */
+.settings-tab-pane { display: none; }
+.settings-tab-pane.active { display: block; }
+
+/* Tab 内的卡片：去掉外部 box-shadow 和 border，改用 divider 分割 */
+.settings-tab-pane .card {
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.settings-tab-pane .card:last-child {
+  border-bottom: none;
+}
+/* 避免 shell 内卡片顶部 header 与 tab-nav 底部出现双重分割线 */
+.settings-tab-pane .card:first-child .card-header {
+  border-top: none;
+}
+
+/* ============================================================
+   表单样式
+   ============================================================ */
+.form-group { margin-bottom: 1.2rem; }
+.form-label {
+  display: block;
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.42rem;
+}
+.form-input {
+  width: 100%;
+  padding: 0.52rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+.form-input:focus {
+  border-color: var(--clr-primary-light);
+  box-shadow: 0 0 0 3px rgba(184,92,56,0.11);
+}
+textarea.form-input {
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 0.83rem;
+}
+.form-input.narrow { max-width: 420px; }
+.form-input.xnarrow { max-width: 120px; }
+.form-input[type="number"].xnarrow { width: 120px; }
+.form-hint {
+  font-size: 0.77rem;
+  color: var(--text-muted);
+  margin-top: 0.38rem;
+}
+
+/* ============================================================
+   只读字段
+   ============================================================ */
+.readonly-wrap { position: relative; }
+.readonly-badge {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.form-input.readonly-field {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-muted);
+  cursor: not-allowed;
+  padding-right: 2.2rem;
+}
+textarea.readonly-field { padding-right: 0.85rem; }
+.readonly-hint {
+  font-size: 0.76rem;
+  color: var(--clr-jade);
+  margin-top: 0.32rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ============================================================
+   Provider 单选卡片
+   ============================================================ */
+.provider-radio-group {
+  display: flex;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+.provider-radio { flex: 1; min-width: 210px; cursor: pointer; }
+.provider-radio input[type="radio"] { display: none; }
+.provider-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 1.1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  transition: border-color 0.2s, background 0.2s;
+  cursor: pointer;
+  user-select: none;
+}
+.provider-radio-label:hover {
+  border-color: var(--clr-primary-light);
+  background: var(--bg-hover);
+}
+.provider-radio input[type="radio"]:checked + .provider-radio-label {
+  border-color: var(--clr-primary);
+  background: rgba(184,92,56,0.05);
+  box-shadow: 0 0 0 3px rgba(184,92,56,0.10);
+}
+.provider-radio-dot {
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.2s;
+}
+.provider-radio input[type="radio"]:checked + .provider-radio-label .provider-radio-dot {
+  border-color: var(--clr-primary);
+  background: var(--clr-primary);
+  box-shadow: inset 0 0 0 3px var(--bg-card);
+}
+.provider-radio-info { display: flex; flex-direction: column; }
+.provider-name { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.provider-desc { font-size: 0.76rem; color: var(--text-muted); margin-top: 0.12rem; }
+
+/* ============================================================
+   按钮
+   ============================================================ */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.38rem;
+  padding: 0.52rem 1.1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.87rem; font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.btn-primary { background: var(--clr-primary); color: #fff; border-color: var(--clr-primary); }
+.btn-primary:hover { background: var(--clr-primary-dark); border-color: var(--clr-primary-dark); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-secondary { background: var(--bg-card); color: var(--clr-primary); border-color: var(--border); }
+.btn-secondary:hover { border-color: var(--clr-primary-light); background: var(--bg-hover); }
+.btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
+.btn-outline:hover { color: var(--text); border-color: var(--border); background: var(--bg-hover); }
+.btn-sm { padding: 0.35rem 0.78rem; font-size: 0.8rem; }
+
+/* ============================================================
+   同步状态
+   ============================================================ */
+.sync-status {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  background: rgba(58,125,68,0.08);
+  border: 1px solid rgba(58,125,68,0.25);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem; color: var(--clr-jade);
+  margin-bottom: 0.9rem;
+}
+
+/* ============================================================
+   自动保存提示条（toast 风格）
+   ============================================================ */
+.autosave-toast {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  z-index: 9999;
+  min-width: 280px;
+  padding: 0.65rem 1.2rem;
+  background: rgba(200,150,62,0.12);
+  border: 1px solid rgba(200,150,62,0.35);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  color: var(--clr-accent);
+  display: flex; align-items: center; gap: 0.6rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  animation: slideDown 0.22s ease forwards;
+}
+.autosave-toast.error {
+  background: rgba(192,57,43,0.09);
+  border-color: rgba(192,57,43,0.28);
+  color: var(--clr-danger);
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateX(-50%) translateY(-16px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ============================================================
+   分隔线 / 子标题
+   ============================================================ */
+.divider { border: none; border-top: 1px solid var(--border-light); margin: 1.25rem 0; }
+.section-title {
+  font-size: 0.88rem; font-weight: 700; color: var(--text-muted);
+  margin-bottom: 0.9rem;
+  display: flex; align-items: center; gap: 0.45rem;
+}
+.section-block {
+  padding: 1rem 1.1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  margin-top: 0.75rem;
+}
+
+/* ============================================================
+   保存栏
+   ============================================================ */
+.save-bar {
+  display: flex; justify-content: flex-end; gap: 0.65rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border-light);
+  margin-top: 1.2rem;
+}
+
+/* ============================================================
+   内联行布局
+   ============================================================ */
+.inline-row { display: flex; align-items: center; gap: 0.65rem; }
+.unit-label { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
+
+/* ============================================================
+   Cron 样例按钮网格
+   ============================================================ */
+.cron-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+/* ============================================================
+   折叠内容区
+   ============================================================ */
+.collapsible { overflow: hidden; transition: max-height 0.3s ease; }
+</style>
+</head>
+<body>
+
+<!-- 预览工具栏 -->
+<div class="preview-notice">
+  <div>📐 <strong>UI 完整预览</strong> — 设置页面 Tab 化重构 &nbsp;·&nbsp; PRD v0.4 / FD v0.3 / TD v0.2 &nbsp;·&nbsp; <span style="opacity:0.5;">仅限设计评审，不影响真实代码</span></div>
+  <div class="preview-notice-right">
+    <button class="btn-toggle-theme" onclick="toggleTheme()" id="themeBtn">🌙 暗色模式</button>
+  </div>
+</div>
+
+<!-- 应用外壳 -->
+<div id="app">
+
+  <!-- ===== 侧边栏 ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">📬</div>
+      <div>
+        <span>Outlook 邮件</span>
+        <small>v2.5.0-preview</small>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">概览</div>
+      <button class="nav-item" onclick="fakeNav(this, '仪表盘', '系统概览')">
+        <span class="nav-icon">🏠</span><span>仪表盘</span>
+      </button>
+
+      <div class="nav-section">邮箱管理</div>
+      <button class="nav-item" onclick="fakeNav(this, '账号管理', '管理 Outlook 账号')">
+        <span class="nav-icon">📬</span><span>账号管理</span>
+      </button>
+      <button class="nav-item" onclick="fakeNav(this, '临时邮箱', '管理临时邮箱')">
+        <span class="nav-icon">⚡</span><span>临时邮箱</span>
+      </button>
+
+      <div class="nav-section">Token</div>
+      <button class="nav-item" onclick="fakeNav(this, '刷新日志', 'Token 刷新历史')">
+        <span class="nav-icon">🔄</span><span>刷新日志</span>
+      </button>
+
+      <div class="nav-section">系统</div>
+      <button class="nav-item active" id="nav-settings" onclick="fakeNav(this, '系统设置', '全局配置管理')">
+        <span class="nav-icon">⚙️</span><span>系统设置</span>
+      </button>
+      <button class="nav-item" onclick="fakeNav(this, '审计日志', '操作记录')">
+        <span class="nav-icon">📋</span><span>审计日志</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="user-chip">
+        <div class="user-avatar">管</div>
+        <div>
+          <div class="user-chip-name">管理员</div>
+          <div class="user-chip-role">Outlook 管理</div>
+        </div>
+      </div>
+      <button class="btn-sidebar-action">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </button>
+      <button class="btn-sidebar-action btn-logout">退出登录</button>
+    </div>
+  </aside>
+
+  <!-- ===== 主内容区 ===== -->
+  <div class="content">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div>
+          <div class="topbar-title" id="topbarTitle">系统设置</div>
+          <div class="topbar-subtitle" id="topbarSubtitle">全局配置管理</div>
+        </div>
+      </div>
+      <div style="font-size:0.78rem;color:var(--text-muted);">
+        <!-- 右侧操作区占位 -->
+      </div>
+    </header>
+
+    <!-- 页面内容 -->
+    <div class="page-scroll">
+      <div class="settings-page">
+
+        <div class="settings-card-shell">
+
+        <!-- Tab 导航 -->
+        <div class="settings-tab-nav">
+          <button class="settings-tab active" id="stab-basic" onclick="switchSettingsTab('basic', this)">
+            ⚙️ 基础
+            <span class="saving-dot"></span>
+          </button>
+          <button class="settings-tab" id="stab-temp-mail" onclick="switchSettingsTab('temp-mail', this)">
+            ⚡ 临时邮箱
+            <span class="saving-dot"></span>
+          </button>
+          <button class="settings-tab" id="stab-api-security" onclick="switchSettingsTab('api-security', this)">
+            🔑 API 安全
+            <span class="saving-dot"></span>
+          </button>
+          <button class="settings-tab" id="stab-automation" onclick="switchSettingsTab('automation', this)">
+            🤖 自动化
+            <span class="saving-dot"></span>
+          </button>
+        </div>
+
+        <!-- ==========================================
+             Tab 1: 基础设置
+        ========================================== -->
+        <div class="settings-tab-pane active" id="stab-pane-basic">
+          <div class="settings-tab-body">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">⚙️ 基础设置</div>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label class="form-label" for="settingsPassword">登录密码</label>
+                  <input type="password" class="form-input narrow" id="settingsPassword" placeholder="输入新密码（留空则不修改）">
+                  <div class="form-hint">用于登录系统的密码。密码修改需手动点击「保存密码」，不会随 Tab 切换自动保存。</div>
+                </div>
+                <div class="save-bar">
+                  <button class="btn btn-primary" onclick="simulateSavePassword(this)">💾 保存密码</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==========================================
+             Tab 2: 临时邮箱
+        ========================================== -->
+        <div class="settings-tab-pane" id="stab-pane-temp-mail">
+          <div class="settings-tab-body">
+
+          <!-- Provider 选择卡 -->
+          <div class="card">
+            <div class="card-body" style="padding-bottom:1.1rem;">
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">全局临时邮箱 Provider</label>
+                <div class="form-hint" style="margin-bottom:0.8rem;">
+                  决定 external API 和其他未明确指定 provider 的操作所使用的来源。生成邮箱时可在临时邮箱页面独立选择。
+                </div>
+                <div class="provider-radio-group">
+                  <label class="provider-radio">
+                    <input type="radio" name="settingsTempMailProvider" value="legacy_bridge" onchange="onProviderChange('legacy_bridge')">
+                    <span class="provider-radio-label">
+                      <span class="provider-radio-dot"></span>
+                      <span class="provider-radio-info">
+                        <span class="provider-name">🔧 GPTMail (Legacy Bridge)</span>
+                        <span class="provider-desc">自建域名临时邮箱，手动配置 API 服务</span>
+                      </span>
+                    </span>
+                  </label>
+                  <label class="provider-radio">
+                    <input type="radio" name="settingsTempMailProvider" value="cloudflare_temp_mail" checked onchange="onProviderChange('cloudflare_temp_mail')">
+                    <span class="provider-radio-label">
+                      <span class="provider-radio-dot"></span>
+                      <span class="provider-radio-info">
+                        <span class="provider-name">☁ Cloudflare Temp Mail</span>
+                        <span class="provider-desc">CF Worker 部署的临时邮箱，域名从 Worker 同步</span>
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- GPTMail 配置面板 -->
+          <div class="card" id="panel-gptmail" style="display:none;">
+            <div class="card-header">
+              <div class="card-title">🔧 GPTMail 配置</div>
+              <div class="card-subtitle">Legacy Bridge — 与 CF Worker 独立，互不覆盖</div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label" for="settingsTempMailApiBaseUrl">API Base URL</label>
+                <input type="text" class="form-input" id="settingsTempMailApiBaseUrl" value="https://gptmail.example.com" placeholder="https://mail.example.com">
+                <div class="form-hint">上游临时邮箱服务地址，留空则使用默认配置。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="settingsTempMailApiKey">API Key</label>
+                <input type="password" class="form-input narrow" id="settingsTempMailApiKey" value="sk-****abcd" placeholder="输入临时邮箱 API Key">
+                <div class="form-hint">用于鉴权的 API Key。已设置时显示脱敏值，留空则不修改。</div>
+              </div>
+              <hr class="divider">
+              <div class="form-group">
+                <label class="form-label" for="settingsTempMailDomains">可用域名（JSON）</label>
+                <textarea class="form-input" id="settingsTempMailDomains" rows="4">[
+  {"name": "mail.example.com", "enabled": true},
+  {"name": "temp.example.net", "enabled": true}
+]</textarea>
+                <div class="form-hint">手动维护的可用域名白名单。支持字符串数组或 {name, enabled} 对象数组。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="settingsTempMailDefaultDomain">默认域名</label>
+                <input type="text" class="form-input narrow" id="settingsTempMailDefaultDomain" value="mail.example.com" placeholder="mail.example.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="settingsTempMailPrefixRules">前缀规则（JSON）</label>
+                <textarea class="form-input" id="settingsTempMailPrefixRules" rows="4">{
+  "min_length": 1,
+  "max_length": 32,
+  "pattern": "^[a-z0-9][a-z0-9._-]*$"
+}</textarea>
+                <div class="form-hint">邮箱前缀格式校验规则，独立于 CF Worker 前缀规则单独保存。</div>
+              </div>
+              <div class="save-bar">
+                <button class="btn btn-secondary btn-sm">重置</button>
+                <button class="btn btn-primary" onclick="simulateAutoSave(this, 'temp-mail')">💾 保存设置</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- CF Worker 配置面板 -->
+          <div class="card" id="panel-cf">
+            <div class="card-header">
+              <div class="card-title">☁ Cloudflare Temp Email Worker 配置</div>
+              <div class="card-subtitle">与 GPTMail 完全独立，互不覆盖</div>
+            </div>
+            <div class="card-body">
+
+              <div class="form-group">
+                <label class="form-label" for="settingsCfWorkerBaseUrl">CF Worker 部署地址</label>
+                <input type="text" class="form-input" id="settingsCfWorkerBaseUrl" value="https://mail.yourname.workers.dev" placeholder="https://mail.yourname.workers.dev">
+                <div class="form-hint">Cloudflare Worker 的部署 URL，不含尾部斜杠。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="settingsCfWorkerAdminKey">CF Worker Admin 密码</label>
+                <input type="password" class="form-input narrow" id="settingsCfWorkerAdminKey" value="••••••••" placeholder="CF Worker 的 ADMIN_PASSWORDS 值" autocomplete="off">
+                <div class="form-hint">对应 CF Worker 环境变量 ADMIN_PASSWORDS 中的密码值。</div>
+              </div>
+
+              <hr class="divider">
+
+              <!-- 同步操作区 -->
+              <div class="form-group">
+                <button type="button" class="btn btn-secondary" id="btnSyncCfWorkerDomains" onclick="simulateCfSync()">
+                  ☁ 从 CF Worker 同步域名
+                </button>
+                <div class="form-hint" style="margin-top:0.45rem;">
+                  自动读取 CF Worker 的域名配置，同步至下方「已同步域名列表」和「默认域名」字段（只读展示）。
+                </div>
+              </div>
+
+              <!-- 同步状态 -->
+              <div class="sync-status" id="cfWorkerSyncTime">
+                ✅ 上次同步：2026-04-04 14:30 — 已同步 3 个域名，默认：mail1.workers.dev
+              </div>
+
+              <!-- 只读：已同步域名 -->
+              <div class="form-group">
+                <label class="form-label">
+                  已同步域名列表
+                  <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（只读 — 由同步操作写入）</span>
+                </label>
+                <div class="readonly-wrap">
+                  <textarea class="form-input readonly-field" id="settingsCfWorkerDomains" rows="4" readonly placeholder="尚未同步，点击「从 CF Worker 同步域名」获取">[
+  {"name": "mail1.workers.dev", "enabled": true},
+  {"name": "mail2.workers.dev", "enabled": true},
+  {"name": "mail3.workers.dev", "enabled": true}
+]</textarea>
+                </div>
+                <div class="readonly-hint">🔒 该字段由「从 CF Worker 同步域名」操作自动写入，不可手动修改</div>
+              </div>
+
+              <!-- 只读：默认域名 -->
+              <div class="form-group">
+                <label class="form-label">
+                  默认域名
+                  <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（只读 — 由同步操作写入）</span>
+                </label>
+                <div class="readonly-wrap">
+                  <input type="text" class="form-input readonly-field narrow" id="settingsCfWorkerDefaultDomain" value="mail1.workers.dev" readonly placeholder="尚未同步">
+                  <span class="readonly-badge">🔒</span>
+                </div>
+                <div class="readonly-hint">🔒 该字段由「从 CF Worker 同步域名」操作自动写入，不可手动修改</div>
+              </div>
+
+              <!-- 可编辑：CF Worker 前缀规则 -->
+              <div class="form-group">
+                <label class="form-label" for="settingsCfWorkerPrefixRules">前缀规则（JSON）</label>
+                <textarea class="form-input" id="settingsCfWorkerPrefixRules" rows="4">{
+  "min_length": 1,
+  "max_length": 32,
+  "pattern": "^[a-z0-9][a-z0-9._-]*$"
+}</textarea>
+                <div class="form-hint">CF Worker 邮箱前缀格式校验规则，独立于 GPTMail 的前缀规则单独保存。</div>
+              </div>
+
+              <div class="save-bar">
+                <button class="btn btn-secondary btn-sm">重置</button>
+                <button class="btn btn-primary" onclick="simulateAutoSave(this, 'temp-mail')">💾 保存设置</button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /settings-tab-body -->
+        </div><!-- /tab-pane temp-mail -->
+
+        <!-- ==========================================
+             Tab 3: API 安全
+        ========================================== -->
+        <div class="settings-tab-pane" id="stab-pane-api-security">
+          <div class="settings-tab-body">
+
+          <!-- 对外开放 API -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🔑 对外开放 API</div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label" for="settingsExternalApiKey">对外开放 API Key</label>
+                <input type="password" class="form-input narrow" id="settingsExternalApiKey" value="sk-****efgh" placeholder="用于 /api/external/* 的 X-API-Key" autocomplete="off">
+                <div class="form-hint">用于对外开放接口鉴权（请求头：X-API-Key）。如需禁用对外开放接口，可清空后保存。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="settingsExternalApiKeysJson">对外开放 API 多 Key 配置（JSON）</label>
+                <textarea class="form-input" id="settingsExternalApiKeysJson" rows="8">[
+  {
+    "name": "partner-a",
+    "api_key": "••••••••",
+    "enabled": true,
+    "allowed_emails": ["user@example.com"]
+  }
+]</textarea>
+                <div class="form-hint">用于按调用方维护多个 Key、邮箱范围授权和启停状态。保留已有脱敏 api_key 表示不修改该 Key；清空后保存表示清空全部多 Key。</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 公网安全配置 -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🛡️ 公网安全配置（P1）</div>
+            </div>
+            <div class="card-body">
+
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="externalApiPublicMode" onchange="togglePublicModePanel(this)">
+                  <span class="form-label" style="margin:0;">启用公网模式</span>
+                </label>
+                <div class="form-hint">关闭时（默认）仅做 API Key 鉴权；开启后额外启用 IP 白名单、限流、高风险端点禁用等安全策略。</div>
+              </div>
+
+              <!-- 公网模式扩展项 -->
+              <div id="publicModePanel" style="display:none;">
+                <hr class="divider">
+                <div class="form-group">
+                  <label class="form-label" for="externalApiIpWhitelist">IP 白名单 <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（仅公网模式生效，留空则不限制）</span></label>
+                  <textarea class="form-input" id="externalApiIpWhitelist" rows="3" placeholder="每行一个 IP 或 CIDR，如 192.168.1.0/24" style="font-family:var(--font-mono);font-size:0.83rem;"></textarea>
+                  <div class="form-hint">支持精确 IP 和 CIDR 格式，每行一个，保存时自动转为 JSON 数组。</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="externalApiRateLimit">每分钟每 IP 限流 <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（仅公网模式生效）</span></label>
+                  <div class="inline-row">
+                    <input type="number" class="form-input xnarrow" id="externalApiRateLimit" min="1" max="10000" value="60">
+                    <span class="unit-label">次 / 分钟</span>
+                  </div>
+                  <div class="form-hint">每个 IP 每分钟最大请求数（默认 60）。</div>
+                </div>
+                <div class="form-group">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="externalApiDisableRaw">
+                    <span class="form-label" style="margin:0;">禁用 raw（原始内容）端点</span>
+                  </label>
+                  <div class="form-hint">公网模式下建议禁用，防止泄露完整邮件原文。</div>
+                </div>
+                <div class="form-group">
+                  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="externalApiDisableWait">
+                    <span class="form-label" style="margin:0;">禁用 wait-message（等待新邮件）端点</span>
+                  </label>
+                  <div class="form-hint">公网模式下建议禁用，防止长连接资源耗尽（Slowloris 风险）。</div>
+                </div>
+              </div>
+
+              <!-- External Pool 区块 -->
+              <hr class="divider">
+              <div class="section-title">📦 External Pool</div>
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="poolExternalEnabled">
+                  <span class="form-label" style="margin:0;">启用 external pool 端点</span>
+                </label>
+                <div class="form-hint">开启后才允许调用 /api/external/pool/*。仅设置对外 API Key 不会自动开启邮箱池对外接口。</div>
+              </div>
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="externalApiDisablePoolClaimRandom">
+                  <span class="form-label" style="margin:0;">禁用 pool claim-random</span>
+                </label>
+                <div class="form-hint">关闭后可供外部调用随机领取邮箱池账号。</div>
+              </div>
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="externalApiDisablePoolClaimRelease">
+                  <span class="form-label" style="margin:0;">禁用 pool claim-release</span>
+                </label>
+                <div class="form-hint">关闭后可供外部调用释放已领取账号。</div>
+              </div>
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="externalApiDisablePoolClaimComplete">
+                  <span class="form-label" style="margin:0;">禁用 pool claim-complete</span>
+                </label>
+                <div class="form-hint">关闭后可供外部调用领取完成/回写结果。</div>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="externalApiDisablePoolStats">
+                  <span class="form-label" style="margin:0;">禁用 pool stats</span>
+                </label>
+                <div class="form-hint">关闭后可供外部读取邮箱池统计信息。</div>
+              </div>
+
+              <div class="save-bar">
+                <button class="btn btn-primary" onclick="simulateAutoSave(this, 'api-security')">💾 保存设置</button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /settings-tab-body -->
+        </div><!-- /tab-pane api-security -->
+
+        <!-- ==========================================
+             Tab 4: 自动化
+        ========================================== -->
+        <div class="settings-tab-pane" id="stab-pane-automation">
+          <div class="settings-tab-body">
+
+          <!-- Token 刷新 -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🔄 Token 刷新设置</div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="enableScheduledRefresh" checked>
+                  <span class="form-label" style="margin:0;">启用定时刷新</span>
+                </label>
+                <div class="form-hint">关闭后将不会自动执行定时刷新任务。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">刷新策略</label>
+                <div style="display:flex;gap:16px;margin-bottom:4px;">
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="radio" name="refreshStrategy" value="days" checked onchange="toggleRefreshStrategy(this.value)">
+                    <span style="font-size:0.87rem;">按天数</span>
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="radio" name="refreshStrategy" value="cron" onchange="toggleRefreshStrategy(this.value)">
+                    <span style="font-size:0.87rem;">Cron 表达式</span>
+                  </label>
+                </div>
+              </div>
+              <!-- 按天数 -->
+              <div id="daysStrategyContainer">
+                <div class="form-group">
+                  <label class="form-label" for="refreshIntervalDays">定时刷新周期 <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（每隔 X 天自动刷新所有账号）</span></label>
+                  <div class="inline-row">
+                    <input type="number" class="form-input xnarrow" id="refreshIntervalDays" min="1" max="90" value="30">
+                    <span class="unit-label">天</span>
+                  </div>
+                  <div class="form-hint">建议设置为 30 天，防止 Token 因 90 天不使用而过期。</div>
+                </div>
+              </div>
+              <!-- Cron 表达式 -->
+              <div id="cronStrategyContainer" style="display:none;">
+                <div class="form-group">
+                  <label class="form-label" for="refreshCron">Cron 表达式</label>
+                  <input type="text" class="form-input narrow" id="refreshCron" placeholder="0 2 * * *" value="0 2 * * *">
+                  <div class="form-hint">格式：分 时 日 月 星期（例如：0 2 * * * 表示每天凌晨 2:00）</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">常用样例</label>
+                  <div class="cron-grid">
+                    <button class="btn btn-sm btn-secondary" onclick="selectCronPreset('0 2 * * *')">每天凌晨 2:00</button>
+                    <button class="btn btn-sm btn-secondary" onclick="selectCronPreset('0 2 * * 1')">每周一凌晨 2:00</button>
+                    <button class="btn btn-sm btn-secondary" onclick="selectCronPreset('0 2 1 * *')">每月 1 号凌晨 2:00</button>
+                    <button class="btn btn-sm btn-secondary" onclick="selectCronPreset('0 2 */3 * *')">每 3 天凌晨 2:00</button>
+                    <button class="btn btn-sm btn-secondary" onclick="selectCronPreset('0 */12 * * *')">每 12 小时</button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <button class="btn btn-outline btn-sm" onclick="validateCronPreview()">验证表达式</button>
+                  <div id="cronValidationResult" style="margin-top:8px;font-size:0.82rem;"></div>
+                </div>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" for="refreshDelaySeconds">邮箱间刷新间隔 <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（每个邮箱刷新之间的等待时间）</span></label>
+                <div class="inline-row">
+                  <input type="number" class="form-input xnarrow" id="refreshDelaySeconds" min="0" max="60" value="5">
+                  <span class="unit-label">秒</span>
+                </div>
+                <div class="form-hint">建议设置为 5-10 秒，避免频繁请求触发 API 限流。</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 自动轮询 -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🔔 自动轮询设置</div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="enableAutoPolling">
+                  <span class="form-label" style="margin:0;">启用自动轮询</span>
+                </label>
+                <div class="form-hint">开启后自动检查当前账号是否有新邮件。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="pollingInterval">轮询间隔 <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（检查新邮件的时间间隔）</span></label>
+                <div class="inline-row">
+                  <input type="number" class="form-input xnarrow" id="pollingInterval" min="3" max="300" value="10">
+                  <span class="unit-label">秒</span>
+                </div>
+                <div class="form-hint">范围：3-300 秒，建议设置为 5-30 秒。</div>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" for="pollingCount">轮询次数 <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（最多轮询多少次后停止）</span></label>
+                <div class="inline-row">
+                  <input type="number" class="form-input xnarrow" id="pollingCount" min="0" max="100" value="5">
+                  <span class="unit-label">次（0 = 持续）</span>
+                </div>
+                <div class="form-hint">范围：0-100 次，设置为 0 表示持续轮询。</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Email 通知 -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">✉️ Email 通知</div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="emailNotificationEnabled">
+                  <span class="form-label" style="margin:0;">启用 Email 通知</span>
+                </label>
+                <div class="form-hint">这里只配置 Email 通知通道。普通邮箱需在账号列表开启通知后才会通过 Email 发送。启用后仅从新到达的邮件开始通知。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="emailNotificationRecipient">接收通知邮箱</label>
+                <input type="email" class="form-input narrow" id="emailNotificationRecipient" placeholder="输入接收通知的邮箱地址">
+                <div class="form-hint">这里只配置 Email 渠道的接收邮箱，不会让所有普通邮箱自动发送。</div>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <button class="btn btn-outline btn-sm" onclick="simulateTestNotify('email')">📨 发送测试邮件</button>
+                <div class="form-hint">按「先保存，再测试」处理；成功语义为「请求已提交，请检查收件箱」。</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Telegram 通知 -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📬 Telegram 通知</div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label" for="telegramBotToken">Bot Token <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（从 @BotFather 获取）</span></label>
+                <input type="password" class="form-input" id="telegramBotToken" placeholder="输入 Bot Token" autocomplete="off">
+                <div class="form-hint">这里只配置 Telegram 通知通道。格式：1234567890:AAxxxxxx（留空则禁用推送）。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="telegramChatId">Chat ID <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（接收推送的用户/群组 ID）</span></label>
+                <input type="text" class="form-input" id="telegramChatId" placeholder="输入 Chat ID" style="max-width:300px;">
+                <div class="form-hint">可用 @userinfobot 获取你的 Chat ID。</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="telegramPollInterval">轮询间隔 <span style="font-size:0.74rem;color:var(--text-muted);font-weight:400;">（检查新邮件的时间间隔）</span></label>
+                <div class="inline-row">
+                  <input type="number" class="form-input xnarrow" id="telegramPollInterval" min="10" max="86400" value="600">
+                  <span class="unit-label">秒</span>
+                </div>
+                <div class="form-hint">范围：10-86400 秒，默认 600 秒（10 分钟）。</div>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <button class="btn btn-outline btn-sm" onclick="simulateTestNotify('telegram')">📨 发送测试消息</button>
+                <div class="form-hint">验证当前 Telegram 通知通道是否配置正确。</div>
+              </div>
+
+              <div class="save-bar">
+                <button class="btn btn-primary" onclick="simulateAutoSave(this, 'automation')">💾 保存设置</button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /settings-tab-body -->
+        </div><!-- /tab-pane automation -->
+
+        </div><!-- /settings-card-shell -->
+
+      </div><!-- /settings-page -->
+    </div><!-- /page-scroll -->
+  </div><!-- /content -->
+
+</div><!-- /#app -->
+
+<script>
+/* ============================================================
+   主题切换
+   ============================================================ */
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? '' : 'dark');
+  document.getElementById('themeBtn').textContent = isDark ? '🌙 暗色模式' : '☀️ 亮色模式';
+}
+
+/* ============================================================
+   侧边栏导航（模拟）
+   ============================================================ */
+function fakeNav(el, title, subtitle) {
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('topbarTitle').textContent = title;
+  document.getElementById('topbarSubtitle').textContent = subtitle;
+}
+
+/* ============================================================
+   Tab 切换 + 自动保存逻辑
+   ============================================================ */
+let currentSettingsTab = 'basic';
+
+function switchSettingsTab(tabName, btnEl) {
+  if (currentSettingsTab === tabName) return;
+  const prev = currentSettingsTab;
+  currentSettingsTab = tabName;
+
+  // 切换按钮高亮
+  document.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+
+  // 切换内容区（立即切换）
+  document.querySelectorAll('.settings-tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('stab-pane-' + tabName).classList.add('active');
+
+  // 基础 Tab 不自动保存（密码字段排除）
+  if (prev !== 'basic') {
+    triggerAutoSave(prev, btnEl);
+  }
+}
+
+function triggerAutoSave(tabName, _btnEl) {
+  // 在离开的 Tab 按钮上显示黄色「保存中」圆点
+  const prevBtn = document.getElementById('stab-' + tabName);
+  if (prevBtn) {
+    const dot = prevBtn.querySelector('.saving-dot');
+    prevBtn.classList.add('saving');
+    dot && dot.classList.remove('done');
+    setTimeout(() => {
+      prevBtn.classList.remove('saving');
+      // 切换为绿色「已保存」圆点，短暂显示后消失
+      if (dot) {
+        dot.classList.add('done');
+        dot.style.display = 'inline-block';
+        setTimeout(() => {
+          dot.classList.remove('done');
+          dot.style.display = '';
+        }, 1800);
+      }
+      showAutosaveToast(tabName, true);
+    }, 800);
+  }
+}
+
+const TAB_NAMES = {
+  'basic': '基础', 'temp-mail': '临时邮箱', 'api-security': 'API 安全', 'automation': '自动化'
+};
+
+function showAutosaveToast(tabName, success) {
+  const old = document.getElementById('_autosave_toast');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.id = '_autosave_toast';
+  el.className = 'autosave-toast' + (success ? '' : ' error');
+  el.innerHTML = success
+    ? `✅ 已自动保存「${TAB_NAMES[tabName] || tabName}」的修改`
+    : `❌ 保存「${TAB_NAMES[tabName] || tabName}」时出错，请重试`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+/* ============================================================
+   Provider 切换
+   ============================================================ */
+function onProviderChange(val) {
+  document.getElementById('panel-gptmail').style.display = (val === 'legacy_bridge') ? 'block' : 'none';
+  document.getElementById('panel-cf').style.display = (val === 'cloudflare_temp_mail') ? 'block' : 'none';
+}
+
+/* ============================================================
+   CF Worker 同步模拟
+   ============================================================ */
+function simulateCfSync() {
+  const btn = document.getElementById('btnSyncCfWorkerDomains');
+  btn.disabled = true;
+  btn.textContent = '⏳ 同步中…';
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = '☁ 从 CF Worker 同步域名';
+    const now = new Date().toLocaleString('zh-CN', { hour12: false });
+    document.getElementById('cfWorkerSyncTime').innerHTML =
+      `✅ 上次同步：${now} — 已同步 3 个域名，默认：mail1.workers.dev`;
+    // 更新只读字段（演示）
+    document.getElementById('settingsCfWorkerDomains').value =
+      `[\n  {"name": "mail1.workers.dev", "enabled": true},\n  {"name": "mail2.workers.dev", "enabled": true},\n  {"name": "mail3.workers.dev", "enabled": true}\n]`;
+    document.getElementById('settingsCfWorkerDefaultDomain').value = 'mail1.workers.dev';
+    showAutosaveToast('temp-mail', true);
+  }, 1200);
+}
+
+/* ============================================================
+   公网模式展开/收起
+   ============================================================ */
+function togglePublicModePanel(el) {
+  document.getElementById('publicModePanel').style.display = el.checked ? 'block' : 'none';
+}
+
+/* ============================================================
+   刷新策略切换（天数 / Cron）
+   ============================================================ */
+function toggleRefreshStrategy(val) {
+  document.getElementById('daysStrategyContainer').style.display = (val === 'days') ? 'block' : 'none';
+  document.getElementById('cronStrategyContainer').style.display = (val === 'cron') ? 'block' : 'none';
+}
+
+function selectCronPreset(expr) {
+  document.getElementById('refreshCron').value = expr;
+}
+
+function validateCronPreview() {
+  const val = document.getElementById('refreshCron').value.trim();
+  const el = document.getElementById('cronValidationResult');
+  const parts = val.split(/\s+/);
+  if (parts.length === 5) {
+    el.style.color = 'var(--clr-success)';
+    el.textContent = `✅ 格式正确（5 段）：${val}`;
+  } else {
+    el.style.color = 'var(--clr-danger)';
+    el.textContent = `❌ 格式有误，需要 5 段（当前 ${parts.length} 段）`;
+  }
+}
+
+/* ============================================================
+   保存密码模拟
+   ============================================================ */
+function simulateSavePassword(btn) {
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ 保存中…';
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = orig;
+    showAutosaveToast('basic', true);
+  }, 900);
+}
+
+/* ============================================================
+   手动保存按钮模拟（临时邮箱、API安全、自动化各自的「保存」按钮）
+   ============================================================ */
+function simulateAutoSave(btn, tabName) {
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ 保存中…';
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = orig;
+    showAutosaveToast(tabName, true);
+  }, 800);
+}
+
+/* ============================================================
+   测试通知模拟
+   ============================================================ */
+function simulateTestNotify(channel) {
+  const names = { email: 'Email', telegram: 'Telegram' };
+  alert(`✅ ${names[channel] || channel} 测试请求已提交。\n（真实环境中将发送测试消息，请检查收件箱/Bot 会话）`);
+}
+</script>
+</body>
+</html>

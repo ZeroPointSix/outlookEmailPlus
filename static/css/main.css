@@ -24,6 +24,7 @@
   --border:             #D9C4A8;
   --border-light:       #EDE0CE;
   --bg-hover:           rgba(184,92,56,0.06);
+  --bg-secondary:       #F0E8D8;
   --shadow:             rgba(44, 24, 16, 0.12);
 
   --font-sans: 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
@@ -45,6 +46,7 @@
   --border:         #3D2C1E;
   --border-light:   #2E2014;
   --bg-hover:        rgba(184,92,56,0.1);
+  --bg-secondary:    #1E1609;
   --shadow:         rgba(0, 0, 0, 0.4);
 }
 
@@ -1520,4 +1522,159 @@ tr:hover td { background: rgba(184,92,56,0.04); }
   border-color: #52c41a !important;
   color: #fff !important;
   box-shadow: 0 0 10px rgba(82, 196, 26, 0.55);
+}
+
+/* ===== v0.3: 设置页面 Tab 重构样式 ===== */
+
+/* 移除旧设置页宽度限制 */
+#page-settings {
+  max-width: none !important;
+}
+
+/* 整体 Tab 卡片外壳 */
+.settings-card-shell {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 12px var(--shadow);
+  overflow: hidden;
+}
+
+/* Tab 导航栏（卡片头部，灰色背景区分） */
+.settings-tab-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--bg-secondary);
+  padding: 0 0.75rem;
+}
+.settings-tab-nav::-webkit-scrollbar { height: 0; }
+
+/* Tab 按钮 */
+.settings-tab {
+  padding: 0.85rem 1.5rem;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+.settings-tab:hover {
+  color: var(--text);
+  background: rgba(184,92,56,0.05);
+}
+
+.settings-tab.active {
+  color: var(--clr-primary);
+  font-weight: 700;
+  border-bottom-color: var(--clr-primary);
+  background: var(--bg-card);
+}
+
+/* Tab 内容区 */
+.settings-tab-pane {
+  display: none;
+}
+
+.settings-tab-pane.active {
+  display: block;
+}
+
+/* Shell 内的 card：去掉独立边框/阴影，用底部分割线区分区块 */
+.settings-tab-pane .card {
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.settings-tab-pane .card:last-child {
+  border-bottom: none;
+}
+
+/* Provider 单选按钮组 */
+.provider-radio-group {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.provider-radio {
+  flex: 1;
+  min-width: 200px;
+  cursor: pointer;
+}
+
+.provider-radio input[type="radio"] {
+  display: none;
+}
+
+.provider-radio-label {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  border: 2px solid var(--border-light);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.provider-radio input[type="radio"]:checked + .provider-radio-label {
+  border-color: var(--clr-primary);
+  background: var(--bg-secondary);
+}
+
+.provider-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.provider-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* 只读字段样式 */
+.readonly-field {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-light) !important;
+  cursor: default !important;
+  color: var(--text-muted);
+}
+
+/* Tab 自动保存状态圆点指示器 */
+.tab-save-dot {
+  display: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.settings-tab.saving > span.tab-save-dot,
+.settings-tab.save-error > span.tab-save-dot {
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.settings-tab.saving > span.tab-save-dot {
+  background: var(--clr-warn, #faad14);
+  animation: pulse-dot 1s infinite;
+}
+.settings-tab.save-error > span.tab-save-dot {
+  background: var(--clr-danger, #ff4d4f);
+  animation: none;
 }

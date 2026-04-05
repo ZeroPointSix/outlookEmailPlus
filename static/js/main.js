@@ -1166,7 +1166,7 @@
         }
 
         // 显示消息提示
-        function showToast(message, type = 'info', errorDetail = null) {
+        function showToast(message, type = 'info', errorDetail = null, persistent = false) {
             let container = document.getElementById('toast-container');
             if (!container) {
                 container = document.createElement('div');
@@ -1196,12 +1196,24 @@
 
             container.appendChild(toast);
 
-            const duration = (errorDetail && type === 'error') ? 8000 : 3000;
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateX(30px)';
-                setTimeout(() => toast.remove(), 300);
-            }, duration);
+            if (persistent) {
+                // persistent 模式：追加关闭按钮，不自动消失
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = '×';
+                closeBtn.style.cssText = 'background:none;border:none;color:inherit;cursor:pointer;margin-left:12px;font-size:1.1rem;opacity:0.8;';
+                closeBtn.onclick = () => {
+                    toast.style.opacity = '0';
+                    setTimeout(() => toast.remove(), 300);
+                };
+                toast.appendChild(closeBtn);
+            } else {
+                const duration = (errorDetail && type === 'error') ? 8000 : 3000;
+                setTimeout(() => {
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translateX(30px)';
+                    setTimeout(() => toast.remove(), 300);
+                }, duration);
+            }
         }
 
         function buildRefreshErrorSuggestions({ accountType, provider, errorMessage }) {
@@ -1542,14 +1554,15 @@ ${details}
                     // 密码不回显
                     document.getElementById('settingsPassword').value = '';
 
-                    const tempMailProviderEl = document.getElementById('settingsTempMailProvider');
-                    if (tempMailProviderEl) {
-                        // 兼容旧值（custom_domain_temp_mail → legacy_bridge）
-                        const rawProvider = data.settings.temp_mail_provider || 'legacy_bridge';
-                        const mappedProvider = (rawProvider === 'custom_domain_temp_mail' || rawProvider === 'legacy_bridge' || rawProvider === 'legacy_gptmail' || rawProvider === 'gptmail')
-                            ? 'legacy_bridge'
-                            : rawProvider;
-                        tempMailProviderEl.value = mappedProvider;
+                    // v0.3: Provider 选择器改为单选按钮
+                    const rawProvider = data.settings.temp_mail_provider || 'legacy_bridge';
+                    const mappedProvider = (rawProvider === 'custom_domain_temp_mail' || rawProvider === 'legacy_bridge' || rawProvider === 'legacy_gptmail' || rawProvider === 'gptmail')
+                        ? 'legacy_bridge'
+                        : rawProvider;
+                    const radioBtn = document.querySelector(`input[name="tempMailProvider"][value="${mappedProvider}"]`);
+                    if (radioBtn) radioBtn.checked = true;
+                    if (typeof onTempMailProviderChange === 'function') {
+                        onTempMailProviderChange(mappedProvider);
                     }
 
                     const tempMailApiBaseUrlEl = document.getElementById('settingsTempMailApiBaseUrl');
@@ -1557,8 +1570,8 @@ ${details}
                         tempMailApiBaseUrlEl.value = data.settings.temp_mail_api_base_url || '';
                     }
 
-                    // 临时邮箱 API Key（仅脱敏展示，避免回填明文）
-                    const tempMailApiKeyEl = document.getElementById('settingsApiKey');
+                    // 临时邮箱 API Key（v0.3: ID 从 settingsApiKey 改为 settingsTempMailApiKey）
+                    const tempMailApiKeyEl = document.getElementById('settingsTempMailApiKey');
                     if (tempMailApiKeyEl) {
                         const maskedValue = data.settings.temp_mail_api_key_masked || '';
                         tempMailApiKeyEl.value = maskedValue;
@@ -1596,6 +1609,35 @@ ${details}
                         cfWorkerAdminKeyEl.dataset.maskedValue = cfMasked;
                         cfWorkerAdminKeyEl.dataset.isSet = data.settings.cf_worker_admin_key_set ? 'true' : 'false';
                     }
+
+                    // v0.3: CF Worker 独立域名配置（只读字段）
+                    const cfWorkerDomainsEl = document.getElementById('settingsCfWorkerDomains');
+                    if (cfWorkerDomainsEl) {
+                        const cfDomains = data.settings.cf_worker_domains || [];
+                        cfWorkerDomainsEl.value = cfDomains.length ? JSON.stringify(cfDomains, null, 2) : '';
+                        cfWorkerDomainsEl.classList.add('readonly-field');
+                        cfWorkerDomainsEl.readOnly = true;
+                        if (!cfDomains.length) {
+                            cfWorkerDomainsEl.setAttribute('placeholder', '尚未同步，请点击上方按钮同步');
+                        }
+                    }
+
+                    const cfWorkerDefaultDomainEl = document.getElementById('settingsCfWorkerDefaultDomain');
+                    if (cfWorkerDefaultDomainEl) {
+                        cfWorkerDefaultDomainEl.value = data.settings.cf_worker_default_domain || '';
+                        cfWorkerDefaultDomainEl.classList.add('readonly-field');
+                        cfWorkerDefaultDomainEl.readOnly = true;
+                        if (!cfWorkerDefaultDomainEl.value) {
+                            cfWorkerDefaultDomainEl.setAttribute('placeholder', '尚未同步');
+                        }
+                    }
+
+                    const cfWorkerPrefixRulesEl = document.getElementById('settingsCfWorkerPrefixRules');
+                    if (cfWorkerPrefixRulesEl) {
+                        const cfPrefixRules = data.settings.cf_worker_prefix_rules || {};
+                        cfWorkerPrefixRulesEl.value = Object.keys(cfPrefixRules).length ? JSON.stringify(cfPrefixRules, null, 2) : '';
+                    }
+
                     const externalApiKeyEl = document.getElementById('settingsExternalApiKey');
                     if (externalApiKeyEl) {
                         const maskedValue = data.settings.external_api_key_masked || '';
@@ -1752,9 +1794,10 @@ ${details}
         async function saveSettings() {
             const password = document.getElementById('settingsPassword').value;
 
-            const tempMailProviderEl = document.getElementById('settingsTempMailProvider');
+            // v0.3: Provider 改为 radio button
+            const tempMailProviderRadio = document.querySelector('input[name="tempMailProvider"]:checked');
             const tempMailApiBaseUrlEl = document.getElementById('settingsTempMailApiBaseUrl');
-            const tempMailApiKeyEl = document.getElementById('settingsApiKey');
+            const tempMailApiKeyEl = document.getElementById('settingsTempMailApiKey');
             const tempMailDomainsEl = document.getElementById('settingsTempMailDomains');
             const tempMailDefaultDomainEl = document.getElementById('settingsTempMailDefaultDomain');
             const tempMailPrefixRulesEl = document.getElementById('settingsTempMailPrefixRules');
@@ -1793,7 +1836,7 @@ ${details}
                 settings.login_password = password;
             }
 
-            settings.temp_mail_provider = tempMailProviderEl ? (tempMailProviderEl.value.trim() || 'legacy_bridge') : 'legacy_bridge';
+            settings.temp_mail_provider = tempMailProviderRadio ? (tempMailProviderRadio.value.trim() || 'legacy_bridge') : 'legacy_bridge';
             settings.temp_mail_api_base_url = tempMailApiBaseUrlEl ? tempMailApiBaseUrlEl.value.trim() : '';
             settings.temp_mail_default_domain = tempMailDefaultDomainEl ? tempMailDefaultDomainEl.value.trim() : '';
 
@@ -1847,6 +1890,26 @@ ${details}
                 // 仅当用户真实输入时才覆盖（避免把脱敏占位符写回 DB）
                 if (!(cfKeyIsSet && cfKey && cfKey === cfKeyMasked)) {
                     settings.cf_worker_admin_key = cfKey;
+                }
+            }
+
+            // v0.3: CF Worker 独立前缀规则（域名字段只读，不保存）
+            const cfWorkerPrefixRulesEl = document.getElementById('settingsCfWorkerPrefixRules');
+            if (cfWorkerPrefixRulesEl) {
+                const rawCfPrefixRules = cfWorkerPrefixRulesEl.value.trim();
+                if (rawCfPrefixRules) {
+                    try {
+                        settings.cf_worker_prefix_rules = JSON.parse(rawCfPrefixRules);
+                    } catch (error) {
+                        showToast(translateAppTextLocal('CF Worker 前缀规则必须是合法 JSON'), 'error');
+                        return;
+                    }
+                } else {
+                    settings.cf_worker_prefix_rules = {
+                        min_length: 1,
+                        max_length: 32,
+                        pattern: '^[a-z0-9][a-z0-9._-]*$'
+                    };
                 }
             }
 
@@ -2060,7 +2123,7 @@ ${details}
 
         async function syncCfWorkerDomains() {
             const btn = document.getElementById('btnSyncCfWorkerDomains');
-            const hintEl = document.getElementById('cfWorkerSyncDomainsHint');
+            const hintEl = document.getElementById('cfWorkerSyncTime');
             if (btn) { btn.disabled = true; btn.textContent = translateAppTextLocal('⏳ 同步中…'); }
             try {
                 const resp = await fetch('/api/settings/cf-worker-sync-domains', {
@@ -2069,24 +2132,14 @@ ${details}
                 });
                 const data = await resp.json();
                 if (data.success) {
-                    // 同步成功后自动刷新域名相关输入框
-                    const domainsEl = document.getElementById('settingsTempMailDomains');
-                    const defaultDomainEl = document.getElementById('settingsTempMailDefaultDomain');
-                    if (domainsEl && data.domains) {
-                        domainsEl.value = JSON.stringify(
-                            data.domains.map(d => ({ name: d, enabled: true })),
-                            null, 2
-                        );
-                    }
-                    if (defaultDomainEl && data.default_domain) {
-                        defaultDomainEl.value = data.default_domain;
-                    }
+                    // v0.3: 同步成功后更新 CF Worker 独立域名只读字段（不覆盖 GPTMail 的 temp_mail_* 字段）
+                    updateCfWorkerReadonlyFields(data);
                     const msg = data.message || `已同步 ${(data.domains || []).length} 个域名`;
                     showToast(msg, 'success');
                     if (hintEl) {
                         const versionInfo = data.version ? ` (${data.version})` : '';
                         const titleInfo = data.title ? `「${data.title}」` : '';
-                        hintEl.textContent = `✅ 同步成功 ${titleInfo}${versionInfo}：${(data.domains || []).join(', ')}`;
+                        hintEl.textContent = `✅ 同步成功 ${titleInfo}${versionInfo}：${(data.domains || []).join(', ')}  — 上次同步：${new Date().toLocaleString()}`;
                     }
                 } else {
                     const errMsg = (data.error && data.error.message) || '同步失败，请检查 CF Worker 地址配置';
@@ -2098,6 +2151,276 @@ ${details}
                 if (hintEl) { hintEl.textContent = `❌ 请求失败: ${e.message}`; }
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('☁ 从 CF Worker 同步域名'); }
+            }
+        }
+
+        // ==================== v0.3: 设置页面 Tab 重构 ====================
+
+        // 当前激活的 Tab（默认 basic）
+        let currentSettingsTab = 'basic';
+
+        // Tab 切换函数
+        function switchSettingsTab(tabName) {
+            const prevTab = currentSettingsTab;
+            if (prevTab === tabName) return; // 同一 Tab 无操作
+            currentSettingsTab = tabName;
+
+            // 1. 基础 Tab 切走时，密码框有内容则清空 + Toast 提示
+            if (prevTab === 'basic') {
+                const pwdEl = document.getElementById('settingsPassword');
+                if (pwdEl && pwdEl.value.trim()) {
+                    pwdEl.value = '';
+                    showToast('密码修改未保存，如需修改请在「基础」Tab 重新输入后点击保存', 'warning');
+                }
+            }
+
+            // 2. 立即更新 Tab 按钮视觉状态
+            document.querySelectorAll('.settings-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tabName);
+            });
+
+            // 3. 立即更新 Tab 内容区显隐
+            document.querySelectorAll('.settings-tab-pane').forEach(pane => {
+                pane.classList.toggle('active', pane.id === `settings-tab-${tabName}`);
+            });
+
+            // 4. 后台异步触发自动保存（基础 Tab 除外）
+            if (prevTab !== 'basic') {
+                autoSaveSettings(prevTab);
+            }
+        }
+
+        // 自动保存逻辑（密码除外）
+        async function autoSaveSettings(tabName) {
+            if (tabName === 'basic') return;
+
+            const settings = {};
+
+            if (tabName === 'temp-mail') {
+                const provider = document.querySelector('input[name="tempMailProvider"]:checked')?.value || 'legacy_bridge';
+                settings.temp_mail_provider = provider;
+
+                if (provider === 'legacy_bridge') {
+                    const baseUrlEl = document.getElementById('settingsTempMailApiBaseUrl');
+                    if (baseUrlEl) settings.temp_mail_api_base_url = baseUrlEl.value.trim();
+
+                    const apiKeyEl = document.getElementById('settingsTempMailApiKey');
+                    if (apiKeyEl) {
+                        const val = apiKeyEl.value.trim();
+                        const masked = apiKeyEl.dataset.maskedValue || '';
+                        const isSet = apiKeyEl.dataset.isSet === 'true';
+                        if (!(isSet && val && val === masked)) {
+                            settings.temp_mail_api_key = val;
+                        }
+                    }
+
+                    const defaultDomainEl = document.getElementById('settingsTempMailDefaultDomain');
+                    if (defaultDomainEl) settings.temp_mail_default_domain = defaultDomainEl.value.trim();
+
+                    const domainsEl = document.getElementById('settingsTempMailDomains');
+                    if (domainsEl && domainsEl.value.trim()) {
+                        try { settings.temp_mail_domains = JSON.parse(domainsEl.value.trim()); } catch (_) {}
+                    }
+
+                    const prefixRulesEl = document.getElementById('settingsTempMailPrefixRules');
+                    if (prefixRulesEl && prefixRulesEl.value.trim()) {
+                        try { settings.temp_mail_prefix_rules = JSON.parse(prefixRulesEl.value.trim()); } catch (_) {}
+                    }
+                } else {
+                    // CF Worker 面板字段（只读域名字段不写入）
+                    const cfBaseUrlEl = document.getElementById('settingsCfWorkerBaseUrl');
+                    if (cfBaseUrlEl) settings.cf_worker_base_url = cfBaseUrlEl.value.trim();
+
+                    const cfAdminKeyEl = document.getElementById('settingsCfWorkerAdminKey');
+                    if (cfAdminKeyEl) {
+                        const val = cfAdminKeyEl.value.trim();
+                        const masked = cfAdminKeyEl.dataset.maskedValue || '';
+                        const isSet = cfAdminKeyEl.dataset.isSet === 'true';
+                        if (!(isSet && val && val === masked)) {
+                            settings.cf_worker_admin_key = val;
+                        }
+                    }
+
+                    const cfPrefixRulesEl = document.getElementById('settingsCfWorkerPrefixRules');
+                    if (cfPrefixRulesEl && cfPrefixRulesEl.value.trim()) {
+                        try { settings.cf_worker_prefix_rules = JSON.parse(cfPrefixRulesEl.value.trim()); } catch (_) {}
+                    }
+                }
+            } else if (tabName === 'api-security') {
+                const externalApiKeyEl = document.getElementById('settingsExternalApiKey');
+                if (externalApiKeyEl) {
+                    const val = externalApiKeyEl.value.trim();
+                    const masked = externalApiKeyEl.dataset.maskedValue || '';
+                    const isSet = externalApiKeyEl.dataset.isSet === 'true';
+                    if (!(isSet && val && val === masked)) {
+                        settings.external_api_key = val;
+                    }
+                }
+
+                const externalApiKeysJsonEl = document.getElementById('settingsExternalApiKeysJson');
+                if (externalApiKeysJsonEl && externalApiKeysJsonEl.value.trim()) {
+                    try {
+                        const parsed = JSON.parse(externalApiKeysJsonEl.value.trim());
+                        if (Array.isArray(parsed)) settings.external_api_keys = parsed;
+                    } catch (_) {}
+                }
+
+                const publicModeEl = document.getElementById('externalApiPublicMode');
+                if (publicModeEl) settings.external_api_public_mode = publicModeEl.checked;
+
+                const ipWhitelistEl = document.getElementById('externalApiIpWhitelist');
+                if (ipWhitelistEl) {
+                    settings.external_api_ip_whitelist = ipWhitelistEl.value.trim().split('\n').map(l => l.trim()).filter(l => l);
+                }
+
+                const rateLimitEl = document.getElementById('externalApiRateLimit');
+                if (rateLimitEl) {
+                    const rl = parseInt(rateLimitEl.value);
+                    if (!isNaN(rl)) settings.external_api_rate_limit_per_minute = rl;
+                }
+
+                const disableRawEl = document.getElementById('externalApiDisableRaw');
+                if (disableRawEl) settings.external_api_disable_raw_content = disableRawEl.checked;
+
+                const disableWaitEl = document.getElementById('externalApiDisableWait');
+                if (disableWaitEl) settings.external_api_disable_wait_message = disableWaitEl.checked;
+
+                const poolExternalEnabledEl = document.getElementById('poolExternalEnabled');
+                if (poolExternalEnabledEl) settings.pool_external_enabled = poolExternalEnabledEl.checked;
+
+                const dpcrEl = document.getElementById('externalApiDisablePoolClaimRandom');
+                if (dpcrEl) settings.external_api_disable_pool_claim_random = dpcrEl.checked;
+
+                const dpcreleaseEl = document.getElementById('externalApiDisablePoolClaimRelease');
+                if (dpcreleaseEl) settings.external_api_disable_pool_claim_release = dpcreleaseEl.checked;
+
+                const dpccEl = document.getElementById('externalApiDisablePoolClaimComplete');
+                if (dpccEl) settings.external_api_disable_pool_claim_complete = dpccEl.checked;
+
+                const dpsEl = document.getElementById('externalApiDisablePoolStats');
+                if (dpsEl) settings.external_api_disable_pool_stats = dpsEl.checked;
+            } else if (tabName === 'automation') {
+                const enableScheduled = document.getElementById('enableScheduledRefresh')?.checked;
+                if (enableScheduled !== undefined) settings.enable_scheduled_refresh = enableScheduled;
+
+                const strategy = document.querySelector('input[name="refreshStrategy"]:checked')?.value;
+                if (strategy) settings.use_cron_schedule = strategy === 'cron';
+
+                const refreshDays = parseInt(document.getElementById('refreshIntervalDays')?.value);
+                if (!isNaN(refreshDays) && refreshDays >= 1 && refreshDays <= 90) settings.refresh_interval_days = refreshDays;
+
+                const refreshDelay = parseInt(document.getElementById('refreshDelaySeconds')?.value);
+                if (!isNaN(refreshDelay) && refreshDelay >= 0 && refreshDelay <= 60) settings.refresh_delay_seconds = refreshDelay;
+
+                const refreshCron = document.getElementById('refreshCron')?.value?.trim();
+                if (refreshCron && strategy === 'cron') settings.refresh_cron = refreshCron;
+
+                const enablePolling = document.getElementById('enableAutoPolling')?.checked;
+                if (enablePolling !== undefined) {
+                    settings.enable_auto_polling = enablePolling;
+                    settings.enable_compact_auto_poll = enablePolling;
+                }
+
+                const pInterval = parseInt(document.getElementById('pollingInterval')?.value);
+                if (!isNaN(pInterval) && pInterval >= 3 && pInterval <= 300) {
+                    settings.polling_interval = pInterval;
+                    settings.compact_poll_interval = pInterval;
+                }
+
+                const pCount = parseInt(document.getElementById('pollingCount')?.value);
+                if (!isNaN(pCount) && pCount >= 0 && pCount <= 100) {
+                    settings.polling_count = pCount;
+                    settings.compact_poll_max_count = pCount;
+                }
+
+                const emailNotifEnabled = document.getElementById('emailNotificationEnabled')?.checked;
+                if (emailNotifEnabled !== undefined) settings.email_notification_enabled = emailNotifEnabled;
+
+                const emailRecipient = document.getElementById('emailNotificationRecipient')?.value?.trim();
+                if (emailRecipient !== undefined) settings.email_notification_recipient = emailRecipient;
+
+                const tgToken = document.getElementById('telegramBotToken')?.value?.trim();
+                if (tgToken) settings.telegram_bot_token = tgToken;
+
+                const tgChatId = document.getElementById('telegramChatId')?.value?.trim();
+                if (tgChatId !== undefined) settings.telegram_chat_id = tgChatId;
+
+                const tgPoll = parseInt(document.getElementById('telegramPollInterval')?.value);
+                if (!isNaN(tgPoll) && tgPoll >= 10 && tgPoll <= 86400) settings.telegram_poll_interval = tgPoll;
+            }
+
+            if (Object.keys(settings).length === 0) return;
+
+            // 显示保存中圆点
+            const prevTabBtn = document.querySelector(`.settings-tab[data-tab="${tabName}"]`);
+            let dotEl = null;
+            if (prevTabBtn) {
+                dotEl = document.createElement('span');
+                dotEl.className = 'tab-save-dot';
+                prevTabBtn.appendChild(dotEl);
+                prevTabBtn.classList.add('saving');
+            }
+
+            try {
+                const resp = await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                // 保存成功：移除圆点
+                if (prevTabBtn) {
+                    prevTabBtn.classList.remove('saving');
+                    if (dotEl) dotEl.remove();
+                }
+            } catch (e) {
+                // 保存失败：圆点变红保留 + 持久 Toast
+                if (prevTabBtn) {
+                    prevTabBtn.classList.remove('saving');
+                    prevTabBtn.classList.add('save-error');
+                }
+                showToast(`保存失败，[${tabName}] Tab 的修改尚未保存，请手动重试`, 'error', null, true);
+            }
+        }
+
+        // Provider 切换面板显隐
+        function onTempMailProviderChange(provider) {
+            const gptmailPanel = document.getElementById('gptmailConfigPanel');
+            const cfWorkerPanel = document.getElementById('cfWorkerConfigPanel');
+
+            if (provider === 'legacy_bridge') {
+                if (gptmailPanel) gptmailPanel.style.display = 'block';
+                if (cfWorkerPanel) cfWorkerPanel.style.display = 'none';
+            } else {
+                if (gptmailPanel) gptmailPanel.style.display = 'none';
+                if (cfWorkerPanel) cfWorkerPanel.style.display = 'block';
+            }
+        }
+
+        // 同步成功后更新 CF Worker 只读字段
+        function updateCfWorkerReadonlyFields(data) {
+            const domainsEl = document.getElementById('settingsCfWorkerDomains');
+            const defaultDomainEl = document.getElementById('settingsCfWorkerDefaultDomain');
+            const syncTimeEl = document.getElementById('cfWorkerSyncTime');
+
+            if (domainsEl && data.domains) {
+                domainsEl.value = JSON.stringify(
+                    data.domains.map(d => ({ name: d, enabled: true })),
+                    null, 2
+                );
+                domainsEl.classList.add('readonly-field');
+                domainsEl.readOnly = true;
+            }
+
+            if (defaultDomainEl && data.default_domain) {
+                defaultDomainEl.value = data.default_domain;
+                defaultDomainEl.classList.add('readonly-field');
+                defaultDomainEl.readOnly = true;
+            }
+
+            if (syncTimeEl) {
+                syncTimeEl.textContent = `上次同步：${new Date().toLocaleString()}`;
+                syncTimeEl.style.display = 'block';
             }
         }
 

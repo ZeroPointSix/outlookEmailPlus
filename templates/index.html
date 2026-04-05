@@ -397,92 +397,169 @@
             </div>
 
             <!-- ===== Page: Settings ===== -->
-            <div class="page page-hidden" id="page-settings" style="padding: 1.5rem; max-width: 720px;">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">⚙️ 系统设置</div>
-                    </div>
-                    <div class="card-body" style="padding: 1.5rem;">
-                        <!-- 基础设置 -->
-                        <div class="form-group">
-                            <label class="form-label">登录密码</label>
-                            <input type="password" class="form-input" id="settingsPassword" placeholder="输入新密码（留空则不修改）">
-                            <div class="form-hint">用于登录系统的密码</div>
+            <div class="page page-hidden" id="page-settings" style="padding: 1.5rem;">
+                <!-- 整体 Tab 容器（Tab 导航 + 内容区共用一个卡片外壳） -->
+                <div class="settings-card-shell">
+
+                <!-- Tab 导航栏 -->
+                <div class="settings-tab-nav" id="settingsTabNav">
+                    <button class="settings-tab active" data-tab="basic" onclick="switchSettingsTab('basic')">基础</button>
+                    <button class="settings-tab" data-tab="temp-mail" onclick="switchSettingsTab('temp-mail')">临时邮箱</button>
+                    <button class="settings-tab" data-tab="api-security" onclick="switchSettingsTab('api-security')">API 安全</button>
+                    <button class="settings-tab" data-tab="automation" onclick="switchSettingsTab('automation')">自动化</button>
+                </div>
+
+                <!-- Tab 内容区 -->
+                <div class="settings-tab-content">
+
+                    <!-- Tab 1: 基础 -->
+                    <div class="settings-tab-pane active" id="settings-tab-basic">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">⚙️ 基础设置</div>
+                            </div>
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <div class="form-group">
+                                    <label class="form-label">登录密码</label>
+                                    <input type="password" class="form-input" id="settingsPassword" placeholder="输入新密码（留空则不修改）">
+                                    <div class="form-hint">用于登录系统的密码</div>
+                                </div>
+                                <!-- 保存按钮 -->
+                                <div style="margin-top: 1.5rem;">
+                                    <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
+                                </div>
+                            </div>
                         </div>
-                        <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text);">⚡ 临时邮箱配置</h4>
-                            <div class="form-group">
-                                <label class="form-label">全局临时邮箱 Provider</label>
-                                <select class="form-input" id="settingsTempMailProvider">
-                                    <option value="legacy_bridge">🔧 GPTMail (Legacy Bridge)</option>
-                                    <option value="cloudflare_temp_mail">☁ Cloudflare Temp Mail</option>
-                                </select>
-                                <div class="form-hint">决定 external API 和其他未明确指定 provider 的操作所使用的来源。生成邮箱时可在前端独立选择。</div>
+                    </div>
+
+                    <!-- Tab 2: 临时邮箱 -->
+                    <div class="settings-tab-pane" id="settings-tab-temp-mail">
+                        <!-- Provider 单选按钮组 -->
+                        <div class="card" style="margin-bottom: 1rem;">
+                            <div class="card-body" style="padding: 1rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label class="form-label">全局临时邮箱 Provider</label>
+                                    <div class="provider-radio-group">
+                                        <label class="provider-radio">
+                                            <input type="radio" name="tempMailProvider" value="legacy_bridge" onchange="onTempMailProviderChange('legacy_bridge')">
+                                            <span class="provider-radio-label">
+                                                <span class="provider-name">🔧 GPTMail (Legacy Bridge)</span>
+                                                <span class="provider-desc">自建域名临时邮箱服务</span>
+                                            </span>
+                                        </label>
+                                        <label class="provider-radio">
+                                            <input type="radio" name="tempMailProvider" value="cloudflare_temp_mail" onchange="onTempMailProviderChange('cloudflare_temp_mail')">
+                                            <span class="provider-radio-label">
+                                                <span class="provider-name">☁ Cloudflare Temp Mail</span>
+                                                <span class="provider-desc">CF Worker 部署的临时邮箱</span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">临时邮箱 API Base URL</label>
-                                <input type="text" class="form-input" id="settingsTempMailApiBaseUrl" placeholder="https://mail.example.com">
-                                <div class="form-hint">上游临时邮箱服务地址，留空则使用默认配置。</div>
+                        </div>
+
+                        <!-- GPTMail 配置面板 -->
+                        <div class="card" id="gptmailConfigPanel">
+                            <div class="card-header">
+                                <div class="card-title">🔧 GPTMail 配置</div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">临时邮箱 API Key</label>
-                                <input type="text" class="form-input" id="settingsApiKey" placeholder="输入临时邮箱 API Key">
-                                <div class="form-hint">用于临时邮箱能力。旧版临时邮箱 API Key 字段仅保留兼容读取与迁移，不再作为正式配置字段。</div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">可用域名（JSON）</label>
-                                <textarea class="form-input" id="settingsTempMailDomains" rows="4" placeholder='[
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <div class="form-group">
+                                    <label class="form-label">临时邮箱 API Base URL</label>
+                                    <input type="text" class="form-input" id="settingsTempMailApiBaseUrl" placeholder="https://mail.example.com">
+                                    <div class="form-hint">上游临时邮箱服务地址，留空则使用默认配置。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">临时邮箱 API Key</label>
+                                    <input type="text" class="form-input" id="settingsTempMailApiKey" placeholder="输入临时邮箱 API Key">
+                                    <div class="form-hint">用于临时邮箱能力。旧版临时邮箱 API Key 字段仅保留兼容读取与迁移，不再作为正式配置字段。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">可用域名（JSON）</label>
+                                    <textarea class="form-input" id="settingsTempMailDomains" rows="4" placeholder='[
   {"name": "mail.example.com", "enabled": true},
   {"name": "temp.example.net", "enabled": true}
 ]' style="font-family: monospace; font-size: 0.84rem;"></textarea>
-                                <div class="form-hint">支持字符串数组或 `{name, enabled}` 对象数组。</div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">默认域名</label>
-                                <input type="text" class="form-input" id="settingsTempMailDefaultDomain" placeholder="mail.example.com">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">前缀规则（JSON）</label>
-                                <textarea class="form-input" id="settingsTempMailPrefixRules" rows="4" placeholder='{
+                                    <div class="form-hint">支持字符串数组或 `{name, enabled}` 对象数组。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">默认域名</label>
+                                    <input type="text" class="form-input" id="settingsTempMailDefaultDomain" placeholder="mail.example.com">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">前缀规则（JSON）</label>
+                                    <textarea class="form-input" id="settingsTempMailPrefixRules" rows="4" placeholder='{
   "min_length": 1,
   "max_length": 32,
   "pattern": "^[a-z0-9][a-z0-9._-]*$"
 }' style="font-family: monospace; font-size: 0.84rem;"></textarea>
-                            </div>
-                        </div>
-                        <!-- CF Worker 独立配置区 -->
-                        <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text);">☁ Cloudflare Temp Email Worker 配置</h4>
-                            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">与 GPTMail 完全独立的配置。部署 dreamhunter2333/cloudflare_temp_email 后填写。</p>
-                            <div class="form-group">
-                                <label class="form-label">CF Worker 部署地址</label>
-                                <input type="text" class="form-input" id="settingsCfWorkerBaseUrl" placeholder="https://mail.yourname.workers.dev">
-                                <div class="form-hint">Cloudflare Worker 的部署 URL，不含尾部斜杠。</div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">CF Worker Admin 密码</label>
-                                <input type="password" class="form-input" id="settingsCfWorkerAdminKey" placeholder="CF Worker 的 ADMIN_PASSWORDS 值" autocomplete="off">
-                                <div class="form-hint">对应 CF Worker 环境变量 ADMIN_PASSWORDS 中的密码值。</div>
-                            </div>
-                            <div class="form-group" style="margin-top: 0.75rem;">
-                                <button type="button" class="btn btn-secondary" id="btnSyncCfWorkerDomains" onclick="syncCfWorkerDomains()" style="font-size: 0.85rem;">
-                                    ☁ 从 CF Worker 同步域名
-                                </button>
-                                <div class="form-hint" id="cfWorkerSyncDomainsHint" style="margin-top: 0.4rem;">
-                                    自动读取 CF Worker 的域名配置，同步至下方「临时邮箱可用域名」和「默认域名」。
                                 </div>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">对外开放 API Key</label>
-                            <input type="password" class="form-input" id="settingsExternalApiKey" placeholder="用于 /api/external/* 的 X-API-Key" autocomplete="off">
-                            <div class="form-hint" id="externalApiKeyHint">
-                                用于对外开放接口鉴权（请求头：X-API-Key）。如需禁用对外开放接口，可清空后保存。
+
+                        <!-- CF Worker 配置面板 -->
+                        <div class="card" id="cfWorkerConfigPanel" style="display: none;">
+                            <div class="card-header">
+                                <div class="card-title">☁ Cloudflare Temp Email Worker 配置</div>
+                            </div>
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">与 GPTMail 完全独立的配置。部署 dreamhunter2333/cloudflare_temp_email 后填写。</p>
+                                <div class="form-group">
+                                    <label class="form-label">CF Worker 部署地址</label>
+                                    <input type="text" class="form-input" id="settingsCfWorkerBaseUrl" placeholder="https://mail.yourname.workers.dev">
+                                    <div class="form-hint">Cloudflare Worker 的部署 URL，不含尾部斜杠。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">CF Worker Admin 密码</label>
+                                    <input type="password" class="form-input" id="settingsCfWorkerAdminKey" placeholder="CF Worker 的 ADMIN_PASSWORDS 值" autocomplete="off">
+                                    <div class="form-hint">对应 CF Worker 环境变量 ADMIN_PASSWORDS 中的密码值。</div>
+                                </div>
+                                <div class="form-group" style="margin-top: 0.75rem;">
+                                    <button type="button" class="btn btn-secondary" id="btnSyncCfWorkerDomains" onclick="syncCfWorkerDomains()" style="font-size: 0.85rem;">
+                                        ☁ 从 CF Worker 同步域名
+                                    </button>
+                                    <div class="form-hint" id="cfWorkerSyncTime" style="margin-top: 0.4rem;">
+                                        自动读取 CF Worker 的域名配置，同步至下方域名字段。
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">可用域名（只读 · 通过同步按钮更新）</label>
+                                    <textarea class="form-input readonly-field" id="settingsCfWorkerDomains" rows="4" readonly placeholder="尚未同步，请点击上方按钮同步" style="font-family: monospace; font-size: 0.84rem;"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">默认域名（只读 · 通过同步按钮更新）</label>
+                                    <input type="text" class="form-input readonly-field" id="settingsCfWorkerDefaultDomain" readonly placeholder="尚未同步">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">前缀规则（JSON）</label>
+                                    <textarea class="form-input" id="settingsCfWorkerPrefixRules" rows="4" placeholder='{
+  "min_length": 1,
+  "max_length": 32,
+  "pattern": "^[a-z0-9][a-z0-9._-]*$"
+}' style="font-family: monospace; font-size: 0.84rem;"></textarea>
+                                </div>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">对外开放 API 多 Key 配置（JSON）</label>
-                            <textarea class="form-input" id="settingsExternalApiKeysJson" rows="10" placeholder='[
+                    </div>
+
+                    <!-- Tab 3: API 安全 -->
+                    <div class="settings-tab-pane" id="settings-tab-api-security">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">🔐 API 安全设置</div>
+                            </div>
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <div class="form-group">
+                                    <label class="form-label">对外开放 API Key</label>
+                                    <input type="password" class="form-input" id="settingsExternalApiKey" placeholder="用于 /api/external/* 的 X-API-Key" autocomplete="off">
+                                    <div class="form-hint" id="externalApiKeyHint">
+                                        用于对外开放接口鉴权（请求头：X-API-Key）。如需禁用对外开放接口，可清空后保存。
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">对外开放 API 多 Key 配置（JSON）</label>
+                                    <textarea class="form-input" id="settingsExternalApiKeysJson" rows="10" placeholder='[
   {
     "name": "partner-a",
     "api_key": "your-key",
@@ -490,233 +567,250 @@
     "allowed_emails": ["user@example.com"]
   }
 ]' style="font-family: monospace; font-size: 0.84rem;"></textarea>
-                            <div class="form-hint" id="externalApiKeysJsonHint">
-                                用于按调用方维护多个 Key、邮箱范围授权和启停状态。保留已有脱敏 `api_key` 表示不修改该 Key；清空后保存表示清空全部多 Key。
+                                    <div class="form-hint" id="externalApiKeysJsonHint">
+                                        用于按调用方维护多个 Key、邮箱范围授权和启停状态。保留已有脱敏 `api_key` 表示不修改该 Key；清空后保存表示清空全部多 Key。
+                                    </div>
+                                </div>
+
+                                <!-- P1：对外 API 公网安全配置 -->
+                                <div id="externalApiAdvancedSettings" style="margin-top: 0.75rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-light);">
+                                    <h5 style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-muted);">🛡️ 公网安全配置（P1）</h5>
+                                    <div class="form-group">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="externalApiPublicMode">
+                                            <span class="form-label" style="margin: 0;">启用公网模式</span>
+                                        </label>
+                                        <div class="form-hint">关闭时（默认）仅做 API Key 鉴权；开启后额外启用 IP 白名单、限流、高风险端点禁用等安全策略。</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">IP 白名单 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（仅公网模式生效，留空则不限制）</span></label>
+                                        <textarea class="form-input" id="externalApiIpWhitelist" rows="2" placeholder='每行一个 IP 或 CIDR，如 192.168.1.0/24' style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                                        <div class="form-hint">支持精确 IP 和 CIDR 格式。每行一个，保存时自动转为 JSON 数组。</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">每分钟每 IP 限流 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（仅公网模式生效）</span></label>
+                                        <input type="number" class="form-input" id="externalApiRateLimit" min="1" max="10000" value="60" style="width: 120px;">
+                                        <div class="form-hint">每个 IP 每分钟最大请求数（默认 60）。</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="externalApiDisableRaw">
+                                            <span class="form-label" style="margin: 0;">禁用 raw（原始内容）端点</span>
+                                        </label>
+                                        <div class="form-hint">公网模式下建议禁用，防止泄露完整邮件原文。</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="externalApiDisableWait">
+                                            <span class="form-label" style="margin: 0;">禁用 wait-message（等待新邮件）端点</span>
+                                        </label>
+                                        <div class="form-hint">公网模式下建议禁用，防止长连接资源耗尽（Slowloris 风险）。</div>
+                                    </div>
+                                    <div style="border-top: 1px solid var(--border-light); margin-top: 1rem; padding-top: 1rem;">
+                                        <h6 style="font-size: 0.82rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-muted);">📦 External Pool</h6>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="poolExternalEnabled">
+                                                <span class="form-label" style="margin: 0;">启用 external pool 端点</span>
+                                            </label>
+                                            <div class="form-hint">开启后才允许调用 `/api/external/pool/*`。仅设置对外 API Key 不会自动开启邮箱池对外接口。</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="externalApiDisablePoolClaimRandom">
+                                                <span class="form-label" style="margin: 0;">禁用 pool claim-random</span>
+                                            </label>
+                                            <div class="form-hint">关闭后可供外部调用随机领取邮箱池账号。</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="externalApiDisablePoolClaimRelease">
+                                                <span class="form-label" style="margin: 0;">禁用 pool claim-release</span>
+                                            </label>
+                                            <div class="form-hint">关闭后可供外部调用释放已领取账号。</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="externalApiDisablePoolClaimComplete">
+                                                <span class="form-label" style="margin: 0;">禁用 pool claim-complete</span>
+                                            </label>
+                                            <div class="form-hint">关闭后可供外部调用领取完成/回写结果。</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                <input type="checkbox" id="externalApiDisablePoolStats">
+                                                <span class="form-label" style="margin: 0;">禁用 pool stats</span>
+                                            </label>
+                                            <div class="form-hint">关闭后可供外部读取邮箱池统计信息。</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- P1：对外 API 公网安全配置 -->
-                        <div id="externalApiAdvancedSettings" style="margin-top: 0.75rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-light);">
-                            <h5 style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-muted);">🛡️ 公网安全配置（P1）</h5>
-                            <div class="form-group">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="externalApiPublicMode">
-                                    <span class="form-label" style="margin: 0;">启用公网模式</span>
-                                </label>
-                                <div class="form-hint">关闭时（默认）仅做 API Key 鉴权；开启后额外启用 IP 白名单、限流、高风险端点禁用等安全策略。</div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">IP 白名单 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（仅公网模式生效，留空则不限制）</span></label>
-                                <textarea class="form-input" id="externalApiIpWhitelist" rows="2" placeholder='每行一个 IP 或 CIDR，如 192.168.1.0/24' style="font-family: monospace; font-size: 0.85rem;"></textarea>
-                                <div class="form-hint">支持精确 IP 和 CIDR 格式。每行一个，保存时自动转为 JSON 数组。</div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">每分钟每 IP 限流 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（仅公网模式生效）</span></label>
-                                <input type="number" class="form-input" id="externalApiRateLimit" min="1" max="10000" value="60" style="width: 120px;">
-                                <div class="form-hint">每个 IP 每分钟最大请求数（默认 60）。</div>
-                            </div>
-                            <div class="form-group">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="externalApiDisableRaw">
-                                    <span class="form-label" style="margin: 0;">禁用 raw（原始内容）端点</span>
-                                </label>
-                                <div class="form-hint">公网模式下建议禁用，防止泄露完整邮件原文。</div>
-                            </div>
-                            <div class="form-group">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="externalApiDisableWait">
-                                    <span class="form-label" style="margin: 0;">禁用 wait-message（等待新邮件）端点</span>
-                                </label>
-                                <div class="form-hint">公网模式下建议禁用，防止长连接资源耗尽（Slowloris 风险）。</div>
-                            </div>
-                            <div style="border-top: 1px solid var(--border-light); margin-top: 1rem; padding-top: 1rem;">
-                                <h6 style="font-size: 0.82rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-muted);">📦 External Pool</h6>
-                                <div class="form-group">
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                        <input type="checkbox" id="poolExternalEnabled">
-                                        <span class="form-label" style="margin: 0;">启用 external pool 端点</span>
-                                    </label>
-                                    <div class="form-hint">开启后才允许调用 `/api/external/pool/*`。仅设置对外 API Key 不会自动开启邮箱池对外接口。</div>
-                                </div>
-                                <div class="form-group">
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                        <input type="checkbox" id="externalApiDisablePoolClaimRandom">
-                                        <span class="form-label" style="margin: 0;">禁用 pool claim-random</span>
-                                    </label>
-                                    <div class="form-hint">关闭后可供外部调用随机领取邮箱池账号。</div>
-                                </div>
-                                <div class="form-group">
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                        <input type="checkbox" id="externalApiDisablePoolClaimRelease">
-                                        <span class="form-label" style="margin: 0;">禁用 pool claim-release</span>
-                                    </label>
-                                    <div class="form-hint">关闭后可供外部调用释放已领取账号。</div>
-                                </div>
-                                <div class="form-group">
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                        <input type="checkbox" id="externalApiDisablePoolClaimComplete">
-                                        <span class="form-label" style="margin: 0;">禁用 pool claim-complete</span>
-                                    </label>
-                                    <div class="form-hint">关闭后可供外部调用领取完成/回写结果。</div>
-                                </div>
-                                <div class="form-group">
-                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                        <input type="checkbox" id="externalApiDisablePoolStats">
-                                        <span class="form-label" style="margin: 0;">禁用 pool stats</span>
-                                    </label>
-                                    <div class="form-hint">关闭后可供外部读取邮箱池统计信息。</div>
-                                </div>
-                            </div>
-                        </div>
-
+                    <!-- Tab 4: 自动化 -->
+                    <div class="settings-tab-pane" id="settings-tab-automation">
                         <!-- Token 刷新设置 -->
-                        <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text);">🔄 Token 刷新设置</h4>
-                            <div class="form-group">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="enableScheduledRefresh" checked>
-                                    <span class="form-label" style="margin: 0;">启用定时刷新</span>
-                                </label>
-                                <div class="form-hint">关闭后将不会自动执行定时刷新任务</div>
+                        <div class="card" style="margin-bottom: 1rem;">
+                            <div class="card-header">
+                                <div class="card-title">🔄 Token 刷新设置</div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">刷新策略</label>
-                                <div style="display: flex; gap: 16px; margin-bottom: 12px;">
-                                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                        <input type="radio" name="refreshStrategy" value="days" checked onchange="toggleRefreshStrategy()">
-                                        <span>按天数</span>
-                                    </label>
-                                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                        <input type="radio" name="refreshStrategy" value="cron" onchange="toggleRefreshStrategy()">
-                                        <span>Cron 表达式</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div id="daysStrategyContainer">
+                            <div class="card-body" style="padding: 1.5rem;">
                                 <div class="form-group">
-                                    <label class="form-label">定时刷新周期 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（每隔 X 天自动刷新所有账号）</span></label>
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="enableScheduledRefresh" checked>
+                                        <span class="form-label" style="margin: 0;">启用定时刷新</span>
+                                    </label>
+                                    <div class="form-hint">关闭后将不会自动执行定时刷新任务</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">刷新策略</label>
+                                    <div style="display: flex; gap: 16px; margin-bottom: 12px;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="refreshStrategy" value="days" checked onchange="toggleRefreshStrategy()">
+                                            <span>按天数</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                            <input type="radio" name="refreshStrategy" value="cron" onchange="toggleRefreshStrategy()">
+                                            <span>Cron 表达式</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="daysStrategyContainer">
+                                    <div class="form-group">
+                                        <label class="form-label">定时刷新周期 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（每隔 X 天自动刷新所有账号）</span></label>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <input type="number" class="form-input" id="refreshIntervalDays" min="1" max="90" value="30" placeholder="30" style="max-width: 120px;">
+                                            <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">天</span>
+                                        </div>
+                                        <div class="form-hint">建议设置为 30 天，防止 Token 因 90 天不使用而过期</div>
+                                    </div>
+                                </div>
+                                <div id="cronStrategyContainer" style="display: none;">
+                                    <div class="form-group">
+                                        <label class="form-label">Cron 表达式</label>
+                                        <input type="text" class="form-input" id="refreshCron" placeholder="0 2 * * *" value="0 2 * * *">
+                                        <div class="form-hint">格式：分 时 日 月 星期（例如：0 2 * * * 表示每天凌晨 2:00）</div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">常用样例</label>
+                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px;">
+                                            <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 2 * * *')">每天凌晨 2:00</button>
+                                            <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 2 * * 1')">每周一凌晨 2:00</button>
+                                            <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 2 1 * *')">每月 1 号凌晨 2:00</button>
+                                            <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 2 */3 * *')">每 3 天凌晨 2:00</button>
+                                            <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 */12 * * *')">每 12 小时</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <button class="btn btn-secondary" onclick="validateCronExpression()">验证表达式</button>
+                                        <div id="cronValidationResult" style="margin-top: 8px; font-size: 0.82rem;"></div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">邮箱间刷新间隔 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（每个邮箱刷新之间的等待时间）</span></label>
                                     <div style="display: flex; align-items: center; gap: 8px;">
-                                        <input type="number" class="form-input" id="refreshIntervalDays" min="1" max="90" value="30" placeholder="30" style="max-width: 120px;">
-                                        <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">天</span>
+                                        <input type="number" class="form-input" id="refreshDelaySeconds" min="0" max="60" value="5" placeholder="5" style="max-width: 120px;">
+                                        <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">秒</span>
                                     </div>
-                                    <div class="form-hint">建议设置为 30 天，防止 Token 因 90 天不使用而过期</div>
+                                    <div class="form-hint">建议设置为 5-10 秒，避免频繁请求触发 API 限流</div>
                                 </div>
-                            </div>
-                            <div id="cronStrategyContainer" style="display: none;">
-                                <div class="form-group">
-                                    <label class="form-label">Cron 表达式</label>
-                                    <input type="text" class="form-input" id="refreshCron" placeholder="0 2 * * *" value="0 2 * * *">
-                                    <div class="form-hint">格式：分 时 日 月 星期（例如：0 2 * * * 表示每天凌晨 2:00）</div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">常用样例</label>
-                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px;">
-                                        <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 2 * * *')">每天凌晨 2:00</button>
-                                        <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 2 * * 1')">每周一凌晨 2:00</button>
-                                        <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 2 1 * *')">每月 1 号凌晨 2:00</button>
-                                        <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 2 */3 * *')">每 3 天凌晨 2:00</button>
-                                        <button class="btn btn-sm btn-secondary" onclick="selectCronExample('0 */12 * * *')">每 12 小时</button>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <button class="btn btn-secondary" onclick="validateCronExpression()">验证表达式</button>
-                                    <div id="cronValidationResult" style="margin-top: 8px; font-size: 0.82rem;"></div>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">邮箱间刷新间隔 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（每个邮箱刷新之间的等待时间）</span></label>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="number" class="form-input" id="refreshDelaySeconds" min="0" max="60" value="5" placeholder="5" style="max-width: 120px;">
-                                    <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">秒</span>
-                                </div>
-                                <div class="form-hint">建议设置为 5-10 秒，避免频繁请求触发 API 限流</div>
                             </div>
                         </div>
 
                         <!-- 自动轮询设置 -->
-                        <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text);">🔔 自动轮询设置</h4>
-                            <div class="form-group">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="enableAutoPolling">
-                                    <span class="form-label" style="margin: 0;">启用自动轮询</span>
-                                </label>
-                                <div class="form-hint">开启后自动检查当前账号是否有新邮件</div>
+                        <div class="card" style="margin-bottom: 1rem;">
+                            <div class="card-header">
+                                <div class="card-title">🔔 自动轮询设置</div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">轮询间隔 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（检查新邮件的时间间隔）</span></label>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="number" class="form-input" id="pollingInterval" min="3" max="300" value="10" placeholder="10" style="max-width: 120px;">
-                                    <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">秒</span>
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <div class="form-group">
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="enableAutoPolling">
+                                        <span class="form-label" style="margin: 0;">启用自动轮询</span>
+                                    </label>
+                                    <div class="form-hint">开启后自动检查当前账号是否有新邮件</div>
                                 </div>
-                                <div class="form-hint">范围：3-300 秒，建议设置为 5-30 秒</div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">轮询次数 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（最多轮询多少次后停止）</span></label>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="number" class="form-input" id="pollingCount" min="0" max="100" value="5" placeholder="5" style="max-width: 120px;">
-                                    <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">次</span>
+                                <div class="form-group">
+                                    <label class="form-label">轮询间隔 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（检查新邮件的时间间隔）</span></label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="number" class="form-input" id="pollingInterval" min="3" max="300" value="10" placeholder="10" style="max-width: 120px;">
+                                        <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">秒</span>
+                                    </div>
+                                    <div class="form-hint">范围：3-300 秒，建议设置为 5-30 秒</div>
                                 </div>
-                                <div class="form-hint">范围：0-100 次，设置为 0 表示持续轮询</div>
+                                <div class="form-group">
+                                    <label class="form-label">轮询次数 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（最多轮询多少次后停止）</span></label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="number" class="form-input" id="pollingCount" min="0" max="100" value="5" placeholder="5" style="max-width: 120px;">
+                                        <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">次</span>
+                                    </div>
+                                    <div class="form-hint">范围：0-100 次，设置为 0 表示持续轮询</div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- [Phase 3] 简洁模式独立面板已合并到上方标准轮询面板 -->
                         <!-- 邮件通知设置 -->
-                        <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text);">✉️ Email 通知</h4>
-                            <div class="form-group">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="emailNotificationEnabled">
-                                    <span class="form-label" style="margin: 0;">启用 Email 通知</span>
-                                </label>
-                                <div class="form-hint">这里只配置 Email 通知通道。普通邮箱需在账号列表开启通知后才会通过 Email 发送；临时邮箱按当前通知规则处理。启用后仅从新到达的邮件开始通知。</div>
+                        <div class="card" style="margin-bottom: 1rem;">
+                            <div class="card-header">
+                                <div class="card-title">✉️ Email 通知</div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">接收通知邮箱</label>
-                                <input type="email" class="form-input" id="emailNotificationRecipient" placeholder="输入接收通知的邮箱地址">
-                                <div class="form-hint">这里只配置 Email 渠道的接收邮箱，不会让所有普通邮箱自动发送。</div>
-                            </div>
-                            <div class="form-group" style="margin-top: 0.5rem;">
-                                <button class="btn btn-outline" onclick="testEmailNotification()" id="btnTestEmailNotification" style="font-size: 0.85rem;">📨 发送测试邮件</button>
-                                <div class="form-hint">按“先保存，再测试”处理；成功语义为“请求已提交，请检查收件箱”。</div>
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <div class="form-group">
+                                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" id="emailNotificationEnabled">
+                                        <span class="form-label" style="margin: 0;">启用 Email 通知</span>
+                                    </label>
+                                    <div class="form-hint">这里只配置 Email 通知通道。普通邮箱需在账号列表开启通知后才会通过 Email 发送；临时邮箱按当前通知规则处理。启用后仅从新到达的邮件开始通知。</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">接收通知邮箱</label>
+                                    <input type="email" class="form-input" id="emailNotificationRecipient" placeholder="输入接收通知的邮箱地址">
+                                    <div class="form-hint">这里只配置 Email 渠道的接收邮箱，不会让所有普通邮箱自动发送。</div>
+                                </div>
+                                <div class="form-group" style="margin-top: 0.5rem;">
+                                    <button class="btn btn-outline" onclick="testEmailNotification()" id="btnTestEmailNotification" style="font-size: 0.85rem;">📨 发送测试邮件</button>
+                                    <div class="form-hint">按"先保存，再测试"处理；成功语义为"请求已提交，请检查收件箱"。</div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Telegram 推送设置 -->
-                        <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text);">📬 Telegram 通知</h4>
-                            <div class="form-group">
-                                <label class="form-label">Bot Token <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（从 @BotFather 获取）</span></label>
-                                <input type="password" class="form-input" id="telegramBotToken" placeholder="输入 Bot Token" autocomplete="off">
-                                <div class="form-hint">这里只配置 Telegram 通知通道。普通邮箱需在账号列表开启通知后才会通过 Telegram 发送；临时邮箱按当前通知规则处理。</div>
-                                <div class="form-hint">格式：1234567890:AAxxxxxx（留空则禁用推送）</div>
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">📬 Telegram 通知</div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">Chat ID <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（接收推送的用户/群组 ID）</span></label>
-                                <input type="text" class="form-input" id="telegramChatId" placeholder="输入 Chat ID" style="max-width: 300px;">
-                                <div class="form-hint">可用 @userinfobot 获取你的 Chat ID</div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">轮询间隔 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（检查新邮件的时间间隔）</span></label>
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <input type="number" class="form-input" id="telegramPollInterval" min="10" max="86400" value="600" placeholder="600" style="max-width: 120px;">
-                                    <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">秒</span>
+                            <div class="card-body" style="padding: 1.5rem;">
+                                <div class="form-group">
+                                    <label class="form-label">Bot Token <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（从 @BotFather 获取）</span></label>
+                                    <input type="password" class="form-input" id="telegramBotToken" placeholder="输入 Bot Token" autocomplete="off">
+                                    <div class="form-hint">这里只配置 Telegram 通知通道。普通邮箱需在账号列表开启通知后才会通过 Telegram 发送；临时邮箱按当前通知规则处理。</div>
+                                    <div class="form-hint">格式：1234567890:AAxxxxxx（留空则禁用推送）</div>
                                 </div>
-                                <div class="form-hint">范围：10-86400 秒，默认 600 秒（10 分钟）</div>
+                                <div class="form-group">
+                                    <label class="form-label">Chat ID <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（接收推送的用户/群组 ID）</span></label>
+                                    <input type="text" class="form-input" id="telegramChatId" placeholder="输入 Chat ID" style="max-width: 300px;">
+                                    <div class="form-hint">可用 @userinfobot 获取你的 Chat ID</div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">轮询间隔 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（检查新邮件的时间间隔）</span></label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="number" class="form-input" id="telegramPollInterval" min="10" max="86400" value="600" placeholder="600" style="max-width: 120px;">
+                                        <span style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">秒</span>
+                                    </div>
+                                    <div class="form-hint">范围：10-86400 秒，默认 600 秒（10 分钟）</div>
+                                </div>
+                                <div class="form-group" style="margin-top: 0.5rem;">
+                                    <button class="btn btn-outline" onclick="testTelegramPush()" id="btnTestTelegram" style="font-size: 0.85rem;">📨 发送测试消息</button>
+                                    <div class="form-hint">验证当前 Telegram 通知通道是否配置正确</div>
+                                </div>
                             </div>
-                            <div class="form-group" style="margin-top: 0.5rem;">
-                                <button class="btn btn-outline" onclick="testTelegramPush()" id="btnTestTelegram" style="font-size: 0.85rem;">📨 发送测试消息</button>
-                                <div class="form-hint">验证当前 Telegram 通知通道是否配置正确</div>
-                            </div>
-                        </div>
-
-                        <!-- 保存按钮 -->
-                        <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-light);">
-                            <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
                         </div>
                     </div>
+
                 </div>
+                </div><!-- /settings-card-shell -->
             </div>
 
             <!-- ===== Page: Audit ===== -->
