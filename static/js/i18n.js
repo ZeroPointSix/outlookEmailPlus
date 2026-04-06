@@ -77,6 +77,12 @@
         '打标签': 'Add Tags',
         '去标签': 'Remove Tags',
         '移动分组': 'Move Group',
+        '🔄 刷新 Token': '🔄 Refresh Token',
+        '请选择要刷新 Token 的账号': 'Please select accounts to refresh tokens',
+        '所选账号均为 IMAP 账号，不支持 Token 刷新': 'All selected accounts are IMAP accounts and do not support token refresh',
+        '刷新请求失败': 'Refresh request failed',
+        '刷新执行出现错误': 'An error occurred during refresh',
+        '当前已有刷新任务执行中，请稍后再试': 'A refresh task is already running. Please try again later',
         '标签': 'Tags',
         '操作': 'Actions',
         '选择': 'Select',
@@ -637,7 +643,19 @@
         '近半年刷新历史（共': 'Refresh history for the last six months (total ',
         '查看错误': 'View error',
         '点击关闭推送': 'Click to disable notifications',
-        '移动到分组': 'Move to Group'
+        '移动到分组': 'Move to Group',
+
+        // 版本更新检测
+        '发现新版本': 'New version available',
+        '查看更新日志': 'View changelog',
+        '立即更新': 'Update now',
+        '忽略': 'Dismiss',
+        '正在触发更新...': 'Triggering update...',
+        '等待容器重启...': 'Waiting for restart...',
+        '更新完成，正在刷新页面...': 'Update complete, reloading...',
+        '更新超时，请手动检查容器状态': 'Update timed out, please check container status',
+        '更新失败：': 'Update failed: ',
+        '更新请求失败，请检查网络': 'Update request failed, check network'
     };
 
     const reverseMap = Object.fromEntries(

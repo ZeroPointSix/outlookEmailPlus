@@ -8,6 +8,11 @@ from flask import jsonify, request
 
 from outlook_web import __version__ as APP_VERSION
 from outlook_web import config
+
+# ==================== 版本检测缓存（模块级，重启后清空） ====================
+_version_cache: dict | None = None
+_version_cache_at: float = 0.0
+_VERSION_CACHE_TTL = 600  # 10 分钟
 from outlook_web.db import (
     DB_SCHEMA_LAST_UPGRADE_ERROR_KEY,
     DB_SCHEMA_LAST_UPGRADE_TRACE_ID_KEY,
@@ -63,9 +68,14 @@ def api_system_health() -> Any:
             except Exception:
                 heartbeat_age_seconds = None
 
-        scheduler_enabled = settings_repo.get_setting("enable_scheduled_refresh", "true").lower() == "true"
+        scheduler_enabled = (
+            settings_repo.get_setting("enable_scheduled_refresh", "true").lower()
+            == "true"
+        )
         scheduler_autostart = config.get_scheduler_autostart_default()
-        scheduler_healthy = (heartbeat_age_seconds is not None) and (heartbeat_age_seconds <= 120)
+        scheduler_healthy = (heartbeat_age_seconds is not None) and (
+            heartbeat_age_seconds <= 120
+        )
 
         # 刷新锁/运行中
         lock_row = conn.execute(
@@ -76,7 +86,9 @@ def api_system_health() -> Any:
         """,
             (REFRESH_LOCK_NAME,),
         ).fetchone()
-        locked = bool(lock_row and lock_row["expires_at"] and lock_row["expires_at"] > time.time())
+        locked = bool(
+            lock_row and lock_row["expires_at"] and lock_row["expires_at"] > time.time()
+        )
 
         running_run = conn.execute("""
             SELECT id, trigger_source, started_at, trace_id
@@ -245,8 +257,12 @@ def api_system_upgrade_status() -> Any:
                     "schema_version": schema_version,
                     "target_version": DB_SCHEMA_VERSION,
                     "up_to_date": schema_version >= DB_SCHEMA_VERSION,
-                    "last_upgrade_trace_id": (last_trace_row["value"] if last_trace_row else ""),
-                    "last_upgrade_error": (last_error_row["value"] if last_error_row else ""),
+                    "last_upgrade_trace_id": (
+                        last_trace_row["value"] if last_trace_row else ""
+                    ),
+                    "last_upgrade_error": (
+                        last_error_row["value"] if last_error_row else ""
+                    ),
                     "last_migration": last_migration,
                     "backup_hint": backup_hint,
                 },
@@ -278,7 +294,9 @@ def api_external_health() -> Any:
         }
         if db_ok:
             try:
-                probe_summary = external_api_service.probe_instance_upstream(cache_ttl_seconds=60)
+                probe_summary = external_api_service.probe_instance_upstream(
+                    cache_ttl_seconds=60
+                )
             except Exception:
                 probe_summary = {
                     "upstream_probe_ok": False,
@@ -318,6 +336,107 @@ def api_external_health() -> Any:
         return jsonify(external_api_service.fail("INTERNAL_ERROR", "服务内部错误")), 500
     finally:
         conn.close()
+
+
+# ==================== 版本更新检测 ====================
+
+
+def _version_gt(a: str, b: str) -> bool:
+    """判断版本 a 是否严格大于版本 b（仅支持语义化版本 x.y.z）"""
+    try:
+        return tuple(int(x) for x in a.split(".")) > tuple(int(x) for x in b.split("."))
+    except Exception:
+        return False
+
+
+@login_required
+def api_version_check() -> Any:
+    """检查是否有新版本可用（内存缓存，10 分钟 TTL）"""
+    import json as _json
+    import urllib.request
+
+    global _version_cache, _version_cache_at
+
+    now = time.time()
+    if _version_cache is not None and (now - _version_cache_at) < _VERSION_CACHE_TTL:
+        return jsonify(_version_cache)
+
+    current = APP_VERSION
+
+    try:
+        GITHUB_API = (
+            "https://api.github.com/repos/hshaokang/outlookemail-plus/releases/latest"
+        )
+        req = urllib.request.Request(
+            GITHUB_API,
+            headers={"User-Agent": "outlook-email-plus"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = _json.loads(resp.read())
+        latest = data.get("tag_name", "").lstrip("v")
+        release_url = data.get("html_url", "")
+        has_update = _version_gt(latest, current)
+        result = {
+            "success": True,
+            "has_update": has_update,
+            "current_version": current,
+            "latest_version": latest,
+            "release_url": release_url,
+        }
+    except Exception:
+        # GitHub API 调用失败：静默降级，返回无更新
+        result = {
+            "success": True,
+            "has_update": False,
+            "current_version": current,
+            "latest_version": current,
+            "release_url": "",
+        }
+
+    _version_cache = result
+    _version_cache_at = now
+    return jsonify(result)
+
+
+@login_required
+def api_trigger_update() -> Any:
+    """触发 Watchtower 一键更新（调用 Watchtower HTTP API）"""
+    import os
+    import urllib.error
+    import urllib.request
+
+    watchtower_url = os.getenv("WATCHTOWER_API_URL", "http://watchtower:8080")
+    watchtower_token = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
+
+    if not watchtower_token:
+        return jsonify(
+            {"success": False, "message": "WATCHTOWER_HTTP_API_TOKEN 未配置"}
+        ), 500
+
+    try:
+        req = urllib.request.Request(
+            f"{watchtower_url}/v1/update",
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {watchtower_token}",
+                "Content-Length": "0",
+            },
+            data=b"",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            status = resp.status
+        if status == 200:
+            return jsonify({"success": True, "message": "更新触发成功，容器即将重启"})
+        else:
+            return jsonify(
+                {"success": False, "message": f"Watchtower 返回状态码 {status}"}
+            ), 502
+    except urllib.error.URLError as e:
+        return jsonify(
+            {"success": False, "message": f"无法连接 Watchtower: {e.reason}"}
+        ), 503
+    except Exception as e:
+        return jsonify({"success": False, "message": f"触发更新失败: {str(e)}"}), 500
 
 
 @api_key_required
@@ -370,7 +489,9 @@ def api_external_account_status() -> Any:
             status="error",
             details={"code": "INVALID_PARAM"},
         )
-        return jsonify(external_api_service.fail("INVALID_PARAM", "email 参数不合法")), 400
+        return jsonify(
+            external_api_service.fail("INVALID_PARAM", "email 参数不合法")
+        ), 400
     try:
         external_api_service.ensure_external_email_scope(email_addr)
     except external_api_service.ExternalApiError as exc:
@@ -381,7 +502,9 @@ def api_external_account_status() -> Any:
             status="error",
             details={"code": exc.code},
         )
-        return jsonify(external_api_service.fail(exc.code, exc.message, data=exc.data)), exc.status
+        return jsonify(
+            external_api_service.fail(exc.code, exc.message, data=exc.data)
+        ), exc.status
 
     account = accounts_repo.get_account_by_email(email_addr)
     if not account:
@@ -392,7 +515,11 @@ def api_external_account_status() -> Any:
             status="error",
             details={"code": "ACCOUNT_NOT_FOUND"},
         )
-        return jsonify(external_api_service.fail("ACCOUNT_NOT_FOUND", "账号不存在", data={"email": email_addr})), 404
+        return jsonify(
+            external_api_service.fail(
+                "ACCOUNT_NOT_FOUND", "账号不存在", data={"email": email_addr}
+            )
+        ), 404
 
     account_type = (account.get("account_type") or "outlook").strip().lower()
     provider = (account.get("provider") or account_type or "outlook").strip().lower()

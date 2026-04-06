@@ -970,6 +970,9 @@
 
             // 加载仪表盘
             loadDashboard();
+
+            // 检查是否有版本更新（页面加载时调一次）
+            checkVersionUpdate();
         });
 
         // 初始化颜色选择器
@@ -3219,6 +3222,213 @@ ${details}
             updateBatchActionBar();
         });
 
+        // 显示批量刷新 Token 确认框
+        async function showBatchRefreshConfirm() {
+            if (selectedAccountIds.size === 0) {
+                showToast('请选择要刷新 Token 的账号', 'error');
+                return;
+            }
+
+            const accountIds = Array.from(selectedAccountIds);
+
+            // 检查是否有 IMAP 账号（通过 data-account-type 属性判断）
+            let imapCount = 0;
+            const allCheckboxes = document.querySelectorAll('.account-select-checkbox');
+            allCheckboxes.forEach(cb => {
+                const id = parseInt(cb.dataset.accountId || cb.value);
+                if (accountIds.includes(id)) {
+                    const card = cb.closest('[data-account-type]');
+                    if (card && card.dataset.accountType === 'imap') {
+                        imapCount++;
+                    }
+                }
+            });
+
+            const outlookCount = accountIds.length - imapCount;
+
+            if (outlookCount === 0) {
+                showToast('所选账号均为 IMAP 账号，不支持 Token 刷新', 'warning');
+                return;
+            }
+
+            let confirmMsg;
+            if (imapCount > 0) {
+                confirmMsg = `已选 ${accountIds.length} 个账号，其中 ${imapCount} 个 IMAP 账号不支持 Token 刷新将被跳过，确认刷新 ${outlookCount} 个 Outlook 账号？`;
+            } else {
+                confirmMsg = `确认刷新选中的 ${accountIds.length} 个账号的 Token？`;
+            }
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            await batchRefreshSelected(accountIds);
+        }
+
+        // 执行指定账号批量刷新 Token（SSE 流式）
+        async function batchRefreshSelected(accountIds) {
+            await initCSRFToken();
+
+            // 显示常驻进度 Toast
+            const toastId = 'batch-refresh-toast-' + Date.now();
+            showPersistentToast(toastId, `🔄 正在刷新 Token... 0 / ${accountIds.length}`);
+
+            try {
+                const response = await fetch('/api/accounts/refresh/selected', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account_ids: accountIds })
+                });
+
+                if (!response.ok || !response.body) {
+                    dismissPersistentToast(toastId);
+                    showToast('刷新请求失败', 'error');
+                    return;
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let totalCount = accountIds.length;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // 保留未完整的行
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        let data;
+                        try {
+                            data = JSON.parse(line.slice(6));
+                        } catch (e) {
+                            continue;
+                        }
+
+                        handleBatchRefreshSSEEvent(data, toastId, totalCount);
+
+                        if (data.type === 'start') {
+                            totalCount = data.total;
+                        }
+                        if (data.type === 'complete' || data.type === 'error') {
+                            break;
+                        }
+                    }
+                }
+            } catch (error) {
+                dismissPersistentToast(toastId);
+                showToast('刷新执行出现错误', 'error');
+                console.error('batchRefreshSelected error:', error);
+            }
+        }
+
+        // 处理批量刷新 SSE 事件
+        function handleBatchRefreshSSEEvent(data, toastId, totalCount) {
+            if (data.type === 'start') {
+                const total = data.total;
+                updatePersistentToast(toastId, `🔄 正在刷新 Token... 0 / ${total}`);
+
+            } else if (data.type === 'progress') {
+                if (data.result === 'processing') {
+                    // 刚开始处理该账号
+                    updatePersistentToast(toastId, `🔄 正在刷新 Token... ${data.current - 1} / ${data.total}`);
+                } else {
+                    // 该账号刷新完成（success 或 failed）
+                    updatePersistentToast(toastId, `🔄 正在刷新 Token... ${data.current} / ${data.total}`);
+                    // 更新对应账号卡片状态
+                    if (data.account_id) {
+                        updateAccountCardRefreshStatus(data.account_id, data.result, data.last_refresh_at, data.error_message);
+                    }
+                }
+
+            } else if (data.type === 'complete') {
+                const { total, success_count, failed_count, failed_list } = data;
+                dismissPersistentToast(toastId);
+
+                if (failed_count === 0) {
+                    showToast(`✅ Token 刷新完成：成功 ${success_count} 个`, 'success');
+                } else {
+                    let detail = null;
+                    if (failed_list && failed_list.length > 0) {
+                        detail = '失败账号：\n' + failed_list.map(f => `${f.email}：${f.error || '未知错误'}`).join('\n');
+                    }
+                    showToast(`⚠️ Token 刷新完成：成功 ${success_count} 个，失败 ${failed_count} 个`, 'warning', detail, true);
+                }
+
+                // 刷新账号列表以同步状态
+                if (currentGroupId) {
+                    loadAccountsByGroup(currentGroupId, true);
+                }
+
+            } else if (data.type === 'error') {
+                dismissPersistentToast(toastId);
+                const errCode = data.error && data.error.code;
+                if (errCode === 'REFRESH_CONFLICT') {
+                    showToast('⚠️ 当前已有刷新任务执行中，请稍后再试', 'warning', null, true);
+                } else {
+                    const msg = (data.error && (data.error.message || data.error.message_en)) || '刷新执行失败';
+                    showToast(`❌ ${msg}`, 'error', null, true);
+                }
+            }
+        }
+
+        // 更新账号卡片的刷新状态显示
+        function updateAccountCardRefreshStatus(accountId, result, lastRefreshAt, errorMessage) {
+            // 标准视图：查找 data-account-id 匹配的卡片
+            const cards = document.querySelectorAll(`[data-account-id="${accountId}"]`);
+            cards.forEach(card => {
+                // 更新刷新状态徽章（如果存在）
+                const refreshBadge = card.querySelector('.refresh-status-badge, [data-refresh-status]');
+                if (refreshBadge) {
+                    refreshBadge.textContent = result === 'success' ? '✅' : '❌';
+                    refreshBadge.title = result === 'success' ? '刷新成功' : (errorMessage || '刷新失败');
+                }
+                // 更新最后刷新时间（如果存在）
+                if (lastRefreshAt) {
+                    const timeEl = card.querySelector('[data-refresh-time], .last-refresh-at');
+                    if (timeEl) {
+                        timeEl.textContent = formatUiRelativeTime(lastRefreshAt, '刚刚', 'Just now');
+                        timeEl.title = lastRefreshAt;
+                    }
+                }
+            });
+        }
+
+        // 显示持久 Toast（用于进度展示）
+        function showPersistentToast(id, message) {
+            // 先清除同 id 的旧 toast
+            dismissPersistentToast(id);
+            showToast(message, 'info', null, true);
+            // 给最后一个 toast 打上 id 标记
+            const toasts = document.querySelectorAll('.toast');
+            if (toasts.length > 0) {
+                toasts[toasts.length - 1].dataset.persistentId = id;
+            }
+        }
+
+        // 更新持久 Toast 内容
+        function updatePersistentToast(id, message) {
+            const toast = document.querySelector(`.toast[data-persistent-id="${id}"]`);
+            if (toast) {
+                const msgEl = toast.querySelector('span') || toast;
+                msgEl.textContent = message;
+            } else {
+                // 如果 toast 已被用户关闭，重新显示
+                showPersistentToast(id, message);
+            }
+        }
+
+        // 关闭持久 Toast
+        function dismissPersistentToast(id) {
+            const toast = document.querySelector(`.toast[data-persistent-id="${id}"]`);
+            if (toast) {
+                toast.remove();
+            }
+        }
+
         // 显示批量删除确认
         function showBatchDeleteConfirm() {
             if (selectedAccountIds.size === 0) {
@@ -3440,5 +3650,110 @@ ${details}
                 }
             } catch (error) {
                 showToast(translateAppTextLocal('请求失败'), 'error');
+            }
+        }
+
+        // ==================== 版本更新检测 ====================
+
+        function getCSRFToken() {
+            const meta = document.querySelector('meta[name="csrf-token"]');
+            return meta ? meta.getAttribute('content') : '';
+        }
+
+        /**
+         * 页面加载时调用一次，检查是否有可用更新
+         */
+        async function checkVersionUpdate() {
+            try {
+                const res = await fetch('/api/system/version-check');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.has_update) {
+                    const banner = document.getElementById('versionUpdateBanner');
+                    const msg = document.getElementById('versionUpdateMsg');
+                    if (!banner || !msg) return;
+                    msg.innerHTML = `发现新版本 <strong>v${data.latest_version}</strong>（当前 v${data.current_version}）
+                        <a href="${data.release_url}" target="_blank" class="ms-1">查看更新日志</a>`;
+                    banner.classList.remove('d-none');
+                    document.getElementById('app').style.paddingTop = banner.offsetHeight + 'px';
+                }
+            } catch (e) {
+                // 静默失败
+            }
+        }
+
+        function dismissVersionBanner() {
+            document.getElementById('versionUpdateBanner').classList.add('d-none');
+            document.getElementById('app').style.paddingTop = '';
+        }
+
+        /**
+         * 用户点击"立即更新"时触发
+         */
+        async function triggerUpdate() {
+            const btn = document.getElementById('btnTriggerUpdate');
+            btn.disabled = true;
+            btn.textContent = '正在触发更新...';
+
+            try {
+                const res = await fetch('/api/system/trigger-update', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCSRFToken() },
+                });
+                const data = await res.json();
+                if (data.success) {
+                    btn.textContent = '等待容器重启...';
+                    await waitForRestart();
+                } else {
+                    const msg = data.message || '未知错误';
+                    // 区分常见错误场景，给出友好提示
+                    if (msg.includes('WATCHTOWER_HTTP_API_TOKEN') || (msg.includes('未配置') && res.status === 500)) {
+                        showToast('一键更新需要配置 Watchtower 服务（仅 Docker 部署支持）。请在 .env 中设置 WATCHTOWER_HTTP_API_TOKEN，并使用含 Watchtower 的 docker-compose 部署方式', 'warning', 10000);
+                    } else if (msg.includes('无法连接') || msg.includes('Watchtower')) {
+                        showToast('无法连接 Watchtower 服务，请确认已使用 docker-compose 方式部署，且 watchtower 容器正常运行', 'warning', 8000);
+                    } else {
+                        showToast('更新失败：' + msg, 'error');
+                    }
+                    btn.disabled = false;
+                    btn.textContent = '立即更新';
+                }
+            } catch (e) {
+                showToast('更新请求失败，请检查网络连接', 'error');
+                btn.disabled = false;
+                btn.textContent = '立即更新';
+            }
+        }
+
+        /**
+         * 轮询 /healthz 等待容器重启后恢复
+         * - 立即开始轮询，每 3 秒一次
+         * - 最长等待 90 秒，超时提示用户手动检查
+         * - 检测到服务恢复后刷新页面
+         */
+        async function waitForRestart() {
+            const MAX_WAIT_MS = 90000;  // 90 秒
+            const POLL_INTERVAL_MS = 3000;  // 每 3 秒
+            const startAt = Date.now();
+
+            while (Date.now() - startAt < MAX_WAIT_MS) {
+                await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+                try {
+                    const res = await fetch('/healthz', { cache: 'no-store' });
+                    if (res.ok) {
+                        showToast('更新完成，正在刷新页面...', 'success');
+                        setTimeout(() => location.reload(), 1500);
+                        return;
+                    }
+                } catch (e) {
+                    // 容器正在重启中，继续轮询
+                }
+            }
+
+            // 超时处理
+            showToast('更新超时，请手动检查容器状态', 'warning', 8000);
+            const btn = document.getElementById('btnTriggerUpdate');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '立即更新';
             }
         }

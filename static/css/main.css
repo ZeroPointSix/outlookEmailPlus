@@ -1678,3 +1678,21 @@ tr:hover td { background: rgba(184,92,56,0.04); }
   background: var(--clr-danger, #ff4d4f);
   animation: none;
 }
+
+/* 版本更新提示横幅 */
+.version-update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #fff3cd;
+  border-bottom: 1px solid #ffc107;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  z-index: 9999;
+}
+.version-update-banner.d-none {
+  display: none;
+}

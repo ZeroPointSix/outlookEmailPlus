@@ -1,5 +1,9 @@
 version: "3.9"
 
+# ⚠️ 注意：此文件为开发测试用配置，使用本地构建的镜像（outlook-email-dev:latest）
+# Watchtower 对本地构建镜像无法执行自动更新，一键更新功能需使用生产 docker-compose 配置
+# 生产部署请参考 README.md 中的 docker-compose 示例（使用 guangshanshui/outlook-email-plus 镜像）
+
 services:
   app:
     build:
@@ -26,6 +30,9 @@ services:
       GPTMAIL_BASE_URL: "https://mail.chatgpt.org.uk"
       GPTMAIL_API_KEY: "gpt-test"
 
+      # 一键更新配置
+      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-}"
+
     volumes:
       # 挂载本地真实数据库目录（确保本地 Flask 服务已停止，避免 SQLite 锁冲突）
       - ./data:/app/data
@@ -40,3 +47,31 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    networks:
+      - outlook-net
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN}
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_CLEANUP=true
+      # 禁用定时轮询，仅通过 HTTP API 触发
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=false
+    command: --http-api-update --label-enable
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      - outlook-net
+
+networks:
+  outlook-net:
+    driver: bridge

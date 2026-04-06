@@ -41,4 +41,17 @@ def create_blueprint() -> Blueprint:
         view_func=system_controller.api_external_account_status,
         methods=["GET"],
     )
+
+    # FD: 版本更新检测与一键更新
+    bp.add_url_rule(
+        "/api/system/version-check",
+        view_func=system_controller.api_version_check,
+        methods=["GET"],
+    )
+    bp.add_url_rule(
+        "/api/system/trigger-update",
+        view_func=system_controller.api_trigger_update,
+        methods=["POST"],
+    )
+
     return bp

@@ -11,6 +11,12 @@
 </head>
 
 <body>
+    <!-- 版本更新提示横幅（默认隐藏） -->
+    <div id="versionUpdateBanner" class="version-update-banner d-none">
+        <span id="versionUpdateMsg"></span>
+        <button id="btnTriggerUpdate" class="btn btn-sm btn-warning ms-3" onclick="triggerUpdate()">立即更新</button>
+        <button class="btn btn-sm btn-link ms-1" onclick="dismissVersionBanner()">忽略</button>
+    </div>
     <div id="app">
         <!-- ===== Sidebar ===== -->
         <aside class="sidebar" id="sidebar">
@@ -206,6 +212,7 @@
                             <button class="btn btn-sm btn-ghost" onclick="showBatchTagModal('add')">打标签</button>
                             <button class="btn btn-sm btn-ghost" onclick="showBatchTagModal('remove')">去标签</button>
                             <button class="btn btn-sm btn-ghost" onclick="showBatchMoveGroupModal()">移动分组</button>
+                            <button class="btn btn-sm btn-primary" onclick="showBatchRefreshConfirm()">🔄 刷新 Token</button>
                             <button class="btn btn-sm btn-danger" onclick="showBatchDeleteConfirm()">删除</button>
                         </div>
                     </div>
@@ -308,6 +315,7 @@
                                 <button class="btn-inline ghost" onclick="showBatchTagModal('add')">打标签</button>
                                 <button class="btn-inline ghost" onclick="showBatchTagModal('remove')">去标签</button>
                                 <button class="btn-inline" onclick="showBatchMoveGroupModal()">移动分组</button>
+                                <button class="btn-inline" onclick="showBatchRefreshConfirm()">🔄 刷新 Token</button>
                                 <button class="btn-inline primary" onclick="showBatchDeleteConfirm()">删除</button>
                             </div>
                         </div>

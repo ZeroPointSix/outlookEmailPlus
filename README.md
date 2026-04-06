@@ -97,10 +97,9 @@ web_outlook_app.py    兼容入口
 
 ### Docker 部署
 
-```bash
-docker pull guangshanshui/outlook-email-plus:v1.11.0
-docker pull guangshanshui/outlook-email-plus:latest
+**方式一：docker run（快速体验）**
 
+```bash
 docker run -d \
   --name outlook-email-plus \
   -p 5000:5000 \
@@ -108,14 +107,65 @@ docker run -d \
   -e SECRET_KEY=your-secret-key-here \
   -e LOGIN_PASSWORD=your-login-password \
   -e ALLOW_LOGIN_PASSWORD_CHANGE=false \
-  guangshanshui/outlook-email-plus:v1.11.0
+  guangshanshui/outlook-email-plus:latest
+```
+
+**方式二：docker-compose（推荐，含一键更新）**
+
+保存以下内容为 `docker-compose.yml`，然后运行 `docker-compose up -d`：
+
+```yaml
+version: "3.9"
+
+services:
+  app:
+    image: guangshanshui/outlook-email-plus:latest
+    container_name: outlook-email-plus
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      SECRET_KEY: "your-secret-key-here"        # 必须修改，建议随机64位
+      LOGIN_PASSWORD: "your-login-password"      # 必须修改
+      ALLOW_LOGIN_PASSWORD_CHANGE: "false"
+      SCHEDULER_AUTOSTART: "true"
+      WATCHTOWER_HTTP_API_TOKEN: "your-watchtower-token"  # 与下方 watchtower 服务保持一致
+    volumes:
+      - ./data:/app/data
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - outlook-net
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_HTTP_API_TOKEN=your-watchtower-token   # 与上方 app 服务保持一致
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=false          # 禁用自动轮询，仅通过界面触发更新
+    command: --http-api-update --label-enable
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      - outlook-net
+
+networks:
+  outlook-net:
+    driver: bridge
 ```
 
 说明：
 
 - 建议始终挂载 `data/`，避免数据库与运行数据丢失
-- `SECRET_KEY` 必须稳定且足够强，建议随机64位
-- 生产环境建议优先固定到明确版本标签，例如 `v1.11.0`；`latest` 更适合快速体验
+- `SECRET_KEY` 必须稳定且足够强，建议随机64位：`python -c "import secrets; print(secrets.token_hex(32))"`
+- `WATCHTOWER_HTTP_API_TOKEN` 两处填写相同的随机字符串，用于一键更新鉴权
+- 配置好后，当有新版本时系统界面会自动弹出更新提示，点击"立即更新"即可完成升级
+- 一键更新功能**仅在 docker-compose 部署方式下有效**；`docker run` 单容器模式不支持
 
 ### 本地运行
 
