@@ -291,7 +291,7 @@ class VersionCheckAPITests(unittest.TestCase):
             sc._VERSION_CACHE_TTL = original_ttl
 
     def test_github_api_url_correct(self):
-        """GitHub API URL 使用 hshaokang/outlookemail-plus"""
+        """GitHub API URL 使用 ZeroPointSix/outlookEmailPlus"""
         client = self.app.test_client()
         self._login(client)
         with patch(URLOPEN_PATH) as mock_urlopen:
@@ -310,7 +310,7 @@ class VersionCheckAPITests(unittest.TestCase):
             # 验证请求 URL
             args = mock_urlopen.call_args
             req_obj = args[0][0]
-            self.assertIn("hshaokang/outlookemail-plus", req_obj.full_url)
+            self.assertIn("ZeroPointSix/outlookEmailPlus", req_obj.full_url)
 
     def test_github_user_agent_header(self):
         """GitHub API 请求包含 User-Agent"""
@@ -366,7 +366,7 @@ class TriggerUpdateAPITests(unittest.TestCase):
         self.assertEqual(resp.status_code, 500)
         data = resp.get_json()
         self.assertFalse(data["success"])
-        self.assertIn("WATCHTOWER_HTTP_API_TOKEN", data["message"])
+        self.assertIn("Token 未配置", data["message"])
 
     def test_watchtower_success(self):
         """Watchtower 返回 200 时成功"""
