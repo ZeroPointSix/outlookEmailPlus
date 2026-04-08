@@ -3974,7 +3974,7 @@ ${details}
         async function triggerUpdate() {
             const btn = document.getElementById('btnTriggerUpdate');
             btn.disabled = true;
-            btn.textContent = '正在触发更新...';
+            btn.textContent = translateAppTextLocal('正在触发更新...');
 
             // 获取更新方式（从设置中读取或默认为 watchtower）
             let updateMethod = 'watchtower';
@@ -4007,9 +4007,9 @@ ${details}
                 if (data.success) {
                     // 镜像已是最新，无需等待重启
                     if (data.already_latest) {
-                        showToast('当前已是最新版本，无需更新', 'info', 5000);
+                        showToast(translateAppTextLocal('当前已是最新版本，无需更新'), 'info', 5000);
                         btn.disabled = false;
-                        btn.textContent = '立即更新';
+                        btn.textContent = translateAppTextLocal('立即更新');
                         return;
                     }
 
@@ -4019,9 +4019,9 @@ ${details}
                     } catch (e) {}
 
                     // Docker API 与 Watchtower 都可能触发容器重启：统一走“等待恢复”逻辑
-                    btn.textContent = '等待容器重启...';
+                    btn.textContent = translateAppTextLocal('等待容器重启...');
                     if (updateMethod === 'docker_api') {
-                        showToast('Docker API 更新已启动，等待容器重启...', 'info', 5000);
+                        showToast(translateAppTextLocal('Docker API 更新已启动，等待容器重启...'), 'info', 5000);
                     }
                     await waitForRestart();
                 } else {
@@ -4029,32 +4029,32 @@ ${details}
                     // 区分常见错误场景，给出友好提示
                     if (updateMethod === 'docker_api') {
                         if (msg.includes('未启用') || msg.includes('DOCKER_SELF_UPDATE_ALLOW')) {
-                            showToast('Docker API 自更新功能未启用。请在 .env 中设置 DOCKER_SELF_UPDATE_ALLOW=true，并在 docker-compose.yml 中挂载 docker.sock', 'warning', 10000);
+                            showToast(translateAppTextLocal('Docker API 自更新功能未启用。请在 .env 中设置 DOCKER_SELF_UPDATE_ALLOW=true，并在 docker-compose.yml 中挂载 docker.sock'), 'warning', 10000);
                         } else if (msg.includes('docker.sock') || msg.includes('无法连接')) {
-                            showToast('无法访问 Docker API。请确认已在 docker-compose.yml 中挂载 /var/run/docker.sock', 'warning', 8000);
+                            showToast(translateAppTextLocal('无法访问 Docker API。请确认已在 docker-compose.yml 中挂载 /var/run/docker.sock'), 'warning', 8000);
                         } else {
-                            showToast('Docker API 更新失败：' + msg, 'error', 8000);
+                            showToast(translateAppTextLocal('Docker API 更新失败：') + msg, 'error', 8000);
                         }
                     } else {
                         if (msg.includes('WATCHTOWER_HTTP_API_TOKEN') || (msg.includes('未配置') && res.status === 500)) {
-                            showToast('一键更新需要配置 Watchtower 服务（仅 Docker 部署支持）。请在 .env 中设置 WATCHTOWER_HTTP_API_TOKEN，并使用含 Watchtower 的 docker-compose 部署方式', 'warning', 10000);
+                            showToast(translateAppTextLocal('一键更新需要配置 Watchtower 服务（仅 Docker 部署支持）。请在 .env 中设置 WATCHTOWER_HTTP_API_TOKEN，并使用含 Watchtower 的 docker-compose 部署方式'), 'warning', 10000);
                         } else if (msg.includes('无法连接') || msg.includes('Watchtower')) {
-                            showToast('无法连接 Watchtower 服务，请确认已使用 docker-compose 方式部署，且 watchtower 容器正常运行', 'warning', 8000);
+                            showToast(translateAppTextLocal('无法连接 Watchtower 服务，请确认已使用 docker-compose 方式部署，且 watchtower 容器正常运行'), 'warning', 8000);
                         } else {
-                            showToast('更新失败：' + msg, 'error');
+                            showToast(translateAppTextLocal('更新失败：') + msg, 'error');
                         }
                     }
                     btn.disabled = false;
-                    btn.textContent = '立即更新';
+                    btn.textContent = translateAppTextLocal('立即更新');
                 }
             } catch (e) {
                 if (e.name === 'AbortError') {
-                    showToast('更新请求超时，请检查配置和网络连接', 'error', 8000);
+                    showToast(translateAppTextLocal('更新请求超时，请检查配置和网络连接'), 'error', 8000);
                 } else {
-                    showToast('更新请求失败，请检查网络连接', 'error');
+                    showToast(translateAppTextLocal('更新请求失败，请检查网络连接'), 'error');
                 }
                 btn.disabled = false;
-                btn.textContent = '立即更新';
+                btn.textContent = translateAppTextLocal('立即更新');
             }
         }
 
@@ -4114,7 +4114,7 @@ ${details}
 
                         // 以“boot_id 变化”作为更可靠的重启完成信号
                         if (bootIdChanged || seenDown) {
-                            showToast('更新完成，正在刷新页面...', 'success');
+                            showToast(translateAppTextLocal('更新完成，正在刷新页面...'), 'success');
                             setTimeout(() => location.reload(), 1500);
                             return;
                         }
@@ -4133,24 +4133,24 @@ ${details}
                 const method = (window.__lastUpdateMethod || 'watchtower');
                 if (method === 'docker_api') {
                     if (!seenDown) {
-                        showToast('等待超时：容器未发生重启，可能已是最新版本或更新仍在后台进行', 'warning', 9000);
+                        showToast(translateAppTextLocal('等待超时：容器未发生重启，可能已是最新版本或更新仍在后台进行'), 'warning', 9000);
                     } else {
-                        showToast('等待超时：容器尚未恢复，请检查容器状态/日志', 'warning', 9000);
+                        showToast(translateAppTextLocal('等待超时：容器尚未恢复，请检查容器状态/日志'), 'warning', 9000);
                     }
                 } else {
                     if (!seenDown) {
-                        showToast('等待超时：容器未发生重启，请检查 Watchtower 配置/日志', 'warning', 9000);
+                        showToast(translateAppTextLocal('等待超时：容器未发生重启，请检查 Watchtower 配置/日志'), 'warning', 9000);
                     } else {
-                        showToast('更新超时，请手动检查容器状态', 'warning', 8000);
+                        showToast(translateAppTextLocal('更新超时，请手动检查容器状态'), 'warning', 8000);
                     }
                 }
             } catch (e) {
-                showToast('更新超时，请手动检查容器状态', 'warning', 8000);
+                showToast(translateAppTextLocal('更新超时，请手动检查容器状态'), 'warning', 8000);
             }
             const btn = document.getElementById('btnTriggerUpdate');
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = '立即更新';
+                btn.textContent = translateAppTextLocal('立即更新');
             }
         }
 
@@ -4164,7 +4164,7 @@ ${details}
             if (!btn) return;
 
             btn.disabled = true;
-            btn.textContent = '正在触发更新...';
+            btn.textContent = translateAppTextLocal('正在触发更新...');
             if (resultDiv) {
                 resultDiv.style.display = 'none';
                 resultDiv.innerHTML = '';
@@ -4198,11 +4198,11 @@ ${details}
                     if (data.already_latest) {
                         showToast(data.message || '当前已是最新版本', 'info', 5000);
                         btn.disabled = false;
-                        btn.textContent = '立即更新';
+                        btn.textContent = translateAppTextLocal('立即更新');
                         return;
                     }
                     window.__lastUpdateMethod = updateMethod;
-                    btn.textContent = '等待容器重启...';
+                    btn.textContent = translateAppTextLocal('等待容器重启...');
                     await waitForRestart();
                 } else {
                     const msg = data.message || '未知错误';
@@ -4211,18 +4211,18 @@ ${details}
                         resultDiv.style.display = 'block';
                         resultDiv.innerHTML = `<span style="color: var(--clr-danger, #dc3545);">❌ ${escapeHtml(msg)}</span>${detail ? '<br><small style="color: var(--text-muted);">' + escapeHtml(detail.trim()) + '</small>' : ''}`;
                     }
-                    showToast('更新失败：' + msg, 'error', 8000);
+                    showToast(translateAppTextLocal('更新失败：') + msg, 'error', 8000);
                     btn.disabled = false;
-                    btn.textContent = '立即更新';
+                    btn.textContent = translateAppTextLocal('立即更新');
                 }
             } catch (e) {
-                const errMsg = e.name === 'AbortError' ? '请求超时' : (e.message || '网络错误');
+                const errMsg = e.name === 'AbortError' ? translateAppTextLocal('请求超时') : (e.message || translateAppTextLocal('网络错误'));
                 if (resultDiv) {
                     resultDiv.style.display = 'block';
                     resultDiv.innerHTML = `<span style="color: var(--clr-danger, #dc3545);">❌ ${escapeHtml(errMsg)}</span>`;
                 }
-                showToast('更新请求失败：' + errMsg, 'error', 8000);
+                showToast(translateAppTextLocal('更新请求失败：') + errMsg, 'error', 8000);
                 btn.disabled = false;
-                btn.textContent = '立即更新';
+                btn.textContent = translateAppTextLocal('立即更新');
             }
         }

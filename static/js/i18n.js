@@ -655,6 +655,7 @@
         '更新完成，正在刷新页面...': 'Update complete, reloading...',
         '更新超时，请手动检查容器状态': 'Update timed out, please check container status',
         '更新失败：': 'Update failed: ',
+        'Docker API 更新失败：': 'Docker API update failed: ',
         '更新请求失败，请检查网络': 'Update request failed, check network',
 
         // 手动触发容器更新
@@ -665,6 +666,7 @@
         '请求超时': 'Request timed out',
         '网络错误': 'Network error',
         '更新请求失败：': 'Update request failed: ',
+        '立即更新': 'Update Now',
 
         // 一键更新配置区域
         '一键更新配置': 'Auto Update Settings',
@@ -684,10 +686,11 @@
 
         // Watchtower 配置
         'Watchtower API 地址': 'Watchtower API URL',
-        'Docker 内网地址': 'Docker internal address',
+        '（Docker 内网地址）': '(Docker internal address)',
         'Watchtower API Token': 'Watchtower API Token',
         '🔗 测试连通性': '🔗 Test Connection',
         '验证 Watchtower 服务是否可达且 Token 正确': 'Verify Watchtower service is reachable and token is correct',
+        '与 docker-compose 中 WATCHTOWER_HTTP_API_TOKEN 保持一致。留空则读取环境变量。': 'Must match WATCHTOWER_HTTP_API_TOKEN in docker-compose. Leave empty to use env variable.',
 
         // 部署信息警告
         '处理建议': 'Suggestion',
@@ -695,7 +698,49 @@
         '输入 Watchtower HTTP API Token': 'Enter Watchtower HTTP API Token',
         '正在触发更新...': 'Triggering update...',
         '等待容器重启...': 'Waiting for container restart...',
-        '更新已触发': 'Update triggered'
+        '更新已触发': 'Update triggered',
+
+        // showToast 动态消息
+        'Docker API 更新已启动，等待容器重启...': 'Docker API update started, waiting for container restart...',
+        'Docker API 自更新功能未启用。请在 .env 中设置 DOCKER_SELF_UPDATE_ALLOW=true，并在 docker-compose.yml 中挂载 docker.sock': 'Docker API self-update not enabled. Set DOCKER_SELF_UPDATE_ALLOW=true in .env and mount docker.sock in docker-compose.yml',
+        '无法访问 Docker API。请确认已在 docker-compose.yml 中挂载 /var/run/docker.sock': 'Cannot access Docker API. Please mount /var/run/docker.sock in docker-compose.yml',
+        '一键更新需要配置 Watchtower 服务（仅 Docker 部署支持）。请在 .env 中设置 WATCHTOWER_HTTP_API_TOKEN，并使用含 Watchtower 的 docker-compose 部署方式': 'Auto-update requires Watchtower service (Docker deployment only). Set WATCHTOWER_HTTP_API_TOKEN in .env and use docker-compose with Watchtower',
+        '无法连接 Watchtower 服务，请确认已使用 docker-compose 方式部署，且 watchtower 容器正常运行': 'Cannot connect to Watchtower. Confirm docker-compose deployment with watchtower container running',
+        '更新请求超时，请检查配置和网络连接': 'Update request timed out, check configuration and network',
+        '更新请求失败，请检查网络连接': 'Update request failed, check network connection',
+        '等待超时：容器未发生重启，可能已是最新版本或更新仍在后台进行': 'Timeout: container did not restart, may already be latest or update still in progress',
+        '等待超时：容器尚未恢复，请检查容器状态/日志': 'Timeout: container not recovered, check container status/logs',
+        '等待超时：容器未发生重启，请检查 Watchtower 配置/日志': 'Timeout: container did not restart, check Watchtower config/logs',
+        '保存设置失败': 'Failed to save settings'
+    };
+
+    // 含内联 HTML（<code>、<strong> 等）的整段翻译块
+    // 用 data-i18n-html="key" 标记需要整体替换 innerHTML 的元素
+    const htmlBlocks = {
+        'docker-api-warning': {
+            zh: '<strong>⚠️ Docker API 模式安全警告：</strong><br>' +
+                '1. 需要在 docker-compose.yml 中挂载 <code>/var/run/docker.sock</code><br>' +
+                '2. 需要在 .env 中设置 <code>DOCKER_SELF_UPDATE_ALLOW=true</code><br>' +
+                '3. ⚠️ 此操作授予容器完全的 Docker API 访问权限，请谨慎使用<br>' +
+                '4. 建议仅在测试环境或可信网络中启用',
+            en: '<strong>⚠️ Docker API Mode Security Warning:</strong><br>' +
+                '1. Mount <code>/var/run/docker.sock</code> in docker-compose.yml<br>' +
+                '2. Set <code>DOCKER_SELF_UPDATE_ALLOW=true</code> in .env<br>' +
+                '3. ⚠️ This grants full Docker API access to the container, use with caution<br>' +
+                '4. Recommended only for test environments or trusted networks'
+        },
+        'watchtower-setup-guide': {
+            zh: '<strong>📌 首次配置指南：</strong><br>' +
+                '1. 在 <code>.env</code> 文件中设置 <code>WATCHTOWER_HTTP_API_TOKEN</code>（使用 <code>python -c "import secrets; print(secrets.token_hex(32))"</code> 生成）<br>' +
+                '2. 使用 <code>docker-compose up -d</code> 重启容器以应用 Token<br>' +
+                '3. 在下方配置相同的 Token 并保存设置<br>' +
+                '4. 点击"测试连通性"验证配置是否正确',
+            en: '<strong>📌 First-time Setup Guide:</strong><br>' +
+                '1. Set <code>WATCHTOWER_HTTP_API_TOKEN</code> in <code>.env</code> file (generate with <code>python -c "import secrets; print(secrets.token_hex(32))"</code>)<br>' +
+                '2. Run <code>docker-compose up -d</code> to restart and apply Token<br>' +
+                '3. Configure the same Token below and save settings<br>' +
+                '4. Click "Test Connection" to verify'
+        }
     };
 
     const reverseMap = Object.fromEntries(
@@ -869,6 +914,17 @@
         if (root.tagName === 'INPUT' && root.type === 'button' && root.value) {
             root.value = translateAppText(root.value);
         }
+
+        // data-i18n-html 整段 HTML 翻译（含 <code>/<strong> 等内联标签的段落）
+        const lang = getLanguage();
+        root.querySelectorAll('[data-i18n-html]').forEach((el) => {
+            const key = el.getAttribute('data-i18n-html');
+            const block = htmlBlocks[key];
+            if (block) {
+                el.innerHTML = block[lang] || block.zh;
+            }
+        });
+
         root.querySelectorAll('[placeholder],[title],[aria-label],input[type="button"][value]').forEach((element) => {
             if (isInI18nSkipScope(element)) {
                 return;

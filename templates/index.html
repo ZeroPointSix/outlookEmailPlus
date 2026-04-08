@@ -851,7 +851,7 @@
                                 </div>
                                  
                                  <!-- Docker API 安全警告 -->
-                                 <div class="form-hint" id="dockerApiWarning" style="background: var(--bg-danger, #f8d7da); padding: 12px; border-radius: 6px; margin-bottom: 1rem; border-left: 3px solid var(--danger, #dc3545); display: none;">
+                                 <div class="form-hint" id="dockerApiWarning" style="background: var(--bg-danger, #f8d7da); padding: 12px; border-radius: 6px; margin-bottom: 1rem; border-left: 3px solid var(--danger, #dc3545); display: none;" data-i18n-html="docker-api-warning">
                                      <strong>⚠️ Docker API 模式安全警告：</strong><br>
                                      1. 需要在 docker-compose.yml 中挂载 <code>/var/run/docker.sock</code><br>
                                      2. 需要在 .env 中设置 <code>DOCKER_SELF_UPDATE_ALLOW=true</code><br>
@@ -879,7 +879,7 @@
                                  <!-- Watchtower 配置区域 -->
                                  <div id="watchtowerConfigArea">
                                      <!-- 首次配置引导 -->
-                                     <div class="form-hint" style="background: var(--bg-accent, #fff3cd); padding: 12px; border-radius: 6px; margin-bottom: 1rem; border-left: 3px solid var(--warning, #ffc107);">
+                                     <div class="form-hint" style="background: var(--bg-accent, #fff3cd); padding: 12px; border-radius: 6px; margin-bottom: 1rem; border-left: 3px solid var(--warning, #ffc107);" data-i18n-html="watchtower-setup-guide">
                                         <strong>📌 首次配置指南：</strong><br>
                                         1. 在 <code>.env</code> 文件中设置 <code>WATCHTOWER_HTTP_API_TOKEN</code>（使用 <code>python -c "import secrets; print(secrets.token_hex(32))"</code> 生成）<br>
                                         2. 使用 <code>docker-compose up -d</code> 重启容器以应用 Token<br>

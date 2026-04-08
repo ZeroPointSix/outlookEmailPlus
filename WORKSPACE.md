@@ -275,17 +275,6 @@
 
 **Commit `e1b503b`** — `chore: bump version to v1.12.6-hotupdate-test`
 
-**后续修复**（未提交）：
-
-5. **Watchtower 错误日志增强**（`system.py`）：
-   - 读取 Watchtower 响应 body 并记录日志 + 返回前端
-   - 区分 `HTTPError`（401/403 等）、`URLError`（连接失败）、`TimeoutError`（超时）
-   - 前端 `manualTriggerUpdate()` 显示 `detail` 字段内容
-
-6. **i18n 翻译补全**（`i18n.js`）：
-   - 新增 24 个 exactMap 条目覆盖一键更新配置区域
-   - 包括：更新方式选项、Docker API 安全警告、Watchtower 配置、部署信息等
-
 **验证结果**（Commit `5415c56` 推送后）：
 
 | 环境 | uses_fixed_tag | recommended_method | warnings |
@@ -307,6 +296,53 @@
 | `52fa491` | chore: bump version to v1.12.4-hotupdate-test |
 | `5415c56` | fix: 智能推荐更新方式，修复固定标签误判和多余警告 |
 | `e1b503b` | chore: bump version to v1.12.6-hotupdate-test |
+
+#### 7. Watchtower 错误日志增强 + i18n 完整修复 + 测试 mock 修复
+
+**时间**：2026-04-08 晚
+
+**修复内容**：
+
+1. **Watchtower 错误日志增强**（`system.py`，Commit `893e757`）：
+   - 读取 Watchtower HTTP 响应 body 并记录日志 + 返回前端 `detail` 字段
+   - 区分 `HTTPError`（401/403 等）、`URLError`（连接失败）、`TimeoutError`（超时）
+   - 前端 `manualTriggerUpdate()` 在错误信息下方展示 `detail` 内容
+
+2. **i18n 翻译补全第一轮**（`i18n.js`，Commit `893e757`）：
+   - 新增 24 个 exactMap 条目覆盖一键更新配置区域
+   - 包括：更新方式选项、Docker API 安全警告、Watchtower 配置、部署信息等
+
+3. **测试 mock 修复**（`test_version_update.py`，Commit `893e757`）：
+   - `test_watchtower_success` / `test_watchtower_non_200` / `test_authorization_header` / `test_env_var_names`
+   - Mock 的 urlopen 响应对象需要 `mock_resp.read.return_value = b""` 
+   - 不配置则 `resp.read()` 返回 MagicMock → `jsonify` 序列化失败 → 500
+
+4. **i18n 完整修复第二轮**（当前进行中）：
+   - 新增 `data-i18n-html` 机制处理含 `<code>`/`<strong>` 内联标签的段落翻译
+   - 两个 HTML 块使用 `data-i18n-html` 属性：`docker-api-warning` 和 `watchtower-setup-guide`
+   - JS 动态文本全部包裹 `translateAppTextLocal()`：
+     - `btn.textContent = '立即更新'` → `translateAppTextLocal('立即更新')`
+     - 所有 `showToast()` 中的中文消息均通过 `translateAppTextLocal()` 转译
+   - 新增 exactMap 条目：`立即更新`、`Docker API 更新失败：`、showToast 长消息等
+   - 修复 `（Docker 内网地址）` 全角括号匹配问题
+   - 新增 `与 docker-compose 中 WATCHTOWER_HTTP_API_TOKEN 保持一致。留空则读取环境变量。` 翻译
+
+**提交记录更新**：
+
+| 提交 | 说明 |
+|------|------|
+| `ddbc91e` | fix: add GHCR image to whitelist and update hotupdate test compose files |
+| `a89295f` | chore: bump version to 1.12.1-hotupdate-test and fix version comparison |
+| `d390411` | feat: add manual trigger update button in settings panel |
+| `1926022` | chore: bump version to 1.12.2-hotupdate-test for UI button testing |
+| `02e4e4f` | fix: Docker API 更新同 digest 时前端超时卡死 |
+| `28e6568` | chore: bump to v1.12.3-hotupdate-test + add i18n for manual trigger |
+| `ff5fb5b` | fix: Watchtower 触发超时 - 增大 API 和前端超时时间 |
+| `52fa491` | chore: bump version to v1.12.4-hotupdate-test |
+| `5415c56` | fix: 智能推荐更新方式，修复固定标签误判和多余警告 |
+| `e1b503b` | chore: bump version to v1.12.6-hotupdate-test |
+| `893e757` | fix: Watchtower 错误日志增强 + i18n 翻译补全 + 测试 mock 修复 |
+| (pending) | fix: i18n 完整修复 — data-i18n-html 机制 + JS 动态文本翻译 |
 
 ---
 
