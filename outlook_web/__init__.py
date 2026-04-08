@@ -1,4 +1,4 @@
-__version__ = "1.12.3-hotupdate-test"
+__version__ = "1.12.4-hotupdate-test"
 
 from outlook_web.app import create_app
 

@@ -152,7 +152,7 @@ class VersionCheckAPITests(unittest.TestCase):
         data = resp.get_json()
         self.assertTrue(data["has_update"])
         self.assertEqual(data["latest_version"], "99.0.0")
-        self.assertEqual(data["current_version"], "1.12.3-hotupdate-test")
+        self.assertEqual(data["current_version"], "1.12.4-hotupdate-test")
         self.assertTrue(data["success"])
 
     def test_has_update_false_when_same(self):
@@ -163,7 +163,7 @@ class VersionCheckAPITests(unittest.TestCase):
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(
                 {
-                    "tag_name": "v1.12.3-hotupdate-test",
+                    "tag_name": "v1.12.4-hotupdate-test",
                     "html_url": "https://github.com/test",
                 }
             ).encode()
@@ -173,7 +173,7 @@ class VersionCheckAPITests(unittest.TestCase):
             resp = client.get("/api/system/version-check")
         data = resp.get_json()
         self.assertFalse(data["has_update"])
-        self.assertEqual(data["latest_version"], "1.12.3-hotupdate-test")
+        self.assertEqual(data["latest_version"], "1.12.4-hotupdate-test")
 
     def test_has_update_false_when_older(self):
         """GitHub 版本更低时 has_update=False"""
@@ -206,8 +206,8 @@ class VersionCheckAPITests(unittest.TestCase):
         data = resp.get_json()
         self.assertTrue(data["success"])
         self.assertFalse(data["has_update"])
-        self.assertEqual(data["current_version"], "1.12.3-hotupdate-test")
-        self.assertEqual(data["latest_version"], "1.12.3-hotupdate-test")
+        self.assertEqual(data["current_version"], "1.12.4-hotupdate-test")
+        self.assertEqual(data["latest_version"], "1.12.4-hotupdate-test")
         self.assertEqual(data["release_url"], "")
 
     def test_response_field_names(self):
@@ -576,7 +576,7 @@ class HTMLTemplateTests(unittest.TestCase):
         self._login(client)
         resp = client.get("/")
         html = resp.get_data(as_text=True)
-        self.assertIn("v1.12.3-hotupdate-test", html)
+        self.assertIn("v1.12.4-hotupdate-test", html)
 
 
 class CSSStyleTests(unittest.TestCase):
