@@ -93,6 +93,7 @@
         async function selectGroup(groupId) {
             currentGroupId = groupId;
             currentAccountPage = 1;  // 切换分组时重置到第 1 页
+            isSearchMode = false;
 
             // 切换分组时停止所有正在运行的轮询（避免跨分组轮询堆积）
             if (typeof stopAllPolls === 'function') {
@@ -244,11 +245,7 @@
                         <p>${translateAppTextLocal('该分组暂无邮箱')}</p>
                     </div>
                 `;
-                const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-                if (selectAllCheckbox) {
-                    selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
-                }
+                updateSelectAllCheckbox();
                 updateBatchActionBar();
                 return;
             }
@@ -389,6 +386,7 @@
         // 账号列表分页状态
         let currentAccountPage = 1;
         const ACCOUNT_PAGE_SIZE = 50;
+        let isSearchMode = false;
 
         // 排序账号列表
         function sortAccounts(sortBy) {
@@ -476,10 +474,13 @@
             const titleElement = document.getElementById('currentGroupName');
 
             if (!query.trim()) {
+                isSearchMode = false;
                 currentAccountPage = 1;  // 清空搜索时重置页码
                 loadAccountsByGroup(currentGroupId);
                 return;
             }
+
+            isSearchMode = true;
 
             container.innerHTML = '<div class="loading-overlay"><span class="spinner"></span> 搜索中…</div>';
 
@@ -652,8 +653,42 @@
 
         // ==================== 全选功能 ====================
 
+        function getCurrentAccountScopeIds() {
+            const source = Array.isArray(accountsCache[currentGroupId])
+                ? applyFiltersAndSort(accountsCache[currentGroupId])
+                : [];
+            return source
+                .map(acc => Number(acc && acc.id))
+                .filter(id => Number.isInteger(id) && id > 0);
+        }
+
+        function getCurrentAccountScopeStats() {
+            const scopeIds = getCurrentAccountScopeIds();
+            const selectedInScope = scopeIds.filter(id => selectedAccountIds.has(id)).length;
+            return {
+                scopeCount: scopeIds.length,
+                selectedInScope,
+                allSelected: scopeIds.length > 0 && selectedInScope === scopeIds.length,
+                noneSelected: selectedInScope === 0,
+            };
+        }
+
+        function syncActiveCheckboxesFromSelection() {
+            const checkboxes = getActiveAccountCheckboxes();
+            checkboxes.forEach(cb => {
+                const id = Number(cb.value);
+                cb.checked = selectedAccountIds.has(id);
+            });
+        }
+
         // 全选/取消全选账号（当前分组）
         function toggleSelectAll() {
+            if (isSearchMode) {
+                showToast(translateAppTextLocal('搜索模式下不支持全选本分组，请先清空搜索'), 'warning');
+                updateSelectAllCheckbox();
+                return;
+            }
+
             const selectAllCheckbox = mailboxViewMode === 'compact'
                 ? document.getElementById('compactSelectAllCheckbox')
                 : document.getElementById('selectAllCheckbox');
@@ -667,43 +702,35 @@
 
         // 全选当前分组所有账号
         function selectAllAccounts() {
-            const checkboxes = getActiveAccountCheckboxes();
-            checkboxes.forEach(cb => {
-                cb.checked = true;
-                selectedAccountIds.add(parseInt(cb.value));
-            });
+            const scopeIds = getCurrentAccountScopeIds();
+            scopeIds.forEach(id => selectedAccountIds.add(id));
+            syncActiveCheckboxesFromSelection();
             updateBatchActionBar();
             updateSelectAllCheckbox();
         }
 
         // 取消全选当前分组
         function unselectAllAccounts() {
-            const checkboxes = getActiveAccountCheckboxes();
-            checkboxes.forEach(cb => {
-                cb.checked = false;
-                selectedAccountIds.delete(parseInt(cb.value));
-            });
+            const scopeIds = getCurrentAccountScopeIds();
+            scopeIds.forEach(id => selectedAccountIds.delete(id));
+            syncActiveCheckboxesFromSelection();
             updateBatchActionBar();
             updateSelectAllCheckbox();
         }
 
         // 更新全选复选框状态（基于当前分组）
         function updateSelectAllCheckbox() {
-            const checkboxes = getActiveAccountCheckboxes();
-            const checkedCount = checkboxes.filter(cb => cb.checked).length;
+            const stats = getCurrentAccountScopeStats();
             const selectAllCheckboxes = [
                 document.getElementById('selectAllCheckbox'),
                 document.getElementById('compactSelectAllCheckbox')
             ].filter(Boolean);
 
             selectAllCheckboxes.forEach(selectAllCheckbox => {
-                if (checkboxes.length === 0) {
+                if (stats.scopeCount === 0 || stats.noneSelected) {
                     selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
-                } else if (checkedCount === 0) {
-                    selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
-                } else if (checkedCount === checkboxes.length) {
+                    selectAllCheckbox.indeterminate = false;
+                } else if (stats.allSelected) {
                     selectAllCheckbox.checked = true;
                     selectAllCheckbox.indeterminate = false;
                 } else {
