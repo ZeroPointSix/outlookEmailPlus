@@ -6,6 +6,7 @@ import imaplib
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.header import decode_header
 from typing import Any, Dict, List, Optional
 
@@ -88,6 +89,77 @@ def get_email_body(msg) -> str:
     return body
 
 
+def _select_folder(connection, folder: str) -> Optional[str]:
+    folder_map = {
+        "inbox": ["INBOX"],
+        "junk": ["Junk", "Junk Email", "Spam", "垃圾邮件"],
+        "junkemail": ["Junk", "Junk Email", "Spam", "垃圾邮件"],
+        "deleteditems": ["Deleted", "Deleted Items", "Trash", "已删除邮件"],
+        "trash": ["Deleted", "Deleted Items", "Trash", "已删除邮件"],
+    }
+    candidates = folder_map.get((folder or "").lower(), [folder or "INBOX"])
+    for candidate in candidates:
+        for select_target in (f'"{candidate}"', candidate):
+            try:
+                status, _ = connection.select(select_target, readonly=True)
+                if status == "OK":
+                    return candidate
+            except Exception:
+                continue
+    return None
+
+
+def _get_html_body(msg) -> str:
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == "text/html":
+                payload = part.get_payload(decode=True)
+                if payload:
+                    charset = part.get_content_charset() or "utf-8"
+                    return payload.decode(charset, errors="replace")
+    else:
+        if msg.get_content_type() == "text/html":
+            payload = msg.get_payload(decode=True)
+            if payload:
+                return payload.decode(
+                    msg.get_content_charset() or "utf-8", errors="replace"
+                )
+    return ""
+
+
+def _parse_batch_fetch_response(all_data: list) -> List[tuple]:
+    results = []
+    for item in all_data:
+        header = None
+        raw_email = None
+
+        if isinstance(item, tuple) and len(item) == 2:
+            first, second = item
+            if isinstance(first, (bytes, bytearray)) and isinstance(
+                second, (bytes, bytearray)
+            ):
+                header = bytes(first)
+                raw_email = bytes(second)
+            elif isinstance(first, tuple) and len(first) == 2:
+                nested_header, nested_raw = first
+                if isinstance(nested_header, (bytes, bytearray)) and isinstance(
+                    nested_raw, (bytes, bytearray)
+                ):
+                    header = bytes(nested_header)
+                    raw_email = bytes(nested_raw)
+
+        if not isinstance(header, (bytes, bytearray)) or not isinstance(
+            raw_email, (bytes, bytearray)
+        ):
+            continue
+
+        msg_id_str = header.split(b" ", 1)[0].decode("ascii", errors="ignore").strip()
+        if not msg_id_str:
+            continue
+        results.append((msg_id_str, raw_email))
+    return results
+
+
 def _make_cache_key(client_id: str, refresh_token: str) -> str:
     rt_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()[:16]
     return f"{client_id}:{rt_hash}"
@@ -99,8 +171,8 @@ def clear_imap_token_cache(client_id: str = None) -> None:
             _token_cache.clear()
         else:
             keys_to_remove = [k for k in _token_cache if k.startswith(f"{client_id}:")]
-            for k in keys_to_remove:
-                del _token_cache[k]
+            for key in keys_to_remove:
+                del _token_cache[key]
 
 
 def get_access_token_imap_result(client_id: str, refresh_token: str) -> Dict[str, Any]:
@@ -215,38 +287,7 @@ def get_emails_imap_with_server(
         auth_string = f"user={account}\1auth=Bearer {access_token}\1\1".encode("utf-8")
         connection.authenticate("XOAUTH2", lambda x: auth_string)
 
-        folder_map = {
-            "inbox": ['"INBOX"', "INBOX"],
-            "junkemail": ['"Junk"', '"Junk Email"', "Junk", '"垃圾邮件"'],
-            "deleteditems": [
-                '"Deleted"',
-                '"Deleted Items"',
-                '"Trash"',
-                "Deleted",
-                '"已删除邮件"',
-            ],
-            "trash": [
-                '"Deleted"',
-                '"Deleted Items"',
-                '"Trash"',
-                "Deleted",
-                '"已删除邮件"',
-            ],
-        }
-        possible_folders = folder_map.get((folder or "").lower(), ['"INBOX"'])
-
-        selected_folder = None
-        last_error = None
-        for imap_folder in possible_folders:
-            try:
-                status, response = connection.select(imap_folder, readonly=True)
-                if status == "OK":
-                    selected_folder = imap_folder
-                    break
-                last_error = f"select {imap_folder} status={status}"
-            except Exception as e:
-                last_error = f"select {imap_folder} error={str(e)}"
-                continue
+        selected_folder = _select_folder(connection, folder)
 
         if not selected_folder:
             try:
@@ -262,14 +303,14 @@ def get_emails_imap_with_server(
                             available_folders.append(str(folder_item))
 
                 error_details = {
-                    "last_error": last_error,
-                    "tried_folders": possible_folders,
+                    "last_error": "select folder failed",
+                    "tried_folder": folder,
                     "available_folders": available_folders[:10],
                 }
             except Exception:
                 error_details = {
-                    "last_error": last_error,
-                    "tried_folders": possible_folders,
+                    "last_error": "select folder failed",
+                    "tried_folder": folder,
                 }
 
             return {
@@ -332,40 +373,40 @@ def get_emails_imap_with_server(
             return {"success": True, "emails": []}
 
         paged_ids = message_ids[start_idx:end_idx][::-1]
-
         emails_data = []
-        for msg_id in paged_ids:
-            try:
-                status, msg_data = connection.fetch(msg_id, "(RFC822)")
-                if status == "OK" and msg_data and msg_data[0]:
-                    raw_email = msg_data[0][1]
-                    msg = email.message_from_bytes(raw_email)
 
-                    body_preview = get_email_body(msg)
-                    emails_data.append(
-                        {
-                            "id": (
-                                msg_id.decode()
-                                if isinstance(msg_id, bytes)
-                                else str(msg_id)
-                            ),
-                            "subject": decode_header_value(
-                                msg.get("Subject", "无主题")
-                            ),
-                            "from": decode_header_value(msg.get("From", "未知发件人")),
-                            "date": msg.get("Date", "未知时间"),
-                            "body_preview": (
-                                body_preview[:200] + "..."
-                                if len(body_preview) > 200
-                                else body_preview
-                            ),
-                        }
-                    )
+        ids_str = b",".join(paged_ids)
+        status, all_data = connection.fetch(ids_str, "(RFC822)")
+        if status != "OK":
+            _LOGGER.debug(
+                "[PERF] imap_fetch | account=%s | batch fetch失败 status=%s",
+                account,
+                status,
+            )
+            return {"success": True, "emails": emails_data}
+
+        for msg_id_str, raw_email in _parse_batch_fetch_response(all_data or []):
+            try:
+                msg = email.message_from_bytes(raw_email)
+                body_preview = get_email_body(msg)
+                emails_data.append(
+                    {
+                        "id": msg_id_str,
+                        "subject": decode_header_value(msg.get("Subject", "无主题")),
+                        "from": decode_header_value(msg.get("From", "未知发件人")),
+                        "date": msg.get("Date", "未知时间"),
+                        "body_preview": (
+                            body_preview[:200] + "..."
+                            if len(body_preview) > 200
+                            else body_preview
+                        ),
+                    }
+                )
             except Exception as fetch_err:
                 _LOGGER.debug(
-                    "[PERF] imap_fetch | account=%s | msg_id=%s | fetch失败: %s",
+                    "[PERF] imap_fetch | account=%s | msg_id=%s | 解析失败: %s",
                     account,
-                    msg_id,
+                    msg_id_str,
                     fetch_err,
                 )
                 continue
@@ -395,6 +436,179 @@ def get_emails_imap_with_server(
                 connection.logout()
             except Exception:
                 pass
+
+
+def fetch_and_detail_imap_with_server(
+    account: str,
+    client_id: str,
+    refresh_token: str,
+    folder: str = "inbox",
+    skip: int = 0,
+    top: int = 1,
+    server: str = IMAP_SERVER_NEW,
+) -> Dict[str, Any]:
+    """一次 IMAP 连接完成邮件列表 + 最新一封详情。"""
+    token_result = get_access_token_imap_result(client_id, refresh_token)
+    if not token_result.get("success"):
+        return {
+            "success": False,
+            "error": token_result.get("error"),
+            "emails": [],
+            "detail": None,
+        }
+
+    access_token = token_result["access_token"]
+    connection = None
+
+    try:
+        connection = imaplib.IMAP4_SSL(server, IMAP_PORT)
+        auth_string = f"user={account}\x01auth=Bearer {access_token}\x01\x01".encode(
+            "utf-8"
+        )
+        connection.authenticate("XOAUTH2", lambda x: auth_string)
+
+        selected = _select_folder(connection, folder)
+        if not selected:
+            return {
+                "success": False,
+                "error": build_error_payload(
+                    "FOLDER_NOT_FOUND", "文件夹选择失败", "IMAPError", 500, ""
+                ),
+                "emails": [],
+                "detail": None,
+            }
+
+        status, messages = connection.search(None, "ALL")
+        if status != "OK" or not messages or not messages[0]:
+            return {"success": True, "emails": [], "detail": None}
+
+        message_ids = messages[0].split()
+        total = len(message_ids)
+        start_idx = max(0, total - skip - top)
+        end_idx = total - skip
+        if start_idx >= end_idx:
+            return {"success": True, "emails": [], "detail": None}
+
+        paged_ids = message_ids[start_idx:end_idx][::-1]
+        emails_data: List[Dict[str, Any]] = []
+        detail = None
+
+        ids_str = b",".join(paged_ids)
+        status, all_data = connection.fetch(ids_str, "(RFC822)")
+        if status != "OK":
+            return {"success": True, "emails": [], "detail": None}
+
+        for i, (msg_id_str, raw_email) in enumerate(
+            _parse_batch_fetch_response(all_data or [])
+        ):
+            msg = email.message_from_bytes(raw_email)
+            body_preview = get_email_body(msg)
+            email_item = {
+                "id": msg_id_str,
+                "subject": decode_header_value(msg.get("Subject", "无主题")),
+                "from": decode_header_value(msg.get("From", "未知发件人")),
+                "date": msg.get("Date", "未知时间"),
+                "body_preview": body_preview[:200] + "..."
+                if len(body_preview) > 200
+                else body_preview,
+            }
+            emails_data.append(email_item)
+
+            if i == 0:
+                raw_text = (
+                    raw_email.decode("utf-8", errors="replace")
+                    if isinstance(raw_email, (bytes, bytearray))
+                    else ""
+                )
+                detail = {
+                    "id": email_item["id"],
+                    "subject": email_item["subject"],
+                    "from": email_item["from"],
+                    "to": decode_header_value(msg.get("To", "")),
+                    "cc": decode_header_value(msg.get("Cc", "")),
+                    "date": email_item["date"],
+                    "body": get_email_body(msg),
+                    "body_html": _get_html_body(msg),
+                    "raw_content": raw_text,
+                }
+
+        return {"success": True, "emails": emails_data, "detail": detail}
+    except imaplib.IMAP4.error as exc:
+        return {
+            "success": False,
+            "error": build_error_payload(
+                "AUTH_FAILED", "IMAP认证失败", "IMAP4Error", 401, str(exc)
+            ),
+            "emails": [],
+            "detail": None,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": build_error_payload(
+                "EMAIL_FETCH_FAILED",
+                "获取邮件失败",
+                type(exc).__name__,
+                500,
+                str(exc),
+            ),
+            "emails": [],
+            "detail": None,
+        }
+    finally:
+        if connection:
+            try:
+                connection.logout()
+            except Exception:
+                pass
+
+
+def get_emails_imap_concurrent(
+    account: str,
+    client_id: str,
+    refresh_token: str,
+    folder: str = "inbox",
+    skip: int = 0,
+    top: int = 20,
+    servers: tuple = (IMAP_SERVER_NEW, "outlook.office365.com"),
+) -> Dict[str, Any]:
+    """并发连接多台 IMAP 服务器，返回第一个成功结果。"""
+    if len(servers) <= 1:
+        return get_emails_imap_with_server(
+            account,
+            client_id,
+            refresh_token,
+            folder,
+            skip,
+            top,
+            servers[0] if servers else IMAP_SERVER_NEW,
+        )
+
+    last_error = None
+    with ThreadPoolExecutor(max_workers=len(servers)) as executor:
+        futures = {
+            executor.submit(
+                get_emails_imap_with_server,
+                account,
+                client_id,
+                refresh_token,
+                folder,
+                skip,
+                top,
+                server,
+            ): server
+            for server in servers
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            if result.get("success"):
+                return result
+            last_error = result
+
+    return last_error or {
+        "success": False,
+        "error": {"code": "ALL_SERVERS_FAILED", "message": "所有服务器连接失败"},
+    }
 
 
 def get_email_detail_imap(
