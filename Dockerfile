@@ -29,6 +29,6 @@ EXPOSE 5000
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["python","-c","import urllib.request as u; u.urlopen('http://localhost:5000/healthz', timeout=4).read()"]
 
-# 启动应用（使用 Gunicorn，单 worker 避免 session 共享问题）
-# 注意：禁用 --preload，避免在 master 进程中启动后台调度线程
-CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:5000", "--timeout", "120", "--access-logfile", "-", "web_outlook_app:app"]
+# 启动应用（单 worker + 多线程：保持调度器单实例，同时支持并发请求处理）
+# 瓶颈是网络 I/O（Graph API / IMAP），GIL 在 I/O 期间释放，线程并发有效
+CMD ["gunicorn", "-w", "1", "--threads", "8", "-b", "0.0.0.0:5000", "--timeout", "120", "--access-logfile", "-", "web_outlook_app:app"]
