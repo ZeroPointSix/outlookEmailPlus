@@ -45,75 +45,105 @@
 
             container.innerHTML = `<div class="loading-overlay"><span class="spinner"></span> ${translateAppTextLocal('获取中…')}</div>`;
 
-            try {
-                // 每次只查询20封邮件
-                const response = await fetch(
-                    `/api/emails/${encodeURIComponent(email)}?method=${currentMethod}&folder=${currentFolder}&skip=0&top=20`
-                );
-                const data = await response.json();
+            // SSE 流式加载：每收到一封邮件立即渲染，不等全部完成
+            const forceParam = forceRefresh ? '&force=1' : '';
+            const streamUrl = `/api/emails/${encodeURIComponent(email)}/stream?folder=${currentFolder}&skip=0&top=20${forceParam}`;
+            const evtSource = new EventSource(streamUrl);
+            let streamEmails = [];
+            let firstEmail = true;
+            const clickHandler = isTempEmailGroup ? 'getTempEmailDetail' : 'selectEmail';
 
-                if (data.success) {
-                    currentEmails = data.emails;
-                    currentMethod = data.method === 'Graph API' ? 'graph' : 'imap';
-                    hasMoreEmails = data.has_more;
-                    if (typeof syncAccountSummaryToAccountCache === 'function' && data.account_summary) {
-                        syncAccountSummaryToAccountCache(email, data.account_summary);
-                    }
+            evtSource.addEventListener('email', function(e) {
+                const emailData = JSON.parse(e.data);
+                streamEmails.push(emailData);
 
-                    if (typeof syncAccountSummaryToAccountCache === 'function' && data.account_summary) {
-                        syncAccountSummaryToAccountCache(email, data.account_summary);
-                    }
+                // 首封邮件到达时清除 loading
+                if (firstEmail) {
+                    container.innerHTML = '';
+                    firstEmail = false;
+                }
 
-                    // 保存到缓存
-                    emailListCache[cacheKey] = {
-                        emails: currentEmails,
-                        has_more: hasMoreEmails,
-                        skip: currentSkip,
-                        method: currentMethod
-                    };
+                // 逐条 DOM append
+                const index = streamEmails.length - 1;
+                const initial = (emailData.from || '?')[0].toUpperCase();
+                const div = document.createElement('div');
+                div.className = `email-item${emailData.is_read === false ? ' unread' : ''}`;
+                div.setAttribute('onclick', `${clickHandler}('${emailData.id}', ${index})`);
+                div.innerHTML = `
+                    <div class="email-checkbox-wrapper" onclick="event.stopPropagation(); toggleEmailSelection('${emailData.id}')">
+                        <input type="checkbox" class="email-checkbox" style="pointer-events: none;">
+                    </div>
+                    <div class="email-avatar">${initial}</div>
+                    <div class="email-meta">
+                        <div class="email-from">${escapeHtml(emailData.from)}</div>
+                        <div class="email-subject">${escapeHtml(emailData.subject || '无主题')}</div>
+                        <div class="email-preview">${escapeHtml(emailData.body_preview || '')}</div>
+                    </div>
+                    <div class="email-time">${formatDate(emailData.date)}</div>
+                `;
+                container.appendChild(div);
 
-                    // 显示使用的方法和邮件数量
-                    const methodTag = document.getElementById('methodTag');
-                    methodTag.textContent = data.method;
-                    methodTag.style.display = 'inline';
+                // 实时更新计数
+                document.getElementById('emailCount').textContent = `(${streamEmails.length})`;
+            });
 
-                    document.getElementById('emailCount').textContent = `(${data.emails.length})`;
+            evtSource.addEventListener('done', function(e) {
+                const info = JSON.parse(e.data);
+                evtSource.close();
 
-                    renderEmailList(data.emails);
-                } else {
-                    // 显示详细的多方法失败弹框
-                    if (data.details) {
-                        showEmailFetchErrorModal(data.details);
-                    } else {
-                        handleApiError(data, '获取邮件失败');
-                    }
+                currentEmails = streamEmails;
+                currentMethod = info.method.includes('Graph API') ? 'graph' : 'imap';
+                hasMoreEmails = info.has_more || false;
+
+                // 如果没收到任何邮件
+                if (streamEmails.length === 0) {
                     container.innerHTML = `
                         <div class="empty-state">
-                            <span class="empty-icon">⚠️</span><p>${translateAppTextLocal('获取邮件失败，')}<a href="javascript:void(0)" id="showEmailErrorLink" style="color:#409eff;text-decoration:underline;">${translateAppTextLocal('点击查看详情')}</a></p>
+                            <span class="empty-icon">📭</span>
+                            <p>${translateAppTextLocal('收件箱为空')}</p>
                         </div>
                     `;
-                    lastFetchErrorDetails = data.details || {};
-                    // 绑定事件监听器
-                    const errorLink = document.getElementById('showEmailErrorLink');
-                    if (errorLink) {
-                        errorLink.addEventListener('click', () => showEmailFetchErrorModal(lastFetchErrorDetails));
-                    }
                 }
-            } catch (error) {
-                console.error('加载邮件列表失败:', error);
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <span class="empty-icon">⚠️</span><p>${translateAppTextLocal('网络错误，请重试')}</p>
-                    </div>
-                `;
-            } finally {
+
+                // 更新 method tag
+                const methodTag = document.getElementById('methodTag');
+                methodTag.textContent = info.method;
+                methodTag.style.display = 'inline';
+
+                // 保存到缓存
+                emailListCache[cacheKey] = {
+                    emails: currentEmails,
+                    has_more: hasMoreEmails,
+                    skip: currentSkip,
+                    method: currentMethod
+                };
+
                 // 启用按钮
                 if (refreshBtn) {
                     refreshBtn.disabled = false;
                     refreshBtn.textContent = translateAppTextLocal('获取邮件');
                 }
                 folderTabs.forEach(tab => tab.disabled = false);
-            }
+            });
+
+            evtSource.addEventListener('error', function(e) {
+                // SSE 自身 error event（非服务端 error event）
+                if (evtSource.readyState === EventSource.CLOSED) return;
+                evtSource.close();
+
+                if (streamEmails.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <span class="empty-icon">⚠️</span><p>${translateAppTextLocal('获取邮件失败')}</p>
+                        </div>
+                    `;
+                }
+                if (refreshBtn) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.textContent = translateAppTextLocal('获取邮件');
+                }
+                folderTabs.forEach(tab => tab.disabled = false);
+            });
         }
 
         // 渲染邮件列表

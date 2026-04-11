@@ -88,10 +88,17 @@ def get_access_token_graph_result(client_id: str, refresh_token: str, proxy_url:
 
         # 根据 Microsoft Learn 文档：refresh token 可能会在每次使用时“自我替换”，应保存新的 refresh_token（如有）。
         new_refresh_token = payload.get("refresh_token")
+
+        # 检查返回的 scope 是否包含 Mail.Read 权限
+        scope = payload.get("scope", "")
+        has_mail_read = "Mail.Read" in scope or "Mail.ReadWrite" in scope
+
         return {
             "success": True,
             "access_token": access_token,
             "refresh_token": new_refresh_token,
+            "scope": scope,
+            "has_mail_read": has_mail_read,
         }
     except Exception as exc:
         return {
@@ -126,6 +133,20 @@ def get_emails_graph(
     token_result = get_access_token_graph_result(client_id, refresh_token, proxy_url)
     if not token_result.get("success"):
         return {"success": False, "error": token_result.get("error")}
+
+    # 无 Mail.Read 权限时直接跳过，不浪费一次 Graph API 请求
+    if not token_result.get("has_mail_read"):
+        return {
+            "success": False,
+            "no_mail_permission": True,
+            "error": build_error_payload(
+                "GRAPH_NO_MAIL_PERMISSION",
+                "Token 无 Mail.Read 权限，跳过 Graph API",
+                "GraphPermissionError",
+                403,
+                token_result.get("scope", ""),
+            ),
+        }
 
     access_token = token_result.get("access_token")
 
