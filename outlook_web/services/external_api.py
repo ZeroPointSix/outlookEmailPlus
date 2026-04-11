@@ -959,127 +959,52 @@ def _extract_verification_with_memory_for_outlook(  # noqa: C901
     expected_field: str | None = None,
 ) -> Dict[str, Any]:
     ensure_external_email_access(email_addr)
-
-    preferred_channel = verification_channel_service.normalize_verification_channel(
-        account.get("preferred_verification_channel")
+    result = verification_channel_service.extract_verification_for_outlook(
+        account=account,
+        proxy_url=_get_proxy_url(account),
+        resolved_policy=resolved_policy,
+        code_source=code_source,
+        expected_field=expected_field,
+        from_contains=from_contains,
+        subject_contains=subject_contains,
+        since_minutes=since_minutes,
+        baseline_timestamp=baseline_timestamp,
     )
-    channel_plan = verification_channel_service.build_verification_channel_plan(
-        preferred_channel
-    )
-    proxy_url = _get_proxy_url(account)
 
-    any_channel_read_success = False
-    upstream_errors: Dict[str, Any] = {}
-    last_extracted: Optional[Dict[str, Any]] = None
-
-    for channel in channel_plan:
-        channel_result = verification_channel_service.fetch_emails_for_channel(
-            account=account,
-            channel=channel,
-            proxy_url=proxy_url,
-            skip=0,
-            top=20,
-        )
-        channel_error = channel_result.get("error")
-        if not channel_result.get("success"):
-            if channel_error:
-                upstream_errors[channel] = channel_error
-            continue
-
-        any_channel_read_success = True
-        method_label = verification_channel_service.channel_method_label(channel)
-        summaries = [
-            {
-                **_build_message_summary(email_addr, item, method=method_label),
-                "_verification_channel": channel,
-            }
-            for item in (channel_result.get("emails") or [])
-        ]
-        filtered = filter_messages(
-            summaries,
-            from_contains=from_contains,
-            subject_contains=subject_contains,
-            since_minutes=since_minutes,
-            baseline_timestamp=baseline_timestamp,
-        )
-        if not filtered:
-            continue
-
-        filtered.sort(key=lambda x: int(x.get("timestamp") or 0), reverse=True)
-        latest_summary = filtered[0]
-        message_id = str(latest_summary.get("id") or "")
-        if not message_id:
-            continue
-
-        detail = verification_channel_service.fetch_email_detail_for_channel(
-            account=account,
-            channel=channel,
-            message_id=message_id,
-            proxy_url=proxy_url,
-        )
-        if not detail:
-            continue
-
-        email_obj = _build_email_obj_from_detail(detail, latest_summary)
-        extracted = extract_verification_info_with_options(
-            email_obj,
-            code_regex=resolved_policy.get("code_regex"),
-            code_length=resolved_policy.get("code_length"),
-            code_source=code_source,
-            enforce_mutual_exclusion=False,
-        )
-        extracted = enhance_verification_with_ai_fallback(
-            email=email_obj,
-            extracted=extracted,
-            code_regex=resolved_policy.get("code_regex"),
-            code_length=resolved_policy.get("code_length"),
-            code_source=code_source,
-            enforce_mutual_exclusion=False,
-        )
-        extracted = apply_confidence_gate(extracted, enforce_mutual_exclusion=False)
-
-        detail_from = _extract_sender_address_from_message_item(detail)
-        summary_from = str(latest_summary.get("from_address") or "")
-        extracted["email"] = email_addr
-        extracted["matched_email_id"] = message_id
-        extracted["from"] = detail_from or summary_from
-        extracted["subject"] = str(detail.get("subject") or "") or str(
-            latest_summary.get("subject") or ""
-        )
-        extracted["received_at"] = str(detail.get("created_at") or "") or str(
-            latest_summary.get("created_at") or ""
-        )
-        extracted["method"] = method_label
-        last_extracted = extracted
-
-        should_return = bool(extracted.get("formatted"))
-        if expected_field in {"verification_code", "verification_link"}:
-            should_return = bool(extracted.get(expected_field))
-        if not should_return:
-            continue
-
-        extracted = _shape_verification_result_by_expected_field(
-            extracted, expected_field
-        )
-
-        if verification_channel_service.is_outlook_oauth_account(account):
-            accounts_repo.update_preferred_verification_channel(
-                int(account["id"]), channel
+    if not result.get("success"):
+        error_code = str(result.get("error_code") or "UNKNOWN")
+        if error_code == "ACCOUNT_AUTH_EXPIRED":
+            raise UpstreamReadFailedError(
+                "Graph/IMAP 均读取失败", data=result.get("upstream_errors")
             )
-        return extracted
-
-    if last_extracted is not None:
-        return _shape_verification_result_by_expected_field(
-            last_extracted, expected_field
+        raise MailNotFoundError(
+            "未找到匹配邮件",
+            data={
+                "email": email_addr,
+                "upstream_errors": result.get("upstream_errors"),
+            },
         )
 
-    if not any_channel_read_success:
-        raise UpstreamReadFailedError(
-            "Graph/IMAP 均读取失败",
-            data=upstream_errors or None,
-        )
+    if result.get("new_refresh_token"):
+        try:
+            new_token = str(result.get("new_refresh_token") or "").strip()
+            if new_token and new_token != str(account.get("refresh_token") or ""):
+                from outlook_web.security.crypto import encrypt_data as _encrypt_data
+                from outlook_web.db import get_db
 
-    raise MailNotFoundError("未找到匹配邮件", data={"email": email_addr})
+                db = get_db()
+                db.execute(
+                    "UPDATE accounts SET refresh_token = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (_encrypt_data(new_token), int(account["id"])),
+                )
+                db.commit()
+                account["refresh_token"] = new_token
+        except Exception:
+            pass
+
+    return _shape_verification_result_by_expected_field(
+        result.get("data") or {}, expected_field
+    )
 
 
 def get_verification_result(
