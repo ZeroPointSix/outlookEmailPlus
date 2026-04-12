@@ -6,6 +6,51 @@
 
 ## 2026-04-12
 
+### 0xh. main 直接发布链路修复与 v1.15.1 补发（本次会话）
+
+**时间**：2026-04-12
+
+**背景**：
+
+1. 用户要求在 `main` 分支直接执行发布，不再停留在 `dev`。
+2. `v1.15.0` 首次发布后出现 CI 门禁失败：`Code Quality` 与 `Build and Push Docker Image` 失败。
+3. 用户要求继续检查 CI/CD，并确保两个镜像仓库状态可核对。
+
+**本次实际动作**：
+
+1. 发布 `v1.15.0`：
+   - 更新版本与发布文档：`outlook_web/__init__.py`、`CHANGELOG.md`、`docs/DEVLOG.md`、`README.md`、`README.en.md`、`tests/test_version_update.py`
+   - 提交：`716c479 docs(release): prepare v1.15.0 notes and version bump`
+   - 推送 `main` + tag `v1.15.0`
+   - 自动创建 GitHub Release：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.15.0`
+2. CI 故障定位：
+   - 失败根因是格式化门禁（`black --check` / `isort --check-only`）未通过，日志显示 47 文件需重排。
+3. CI 修复：
+   - 执行全仓格式化：`black` + `isort`
+   - 提交：`61208e0 chore(format): align codebase with black and isort for CI`
+   - 推送后，`main` 相关工作流全绿（Build&Push / Code Quality / Python Tests / SonarCloud）。
+4. 为补齐“版本标签镜像”再发布 `v1.15.1`：
+   - 版本与文档更新（同一套 release 文件）
+   - 提交：`d09d67f docs(release): v1.15.1 ci gate recovery and mirror tag`
+   - 推送 `main` + tag `v1.15.1`
+   - 自动创建 GitHub Release：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.15.1`
+   - `v1.15.1` tag 的 `Build and Push Docker Image` 成功。
+5. 两个镜像仓库核对（digest 级）：
+   - GHCR 与 Docker Hub 均存在并一致：
+     - `v1.15.1` / `v1.15.1-d09d67f` → `sha256:4b1985478bb0f2c0fdf1ec6ef705ee62858919a886c7a8c79acd880ac45dd964`
+     - `main` / `main-d09d67f` / `latest` → `sha256:a409244bf43a7f2e921d86f4977eeced462942d589b66d57982f1ed8eb930a9f`
+
+**文档同步**：
+
+1. `CHANGELOG.md`：新增 `v1.15.1` 段并补充 CI/镜像一致性验证结果。
+2. `docs/DEVLOG.md`：新增 `v1.15.1` 版本记录，补齐 tag 构建与双仓 digest 核对信息。
+3. `README.md` / `README.en.md`：稳定版本更新为 `v1.15.1`。
+
+**结论**：
+
+1. `main` 发布链路已恢复，当前 `v1.15.1` 对应的 release / CI / 镜像均闭环。
+2. 双仓（GHCR + Docker Hub）关键标签一致性正常。
+
 ### 0xg. 设置页 i18n 缺失补齐（本次会话）
 
 **时间**：2026-04-12

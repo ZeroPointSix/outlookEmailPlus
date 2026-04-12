@@ -33,6 +33,12 @@ All notable changes to OutlookMail Plus are documented in this file.
   - `Code Quality` ✅
   - `Python Tests` ✅
   - `SonarCloud Scan` ✅
+- `v1.15.1` tag 发布链路验证：
+  - `Create GitHub Release` ✅
+  - `Build and Push Docker Image`（tag）✅
+- 仓库镜像一致性核对（GHCR / Docker Hub）：
+  - `v1.15.1` 与 `v1.15.1-d09d67f` digest 一致：`sha256:4b1985478bb0f2c0fdf1ec6ef705ee62858919a886c7a8c79acd880ac45dd964`
+  - `main` / `main-d09d67f` / `latest` digest 一致：`sha256:a409244bf43a7f2e921d86f4977eeced462942d589b66d57982f1ed8eb930a9f`
 
 ## [v1.15.0] - 2026-04-12
 

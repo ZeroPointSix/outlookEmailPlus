@@ -28,6 +28,12 @@
   - `Code Quality` ✅
   - `Python Tests` ✅
   - `SonarCloud Scan` ✅
+- `v1.15.1` tag 流水线验证通过：
+  - `Create GitHub Release` ✅
+  - `Build and Push Docker Image`（tag）✅
+- 镜像仓库一致性核对（GHCR + Docker Hub）通过：
+  - 版本标签：`v1.15.1` / `v1.15.1-d09d67f` → `sha256:4b1985478bb0f2c0fdf1ec6ef705ee62858919a886c7a8c79acd880ac45dd964`
+  - 主线标签：`main` / `main-d09d67f` / `latest` → `sha256:a409244bf43a7f2e921d86f4977eeced462942d589b66d57982f1ed8eb930a9f`
 
 ## v1.15.0 - 验证码提取链路优化与设置页 i18n 补齐
 
