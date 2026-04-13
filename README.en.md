@@ -194,6 +194,14 @@ Notes:
 3. Switch "Update Method" to "Docker API" in Settings
 4. ⚠️ Please fully understand the security implications before enabling
 
+#### ClawCloud / Reverse Proxy Deployment Notes
+
+- Point health checks explicitly to `GET /healthz`. Do not rely on `/`, `/login`, or a 302 redirect chain; in this project, `/` is login-protected and redirects to `/login`
+- `no healthy upstream` means the reverse proxy currently has no healthy backend. It does **not** automatically mean the app code crashed; after an update, check the **new container startup logs** and platform events first
+- If platform events show `Stopping container`, `FailedKillPod`, or `KillPodSandbox DeadlineExceeded`, the incident includes a platform-side Pod stop/reclaim problem and should not be diagnosed from app logs alone
+- This project uses SQLite with a persistent volume by default. During updates, keep it as a **single-instance** deployment; if old and new instances touch the same database file briefly, startup migrations or file-lock waits may cause health-check timeouts
+- Treat `TEMP_EMAIL_UPSTREAM_READ_FAILED` separately from `no healthy upstream`: the former is a temp-mail upstream read failure, while the latter means the ingress layer has no healthy app instance behind it
+
 ### Local Run
 
 ```bash

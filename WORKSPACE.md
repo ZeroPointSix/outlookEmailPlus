@@ -8,6 +8,86 @@
 
 ### 操作记录
 
+#### 44. main 对齐 alias 合并结果并完成分批全量 unittest 验证
+
+**时间**：2026-04-13
+
+**本次操作**：
+
+1. 分支与合并状态对齐
+   - 在 `main` 先执行本地文档改动暂存：`git stash push -u -m "pre-alias-merge-main-docs"`
+   - `git pull --ff-only origin main` 后，`main` 快进到 `67f3ea4`，该提交已包含 PR #41（`alias-email-merge`）的 merge commit
+   - 结论：邮箱别名功能代码已在 `main` 分支可见并可测试
+
+2. 全量测试执行（受 300000ms 单命令上限，改为分批）
+   - `python -m unittest discover -s tests -v -p "test_[a-f]*.py"` → `Ran 346 tests in 178.563s`，`OK`
+   - `python -m unittest discover -s tests -v -p "test_[g-l]*.py"` → `Ran 89 tests in 11.477s`，`OK`
+   - `python -m unittest discover -s tests -v -p "test_[m-r]*.py"` → `Ran 226 tests in 36.681s`，`OK (skipped=7)`
+   - `python -m unittest discover -s tests -v -p "test_[s-z]*.py"` → `Ran 472 tests in 83.833s`，`OK`
+   - 汇总：`Ran 1133 tests`，`OK`，`skipped=7`
+
+3. 文档恢复与冲突处理
+   - 按用户确认的方案 B 恢复 `main` 的 3 个无关文档改动（`README.md`、`README.en.md`、`WORKSPACE.md`）
+   - `git stash pop` 时 `WORKSPACE.md` 发生冲突，已改为手工合并，保留：
+     - ClawCloud 排障记录（43/42）
+     - 邮箱别名实现记录（41）
+     - 本次 main 合并与测试记录（44）
+
+4. 当前结论
+   - 邮箱别名能力已在 `main`；全量 unittest 分批回归通过
+   - 当前工作区仅剩文档变更，待统一提交与推送
+
+---
+
+#### 43. 联网比对公开案例并收敛平台侧共性
+
+**时间**：2026-04-13
+
+**本次操作**：
+
+1. 联网检索方向
+   - 检索 `KillPodSandbox` / `FailedKillPod` / `DeadlineExceeded`
+   - 检索 Caddy / 反向代理健康检查与 upstream 全部 unhealthy 的公开案例
+
+2. 命中案例
+   - Kubernetes issue `kubernetes/kubernetes#126681`
+   - Caddy issue `caddyserver/caddy#7544`
+   - Caddy issue `caddyserver/caddy#7524`
+
+3. 共性结论
+   - `Stopping container` + `KillPodSandbox DeadlineExceeded` 在公网案例中常与 Pod 终止异常、容器运行时状态不一致、探针持续失败同时出现
+   - 即使健康端点人工访问正常，反向代理的 active health check 仍可能把所有 upstream 长时间判为 unhealthy
+   - 因此本次 `no healthy upstream` 不能简单理解为应用代码崩溃，更符合“平台侧容器生命周期异常 + 健康实例判定失败”的组合问题
+
+4. 对当前案例的影响
+   - 继续优先从 ClawCloud 平台事件、实例切换、健康检查路径与策略入手
+   - 不把临时邮箱上游 502 作为入口层故障的直接根因
+
+---
+
+#### 42. 收敛 ClawCloud 故障处理方向并补记执行约束
+
+**时间**：2026-04-13
+
+**本次操作**：
+
+1. 新增平台侧证据
+   - 用户补充 ClawCloud / 容器事件：`Successfully assigned ...`
+   - 用户补充容器停止事件：`Stopping container mail`
+   - 用户补充回收异常：`FailedKillPod`、`KillPodSandbox DeadlineExceeded`
+
+2. 解决方向收敛
+   - 当前优先判断为平台侧容器生命周期 / 健康实例切换问题
+   - 后续解决重点放在健康检查路径、单实例更新策略、以及新实例启动日志
+   - 不再把 `TEMP_EMAIL_UPSTREAM_READ_FAILED` 作为 `no healthy upstream` 的直接根因
+
+3. 执行约束补记
+   - 后续如需启动长时间命令，仅使用新进程后台启动（如 `Start-Process` / 独立进程）
+   - 不再使用前台长命令占住执行链路
+   - 继续通过 MCP `寸止` 输出会话信息，不在终端直接对话
+
+---
+
 #### 41. 邮箱别名（+ 子地址）自动识别与无缝迁移测试补齐
 
 **时间**：2026-04-13

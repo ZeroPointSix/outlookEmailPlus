@@ -202,6 +202,14 @@ networks:
 3. 在设置页选择"更新方式"为"Docker API"
 4. ⚠️ 请充分了解安全风险后再启用
 
+#### ClawCloud / 反向代理部署注意事项
+
+- 健康检查请显式使用 `GET /healthz`，不要依赖 `/`、`/login` 或 302 跳转链路；本项目首页 `/` 受登录保护，会重定向到 `/login`
+- `no healthy upstream` 表示反向代理当前没有健康后端，不等于应用一定是“代码崩溃”；更新后若持续出现，优先查看**新容器启动日志**与平台事件
+- 若平台事件出现 `Stopping container`、`FailedKillPod`、`KillPodSandbox DeadlineExceeded`，说明故障至少包含平台侧 Pod 停止/回收异常，不能只根据应用日志下结论
+- 本项目默认使用 SQLite + 持久卷，更新时建议保持**单实例**；若新旧实例短时并发访问同一数据库文件，启动阶段的迁移或文件锁等待可能导致健康检查超时
+- `TEMP_EMAIL_UPSTREAM_READ_FAILED` 与 `no healthy upstream` 需要分开理解：前者是临时邮箱上游读取失败，后者是入口层前面没有健康应用实例
+
 ### 本地运行
 
 ```bash
