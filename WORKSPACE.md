@@ -38,12 +38,12 @@
    - Git 历史中无 "India" / "outlook.in" 相关提交
 
 **分支状态**：
-- `main`：领先 origin/main 3 commits（未推送）
+- `main`：领先 origin/main 4 commits（未推送）
 - `dev`：已推送到 origin ✅
 - `Buggithubissue`：领先 origin 1 commit
 
 **本地服务**：
-- dev 工作区 PID 46336，`http://127.0.0.1:5000/login` HTTP 200
+- main 分支 PID 52780，`http://127.0.0.1:5000/login` HTTP 200 ✅（用户已测试确认正常）
 
 ---
 
