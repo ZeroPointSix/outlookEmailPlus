@@ -18,19 +18,16 @@ class DbSchemaV22PoolProjectReuseTests(unittest.TestCase):
     def _seed_legacy_v21_db(self, db_path: Path) -> None:
         conn = sqlite3.connect(str(db_path))
         try:
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
                     value TEXT,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-                """
-            )
+                """)
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('db_schema_version', '21')")
 
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS accounts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     email TEXT UNIQUE NOT NULL,
@@ -45,10 +42,8 @@ class DbSchemaV22PoolProjectReuseTests(unittest.TestCase):
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-                """
-            )
-            conn.execute(
-                """
+                """)
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS account_project_usage (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     account_id INTEGER NOT NULL,
@@ -58,26 +53,21 @@ class DbSchemaV22PoolProjectReuseTests(unittest.TestCase):
                     last_claimed_at TEXT NOT NULL,
                     UNIQUE(account_id, consumer_key, project_key)
                 )
-                """
-            )
+                """)
 
-            conn.execute(
-                """
+            conn.execute("""
                 INSERT INTO accounts (
                     email, client_id, refresh_token, status, account_type, provider, group_id, pool_status, email_domain
                 ) VALUES
                     ('legacy_outlook@example.com', 'cid', 'rt', 'active', 'outlook', 'outlook', 1, 'used', 'example.com'),
                     ('legacy_cf@example.com', 'cid', 'rt', 'active', 'temp_mail', 'cloudflare_temp_mail', 1, 'used', 'example.com')
-                """
-            )
-            conn.execute(
-                """
+                """)
+            conn.execute("""
                 INSERT INTO account_project_usage (
                     account_id, consumer_key, project_key, first_claimed_at, last_claimed_at
                 )
                 VALUES (1, 'legacy_bot', 'legacy_project', '2026-04-15T10:00:00Z', '2026-04-15T10:05:00Z')
-                """
-            )
+                """)
             conn.commit()
         finally:
             conn.close()
@@ -127,9 +117,7 @@ class DbSchemaV22PoolProjectReuseTests(unittest.TestCase):
 
             conn = sqlite3.connect(str(db_path))
             try:
-                row = conn.execute(
-                    "SELECT pool_status FROM accounts WHERE email = 'legacy_outlook@example.com'"
-                ).fetchone()
+                row = conn.execute("SELECT pool_status FROM accounts WHERE email = 'legacy_outlook@example.com'").fetchone()
                 self.assertIsNotNone(row)
                 self.assertEqual(row[0], "available")
             finally:
@@ -146,9 +134,7 @@ class DbSchemaV22PoolProjectReuseTests(unittest.TestCase):
 
             conn = sqlite3.connect(str(db_path))
             try:
-                row = conn.execute(
-                    "SELECT pool_status FROM accounts WHERE email = 'legacy_cf@example.com'"
-                ).fetchone()
+                row = conn.execute("SELECT pool_status FROM accounts WHERE email = 'legacy_cf@example.com'").fetchone()
                 self.assertIsNotNone(row)
                 self.assertEqual(row[0], "used")
             finally:
@@ -165,13 +151,11 @@ class DbSchemaV22PoolProjectReuseTests(unittest.TestCase):
 
             conn = sqlite3.connect(str(db_path))
             try:
-                row = conn.execute(
-                    """
+                row = conn.execute("""
                     SELECT first_success_at, last_success_at, success_count
                     FROM account_project_usage
                     WHERE consumer_key = 'legacy_bot' AND project_key = 'legacy_project'
-                    """
-                ).fetchone()
+                    """).fetchone()
                 self.assertIsNotNone(row)
                 self.assertIsNone(row[0])
                 self.assertIsNone(row[1])

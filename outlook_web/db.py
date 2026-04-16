@@ -1102,22 +1102,18 @@ def init_db(database_path: Optional[str] = None):
         if "last_success_at" not in project_usage_columns_v22:
             cursor.execute("ALTER TABLE account_project_usage ADD COLUMN last_success_at TEXT DEFAULT NULL")
         if "success_count" not in project_usage_columns_v22:
-            cursor.execute(
-                "ALTER TABLE account_project_usage ADD COLUMN success_count INTEGER NOT NULL DEFAULT 0"
-            )
+            cursor.execute("ALTER TABLE account_project_usage ADD COLUMN success_count INTEGER NOT NULL DEFAULT 0")
 
         # 一次性数据迁移：历史 used 长期邮箱回 available，释放被旧语义"锁死"的邮箱资产
         # 临时邮箱（cloudflare_temp_mail / temp_mail）不参与迁移，因其生命周期由 CF 管理
         if current_version < 22:
-            cursor.execute(
-                """
+            cursor.execute("""
                 UPDATE accounts
                 SET pool_status = 'available'
                 WHERE pool_status = 'used'
                   AND COALESCE(provider, '') != 'cloudflare_temp_mail'
                   AND COALESCE(account_type, '') != 'temp_mail'
-                """
-            )
+                """)
 
         # 迁移现有明文数据为加密数据
         migrate_sensitive_data(conn)

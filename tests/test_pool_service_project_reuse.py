@@ -146,15 +146,13 @@ class PoolServiceProjectReuseTests(unittest.TestCase):
             from outlook_web.services.pool import PoolServiceError
 
             db = get_db()
-            db.execute(
-                """
+            db.execute("""
                 INSERT INTO accounts (
                     email, client_id, refresh_token, status,
                     account_type, provider, group_id, pool_status, email_domain
                 )
                 VALUES ('svc-blank@example.com', 'cid', 'rt', 'active', 'outlook', 'outlook', 1, 'available', 'example.com')
-                """
-            )
+                """)
             db.commit()
 
             account = pool_service.claim_random(
