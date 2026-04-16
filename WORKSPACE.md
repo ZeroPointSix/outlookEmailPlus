@@ -8,6 +8,37 @@
 
 ### 操作记录
 
+#### 121. 本地 Docker 构建启动排查：Compose 失败根因确认 + 本地镜像健康验证
+
+**时间**：2026-04-16
+
+**本次操作**：
+
+1. Compose 现场排查
+   - 当前 `.env` 中存在：`IMAGE_TAG=hotupdate-test`
+   - 因此直接执行 `docker compose up` 时，实际使用的是 `ghcr.io/zeropointsix/outlook-email-plus:hotupdate-test`
+   - 该容器启动后持续 `Restarting (3)`，`/healthz` 无法正常对外服务
+
+2. Compose 失败根因
+   - 通过 `docker logs outlook-email-plus` 确认报错：
+     - `sqlite3.DatabaseError: database disk image is malformed`
+   - 直接原因：Compose 默认挂载 `./data:/app/data`，容器读取到了当前本地损坏的数据库文件
+
+3. 本地构建镜像验证
+   - 本地构建镜像：`ghcr.io/zeropointsix/outlook-email-plus:local-main-20260416`
+   - 为避免受损坏数据库影响，使用隔离数据目录与隔离运行时目录单独启动：
+     - 容器名：`outlook-email-plus-local-main`
+     - 端口：`5002 -> 5000`
+   - 健康检查结果：
+     - `GET http://127.0.0.1:5002/healthz` → `200`
+     - 返回：`{\"boot_id\":\"1776334299176-7\",\"status\":\"ok\",\"version\":\"1.17.0\"}`
+   - 当前状态：容器 `healthy`
+
+4. 现场结论
+   - 问题不在本地 build 产物本身
+   - 默认 Compose 启动失败的根因是：`.env` 固定 tag + 挂载了损坏的本地数据库
+   - 当前可用于本地验收的 Docker 实例地址：`http://127.0.0.1:5002`
+
 #### 120. 本地 main 合并完成并通过全量复验
 
 **时间**：2026-04-16
