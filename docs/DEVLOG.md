@@ -1,5 +1,35 @@
 # DEVLOG
 
+## v1.18.0 - 邮箱池项目维度成功复用
+
+发布日期：2026-04-16
+
+### 新增功能
+
+- 新增长期邮箱“项目维度成功复用”能力：在显式传入 `project_key`、`caller_id`、`task_id` 的路径下，`claim-complete(result=success)` 后账号立即回到 `available`，支持跨项目继续领取。
+- 新增项目成功事实字段与 claim 上下文记录：`accounts.claimed_project_key`、`account_project_usage.first_success_at / last_success_at / success_count`，用于把复用判定从 claim 痕迹切换为 success 事实。
+- 新增对应的专项测试文件与回归覆盖，围绕 Schema v22、Repository 生命周期、Service 上下文传递和 flow suite 补齐目标语义验证。
+
+### 修复
+
+- 修复长期邮箱 success 后被全局打成 `used`、导致其他项目无法复用的问题。
+- 修复 `claim-complete` 阶段缺失项目上下文的问题，使 complete 时可以准确判断是否启用项目复用语义。
+- 修复 legacy v21 迁移过程中缺少 `password` 等列时的兼容性问题。
+- 修复历史旧测试对 `release()` 语义的错误假设，避免继续要求删除 `account_project_usage` 行。
+
+### 重要变更
+
+- 版本号从 `1.17.0` 升级至 `1.18.0`。
+- 数据库 schema 升级至 `v22`，并引入长期邮箱 `used -> available` 的一次性历史迁移逻辑。
+- `README.md`、`README.en.md`、`tests/test_version_update.py` 已同步到 `v1.18.0`。
+- 当前仓库仍不是 Tauri 工程，不包含 `Cargo.toml`、`package.json`、MSI 或 NSIS 构建链路；本次正式产物继续沿用 Docker 镜像 tar 与源码 zip。
+
+### 测试/验证
+
+- 目标专项回归：`python -m unittest tests.test_db_schema_v22_pool_project_reuse tests.test_pool_repository_project_reuse tests.test_pool_service_project_reuse tests.test_pool_flow_suite tests.test_pool -v` → `Ran 78 tests`，`OK`
+- 全量回归：`python -m unittest discover -v` → `Ran 1187 tests`，`OK (skipped=7)`
+- Docker 本地构建启动验证：本地构建镜像在隔离数据目录下可健康启动，`GET /healthz` 返回 `200`
+
 ## v1.17.0 - 通用 Webhook 通知与 API Key 易用性增强
 
 发布日期：2026-04-15

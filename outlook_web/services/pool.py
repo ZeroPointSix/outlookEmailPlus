@@ -129,6 +129,13 @@ def _is_project_reuse_eligible_account(
     account_type: Optional[str],
     claimed_project_key: Optional[str],
 ) -> bool:
+    """判定账号是否适用项目维度成功复用路径 (FD §2.1)。
+
+    三重门控缺一不可：
+    1. claimed_project_key 非空 — 必须在 claim 时显式传入
+    2. 非 cloudflare_temp_mail — CF 临时邮箱不在本期覆盖范围
+    3. 非 temp_mail — 一次性临时邮箱不在本期覆盖范围
+    """
     if not claimed_project_key:
         return False
     if (provider or "").strip() == "cloudflare_temp_mail":
@@ -307,6 +314,8 @@ def complete_claim(
                 http_status=403,
             )
 
+        # 从 claim 上下文读取 claimed_project_key，而非依赖 API 入参
+        # 保证 claim-complete 即使未传 project_key 也能正确判定复用路径（TDD §4.1 N-03）
         claimed_project_key = str(row["claimed_project_key"] or "").strip() or None
         enable_project_reuse = _is_project_reuse_eligible_account(
             provider=row["provider"],

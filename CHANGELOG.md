@@ -4,6 +4,40 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v1.18.0] - 2026-04-16
+
+### 新增功能 / New Features
+
+- **邮箱池项目维度成功复用**：长期邮箱在显式携带 `project_key`、`caller_id`、`task_id` 的路径下，完成 `claim-complete(result=success)` 后不再全局退出候选池，而是支持跨项目立即复用。
+- **项目成功事实沉淀**：新增 claim 上下文与项目成功记录字段，成功复用的判断从“claim 痕迹”升级为“项目 success 事实”，同项目成功后阻断、跨项目成功后立即可复用。
+- **测试覆盖扩展**：新增 Schema / Repository / Service 三层专项测试，并补强 flow suite 与旧骨架回归，覆盖迁移、成功计数、同项目/跨项目语义与 token 校验。
+
+### 修复 / Bug Fixes
+
+- **success 生命周期修复**：修复长期邮箱在 success 后被直接打成全局 `used`、导致其他项目无法继续领取的问题。
+- **claim 上下文缺失修复**：修复 `claim-complete` 阶段无法得知 claim 所属项目、从而无法判断是否应进入项目复用语义的问题。
+- **遗留迁移兼容修复**：修复 legacy v21 测试库缺列时 `migrate_sensitive_data()` 直接读取失败的问题，迁移阶段现可按实际列集合兼容处理。
+- **旧回归口径修复**：收口历史测试中“release 必须删除 `account_project_usage` 行”的旧假设，改为与当前 success 语义一致。
+
+### 重要变更 / Important Changes
+
+- **版本升级**：`outlook_web.__version__` 从 `1.17.0` 升级为 `1.18.0`。
+- **数据库升级**：数据库 schema 升级到 `v22`，新增 `accounts.claimed_project_key` 与 `account_project_usage.first_success_at / last_success_at / success_count`。
+- **迁移边界**：历史长期邮箱 `used -> available` 只在升级到 `v22` 时执行；`cloudflare_temp_mail` / `temp_mail` 不进入该迁移语义，也不伪造历史 success 数据。
+- **发布产物口径**：当前仓库仍不是 Tauri 工程，不包含 `Cargo.toml`、`package.json`、MSI 或 NSIS 构建链路；本次发布继续沿用 Docker 镜像 tar 与源码 zip 作为正式产物。
+
+### 测试/验证 / Testing & Verification
+
+- 目标专项回归：
+  - `python -m unittest tests.test_db_schema_v22_pool_project_reuse tests.test_pool_repository_project_reuse tests.test_pool_service_project_reuse tests.test_pool_flow_suite tests.test_pool -v`
+  - 结果：`Ran 78 tests`，`OK`
+- 全量回归（本地 `main`）：
+  - `python -m unittest discover -v`
+  - 结果：`Ran 1187 tests`，`OK (skipped=7)`
+- Docker 运行态验证：
+  - 默认 Compose 路径因挂载损坏的本地数据库而启动失败，根因已确认
+  - 本地构建镜像使用隔离数据目录启动后，`GET /healthz` 返回 `200`
+
 ## [v1.17.0] - 2026-04-15
 
 ### 新功能 / New Features

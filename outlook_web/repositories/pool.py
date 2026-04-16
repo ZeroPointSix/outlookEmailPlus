@@ -9,6 +9,17 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# 邮箱池 Repository 层 — 邮箱领取/释放/完成的核心原子操作
+#
+# 业务背景:
+#   - PRD: docs/PRD/2026-04-16-邮箱池项目维度成功复用PRD.md (项目维度成功复用)
+#   - PRD: docs/PRD/2026-04-09-CF临时邮箱接入邮箱池PRD.md (CF 临时邮箱)
+#
+# 设计决策:
+#   - FD: docs/FD/2026-04-16-邮箱池项目维度成功复用FD.md
+#   - 同 caller+project 只防 success，不防失败/release/expire（FD §2.2）
+#   - success_count > 0 是 claim 排除的唯一门控（TDD §4.1 N-02）
+
 RESULT_TO_POOL_STATUS: Dict[str, str] = {
     "success": "used",
     "verification_timeout": "cooldown",
@@ -218,7 +229,9 @@ def claim_atomic(
         sql += " AND a.email_domain = ? COLLATE NOCASE"
         params.append(email_domain.strip().lower())
 
-    # PR#27: project_key 防止同项目复用已用账号
+    # PR#27 + v22 语义变更: project_key 防同项目复用
+    # v22 前：NOT EXISTS 即排除（含 claim trace），导致 release 后需删 usage 行（Bug #28）
+    # v22 后：只排除 success_count > 0 的记录，release/expire 产生的 trace 不阻断再次领取
     if project_key and caller_id:
         sql += """
             AND NOT EXISTS (
@@ -359,6 +372,13 @@ def release(
     task_id: str,
     reason: Optional[str],
 ) -> None:
+    """释放已领取的账号，恢复为 available。
+
+    v22 语义变更 (FD §2.2): release 不再删除 account_project_usage 记录。
+    旧逻辑（Bug #28 fix）通过 DELETE 防止同 project 二次 claim 被排除，
+    但 v22 改用 success_count > 0 门控后，未成功的 usage 行天然不会阻断，无需清理。
+    仅清除 accounts.claimed_project_key，让 complete 阶段无法走复用路径。
+    """
     now_str = _utcnow().isoformat() + "Z"
     conn.execute("BEGIN IMMEDIATE")
     conn.execute(
@@ -398,6 +418,16 @@ def complete(
     claimed_project_key: Optional[str] = None,
     enable_project_reuse: Optional[bool] = None,
 ) -> str:
+    """完成领取流程，根据结果更新池状态。
+
+    v22 新增项目复用路径 (FD §2.3):
+    - 当 enable_project_reuse=True 且 claimed_project_key 非空且 result='success' 时，
+      pool_status 回 'available'（而非旧语义的 'used'），同时写入/更新 success 记录。
+    - 旧路径（无 project_key 或非长期邮箱）行为不变：success → used。
+    - enable_project_reuse 由 Service 层根据 _is_project_reuse_eligible_account 判定后传入。
+    """
+    # 读取 claim 时写入的 claimed_project_key 作为复用路径的自动判定依据
+    # 即使 API 层未传 project_key，只要 claim 时带了就能正确走复用路径（TDD §4.1 N-03）
     current_row = conn.execute(
         "SELECT claimed_project_key FROM accounts WHERE id = ?",
         (account_id,),
@@ -446,6 +476,9 @@ def complete(
         ),
     )
     if reuse_success:
+        # 成功复用路径：写入/更新 project 维度的 success 统计
+        # ON CONFLICT DO UPDATE 实现幂等：重复 success 不会产生重复行
+        # COALESCE(first_success_at) 保留首次成功时间戳，仅更新 last_success_at 和 success_count
         conn.execute(
             """
             INSERT INTO account_project_usage (

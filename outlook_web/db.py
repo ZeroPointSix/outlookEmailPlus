@@ -1086,12 +1086,15 @@ def init_db(database_path: Optional[str] = None):
         if "preferred_verification_channel" not in accounts_columns_v21:
             cursor.execute("ALTER TABLE accounts ADD COLUMN preferred_verification_channel TEXT")
 
-        # v22: 邮箱池项目维度成功复用
+        # v22: 邮箱池项目维度成功复用 (FD: docs/FD/2026-04-16-邮箱池项目维度成功复用FD.md)
+        # 核心语义：长期邮箱 success 后回 available 而非 used，同 caller+project 只防成功不防失败
+        # claimed_project_key：claim 时写入、complete/release/expire 时清除，用于 complete 阶段自动判定复用路径
         cursor.execute("PRAGMA table_info(accounts)")
         accounts_columns_v22 = [col[1] for col in cursor.fetchall()]
         if "claimed_project_key" not in accounts_columns_v22:
             cursor.execute("ALTER TABLE accounts ADD COLUMN claimed_project_key TEXT DEFAULT NULL")
 
+        # success_count > 0 是 claim_atomic 排除同项目复用的唯一门控条件（TDD §4.1 N-02）
         cursor.execute("PRAGMA table_info(account_project_usage)")
         project_usage_columns_v22 = [col[1] for col in cursor.fetchall()]
         if "first_success_at" not in project_usage_columns_v22:
@@ -1103,6 +1106,8 @@ def init_db(database_path: Optional[str] = None):
                 "ALTER TABLE account_project_usage ADD COLUMN success_count INTEGER NOT NULL DEFAULT 0"
             )
 
+        # 一次性数据迁移：历史 used 长期邮箱回 available，释放被旧语义"锁死"的邮箱资产
+        # 临时邮箱（cloudflare_temp_mail / temp_mail）不参与迁移，因其生命周期由 CF 管理
         if current_version < 22:
             cursor.execute(
                 """
@@ -1205,14 +1210,19 @@ def init_db(database_path: Optional[str] = None):
 
 
 def migrate_sensitive_data(conn: sqlite3.Connection):
-    """迁移现有明文敏感数据为加密数据"""
+    """迁移现有明文敏感数据为加密数据。
+
+    v22 改为通过 PRAGMA table_info 动态检测列是否存在，
+    避免在早期 schema（如 v21 seed 数据中没有 password/refresh_token 列）上执行 SELECT 时报错。
+    列名来自 SQLite 内置 PRAGMA 返回值，不存在 SQL 注入风险。
+    """
     cursor = conn.cursor()
     account_columns = {row[1] for row in cursor.execute("PRAGMA table_info(accounts)").fetchall()}
     has_password = "password" in account_columns
     has_refresh_token = "refresh_token" in account_columns
     has_imap_password = "imap_password" in account_columns
 
-    # 获取所有账号
+    # 动态构建 SELECT，缺失列用 NULL AS 占位保持列数一致
     select_fields = ["id"]
     select_fields.append("password" if has_password else "NULL AS password")
     select_fields.append("refresh_token" if has_refresh_token else "NULL AS refresh_token")
