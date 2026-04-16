@@ -8,6 +8,28 @@
 
 ### 操作记录
 
+#### 120. 本地 main 合并完成并通过全量复验
+
+**时间**：2026-04-16
+
+**本次操作**：
+
+1. 本地合并结果
+   - 已在本地 `main` worktree 完成 `Buggithubissue -> main` 合并
+   - 本轮仅做本地合并，未执行 push
+   - merge commit：`c238b21`
+
+2. 全量复验
+   - 执行：`python -m unittest discover -v`
+   - 方式：使用 `Start-Process` 后台独立进程启动
+   - 结果：`Ran 1187 tests in 536.823s`，`OK (skipped=7)`
+
+3. 文档同步
+   - 更新：`docs/TODO/2026-04-16-邮箱池项目维度成功复用TODO.md`
+   - 更新：`docs/TDD/2026-04-16-邮箱池项目维度成功复用TDD.md`
+   - 更新：`WORKSPACE.md`
+   - 已将“本地 main 合并后再次全量复验通过”的状态回填
+
 #### 119. 本地合并 Buggithubissue 到 main 并准备主线复验
 
 **时间**：2026-04-16
