@@ -8,6 +8,51 @@
 
 ### 操作记录
 
+#### 155. 发布执行（v1.19.0）：版本同步、分批回归、构建产物完成
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 发布口径确认
+   - 按仓库 `RELEASE.md` 执行 Python + Docker 发布流程（非 Tauri 流程）
+   - 目标版本：`v1.19.0`
+
+2. 版本与发布文档同步
+   - 更新：`outlook_web/__init__.py`（`1.18.0 -> 1.19.0`）
+   - 更新：`tests/test_version_update.py`（版本断言与展示）
+   - 更新：`README.md`、`README.en.md`（稳定版本号）
+   - 更新：`CHANGELOG.md`（新增 `v1.19.0` 章节）
+   - 更新：`docs/DEVLOG.md`（新增 `v1.19.0` 记录）
+   - 生成：`dist/release-notes-v1.19.0.md`
+
+3. 测试验证（失败即停止策略，本轮均通过）
+   - 版本回归：`python -m unittest tests.test_version_update -v`
+     - 结果：`Ran 51 tests in 9.689s`，`OK`
+   - 全量分批回归（每批 timeout=300000ms）：
+     - Batch1：`Ran 303 tests in 146.333s`，`OK`
+     - Batch2：`Ran 266 tests in 58.760s`，`OK`
+     - Batch3：`Ran 273 tests in 44.991s`，`OK (skipped=7)`
+     - Batch4：`Ran 352 tests in 83.978s`，`OK`
+
+4. 构建与产物
+   - 镜像构建：`docker build -t outlook-email-plus:v1.19.0 .` 成功
+   - 镜像 ID：`sha256:bc56878addf59549a2871319039f8d192bcb0b487578c274cfd3fe051983883b`
+   - 导出产物：
+     - `dist/outlook-email-plus-v1.19.0-docker.tar`
+       - size=`205110784`
+       - sha256=`2192206c35b53baffb30d669f01f3712682518a94c07057e5efc716d5d296410`
+     - `dist/outlookEmailPlus-v1.19.0-src.zip`
+       - size=`4153423`
+       - sha256=`c6e03de9b5e6c36f980544464bcfea152bd1e28c4557cc097ae99333bbea6778`
+
+5. 主线同步
+   - 已提交：`8f578da release: prepare v1.19.0 refresh guidance update`
+   - 已推送：`git push origin main`（`772d540..8f578da`）
+
+6. 当前状态
+   - 版本准备、测试、构建均已完成，下一步为打 tag 并创建 GitHub Release。
+
 #### 154. 人工验收结论回填：本轮本地 Docker 验收通过
 
 **时间**：2026-04-17
