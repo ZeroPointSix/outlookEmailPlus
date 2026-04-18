@@ -462,6 +462,7 @@ def update_account_credentials(account_id: int, **fields) -> bool:
         "account_type",
         "provider",
         "group_id",
+        "pool_status",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:

@@ -332,6 +332,30 @@ Notes:
 - the old anonymous `/api/pool/*` endpoints have been removed
 - in production, controlled public mode with allowlists is recommended
 
+## Browser Extension
+
+The `browser-extension/` directory contains a companion Chrome / Edge extension (Manifest V3). It provides a one-stop panel for the full claim → verification → complete/release flow without switching tabs.
+
+Full usage guide: [browser-extension/README.md](./browser-extension/README.md)
+
+### Project Key
+
+The project key enables **multi-tenant isolation** in the mail pool — different projects' claims are kept separate. Combined with `caller_id + task_id`, it also prevents duplicate assignments within the same project.
+
+- **Omit**: claim from the shared public pool
+- **Set**: claim only from that project's mailboxes; after a `success` complete, the mailbox returns to `available` immediately and can be reused by other projects
+
+### Complete vs Release
+
+Both operations end the current task; the difference is what happens to the mailbox:
+
+| Operation | Mailbox status | When to use |
+|-----------|---------------|-------------|
+| **Release** | → `available` (claimable again immediately) | Registration failed, wrong mailbox, test return |
+| **Complete** | → `used` (marked used, not re-assigned by default) | Registration succeeded, verification code consumed |
+
+> When project reuse is enabled, `complete(result=success)` with an explicit `project_key` returns the mailbox directly to `available` for cross-project reuse.
+
 ## Demo Site Recommendation
 
 If you want to expose a demo site to other users, at minimum use:

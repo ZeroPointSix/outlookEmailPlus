@@ -343,6 +343,30 @@ EMAIL_NOTIFICATION_SMTP_TIMEOUT=15
 - 旧匿名 `/api/pool/*` 已移除
 - 生产环境建议开启受控公网模式并配置白名单
 
+## 浏览器扩展
+
+`browser-extension/` 目录包含配套的 Chrome / Edge 扩展（Manifest V3），提供「申领邮箱 → 获取验证码/链接 → 完成/释放」一站式快捷面板，无需切换标签页。
+
+详细说明见 [browser-extension/README.md](./browser-extension/README.md)。
+
+### 项目 Key（Project Key）
+
+项目 Key 用于**邮箱池的多租户隔离**：不同业务/项目的申领互不干扰，配合 `caller_id + task_id` 还能在同项目内防止重复分配。
+
+- **不填**：从公共邮箱池随机申领
+- **填写**：只在该项目的邮箱中申领；`success` 完成后邮箱立即回到 `available`，可被其他项目复用
+
+### 完成 vs 释放
+
+完成和释放都会结束当前任务，区别在于邮箱的后续状态：
+
+| 操作 | 邮箱状态 | 适用场景 |
+|------|---------|---------|
+| **释放（Release）** | → `available`（立即可再申领） | 注册失败、误领、测试归还 |
+| **完成（Complete）** | → `used`（已用，默认不再分配） | 注册成功、验证码已使用 |
+
+> 启用项目复用时，`complete(result=success)` + 显式 `project_key` 路径会直接回到 `available`，支持跨项目立即复用。
+
 ## 演示站点建议
 
 如果你要公开一个演示站点给其他人访问，建议至少这样配置：

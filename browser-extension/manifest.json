@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "邮箱池快捷操作",
+  "version": "0.1.0",
+  "description": "OutlookMail Plus 伴生扩展 — 快捷申领邮箱、获取验证码",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "邮箱池"
+  },
+  "permissions": ["storage", "tabs"],
+  "optional_host_permissions": ["<all_urls>"],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "打开邮箱池快捷操作面板"
+    }
+  }
+}

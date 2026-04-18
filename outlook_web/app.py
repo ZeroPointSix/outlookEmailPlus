@@ -160,6 +160,24 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
 
             app.register_blueprint(token_tool.create_blueprint())
 
+        # 浏览器扩展 CORS 支持（仅对 /api/external/* 路径）
+        # chrome-extension:// 前缀不可被普通网页伪造，允许此来源不扩大安全边界
+        import re as _re
+
+        from flask_cors import CORS as _CORS
+
+        _CORS(
+            app,
+            resources={
+                r"/api/external/*": {
+                    "origins": [_re.compile(r"^chrome-extension://.*$")],
+                    "methods": ["GET", "POST", "OPTIONS"],
+                    "allow_headers": ["Content-Type", "X-API-Key"],
+                    "supports_credentials": False,
+                }
+            },
+        )
+
         # 打印初始化信息
         print("=" * 60)
         print("Outlook 邮件 Web 应用已初始化")

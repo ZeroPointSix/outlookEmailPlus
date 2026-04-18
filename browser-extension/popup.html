@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>邮箱池助手</title>
+  <style>
+    :root {
+      --clr-primary: #B85C38;
+      --clr-primary-dark: #8E3E22;
+      --clr-primary-light: #D4795A;
+      --clr-accent: #C8963E;
+      --clr-jade: #3A7D44;
+      --clr-jade-light: #5AA35F;
+      --clr-jade-dark: #2D6035;
+      --clr-danger: #C0392B;
+      --clr-success: #27AE60;
+      --clr-warn: #E67E22;
+      --bg: #F5EDE0;
+      --bg-card: #FDFAF5;
+      --bg-sidebar: #2C1A0E;
+      --bg-hover: rgba(184,92,56,0.06);
+      --bg-secondary: #F0E8D8;
+      --text: #2C1810;
+      --text-secondary: #6B4226;
+      --text-muted: #9E7A5A;
+      --border: #D9C4A8;
+      --border-light: #EDE0CE;
+      --shadow: rgba(44,24,16,.12);
+      --shadow-md: rgba(44,24,16,.18);
+      --font-sans: 'PingFang SC','Noto Sans SC','Microsoft YaHei',system-ui,sans-serif;
+      --radius: 10px;
+      --radius-sm: 6px;
+      --transition: 0.22s ease;
+    }
+
+    [data-theme="dark"] {
+      --bg:             #1A1208;
+      --bg-card:        #241A0F;
+      --bg-sidebar:     #120C04;
+      --bg-hover:       rgba(184,92,56,0.1);
+      --bg-secondary:   #1E1609;
+      --text:           #EDD9BE;
+      --text-secondary: #C9A97A;
+      --text-muted:     #8C7058;
+      --border:         #3D2C1E;
+      --border-light:   #2E2014;
+      --shadow:         rgba(0,0,0,.4);
+      --shadow-md:      rgba(0,0,0,.5);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      margin: 0;
+      min-width: 340px;
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      transition: background var(--transition), color var(--transition);
+    }
+
+    .popup {
+      width: 100%;
+      background: var(--bg);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px var(--shadow-md);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .header {
+      background: var(--bg-sidebar);
+      padding: 12px 15px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .logo-mark {
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--clr-primary), var(--clr-accent));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(184,92,56,.4);
+    }
+    .logo-text { color: #FAEBD7; font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+    .logo-sub { color: rgba(250,235,215,.45); font-size: 11px; margin-top: 1px; }
+    .header-btn {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: var(--radius-sm);
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      color: rgba(250,235,215,.65);
+      font-size: 14px;
+      transition: background var(--transition);
+    }
+    .header-actions { display: flex; gap: 6px; align-items: center; }
+    .header-btn:hover { background: rgba(255,255,255,.16); color: #FAEBD7; }
+
+    .message-bar {
+      padding: 8px 12px;
+      font-size: 12px;
+      text-align: center;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .message-error { background: rgba(192,57,43,.1); color: var(--clr-danger); }
+    .message-success { background: rgba(58,125,68,.1); color: var(--clr-jade); }
+    .message-warning { background: rgba(230,126,34,.1); color: var(--clr-warn); }
+
+    .content { padding: 14px; }
+    .state-empty, .state-task, .state-settings { display: none; }
+    .state-empty.active, .state-task.active, .state-settings.active { display: block; }
+
+    .empty-hint {
+      text-align: center;
+      padding: 8px 6px 2px;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      line-height: 1.65;
+    }
+    .empty-icon { font-size: 34px; margin-bottom: 6px; }
+
+    .form-group { margin-top: 11px; }
+    .form-label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .form-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      line-height: 1.45;
+    }
+    .form-hint a { color: var(--clr-primary); text-decoration: underline; cursor: default; }
+    .form-input {
+      width: 100%;
+      padding: 7px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--text);
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .form-input:focus {
+      border-color: var(--clr-primary);
+      box-shadow: 0 0 0 3px rgba(184,92,56,.14);
+    }
+    .form-input::placeholder { color: var(--border); }
+
+    .btn {
+      width: 100%;
+      padding: 8.5px 13px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all var(--transition);
+      margin-top: 7px;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--clr-primary); color: #fff; }
+    .btn-primary:hover { background: var(--clr-primary-dark); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(184,92,56,.3); }
+    .btn-jade { background: var(--clr-jade); color: #fff; }
+    .btn-jade:hover { background: var(--clr-jade-dark); transform: translateY(-1px); }
+    .btn-outline { background: transparent; color: var(--clr-primary); border: 1px solid var(--clr-primary-light); }
+    .btn-outline:hover { background: rgba(184,92,56,.06); }
+    .btn-danger-outline { background: transparent; color: var(--clr-danger); border: 1px solid rgba(192,57,43,.35); }
+    .btn-danger-outline:hover { background: rgba(192,57,43,.06); }
+    .btn-ghost { background: var(--border-light); color: var(--text-secondary); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--border); color: var(--text); }
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 7px; }
+    .btn-row .btn { margin-top: 0; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+    .email-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 11px 13px;
+      margin-bottom: 11px;
+      box-shadow: 0 1px 4px var(--shadow);
+    }
+    .card-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      margin-bottom: 5px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 100px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .badge-waiting { background: rgba(200,150,62,.12); color: var(--clr-accent); border: 1px solid rgba(200,150,62,.25); }
+    .badge-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    .email-row { display: flex; align-items: center; gap: 7px; }
+    .email-address { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--text); word-break: break-all; }
+    .btn-copy {
+      flex-shrink: 0;
+      background: rgba(184,92,56,.1);
+      border: 1px solid rgba(184,92,56,.2);
+      border-radius: var(--radius-sm);
+      padding: 3px 8px;
+      cursor: pointer;
+      color: var(--clr-primary);
+      font-size: 11.5px;
+      font-family: var(--font-sans);
+      white-space: nowrap;
+      transition: background var(--transition);
+    }
+    .btn-copy:hover { background: rgba(184,92,56,.18); }
+    .btn-copy.copied { background: rgba(58,125,68,.12); border-color: rgba(58,125,68,.25); color: var(--clr-jade); }
+
+    .result-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--clr-primary);
+      border-radius: var(--radius);
+      padding: 11px 13px;
+      margin-top: 9px;
+      display: none;
+      box-shadow: 0 1px 4px var(--shadow);
+    }
+    .result-box.show { display: block; }
+    .result-label { font-size: 10.5px; font-weight: 600; color: var(--clr-primary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 5px; }
+    .result-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .result-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: .14em;
+      word-break: break-all;
+    }
+    .result-value.link-mode { font-size: 11px; letter-spacing: 0; color: var(--clr-primary); }
+
+    .divider { border: none; border-top: 1px solid var(--border-light); margin: 11px 0; }
+
+    .settings-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .settings-group { margin-bottom: 10px; }
+
+    .spinner {
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    .spinner-brown { border-color: rgba(184,92,56,.25); border-top-color: var(--clr-primary); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .history-section { border-top: 1px solid var(--border-light); }
+    .history-header {
+      padding: 9px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      transition: background var(--transition);
+    }
+    .history-header:hover { background: var(--border-light); }
+    .history-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .history-count {
+      background: var(--border);
+      color: var(--text-muted);
+      font-size: 10.5px;
+      padding: 1px 6px;
+      border-radius: 100px;
+    }
+    .history-caret { color: var(--text-muted); font-size: 10px; transition: transform .2s; }
+    .history-caret.open { transform: rotate(180deg); }
+    .history-list { padding: 0 14px 12px; display: none; }
+    .history-list.open { display: block; }
+    .history-item {
+      padding: 8px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-sm);
+      margin-bottom: 6px;
+      font-size: 11.5px;
+    }
+    .history-item:last-child { margin-bottom: 0; }
+    .history-email { font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .history-meta { color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .history-code { color: var(--clr-primary); font-weight: 600; }
+    .status-done { color: var(--clr-jade); }
+    .status-release { color: var(--clr-warn); }
+  </style>
+</head>
+<body>
+<div class="popup">
+  <div class="header">
+    <div class="header-logo">
+      <div class="logo-mark">📬</div>
+      <div>
+        <div class="logo-text">邮箱池助手</div>
+        <div class="logo-sub">OutlookMail Plus</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="header-btn" id="header-theme-btn" title="切换深色/浅色">🌙</button>
+      <button class="header-btn" id="header-settings-btn" title="设置">⚙</button>
+    </div>
+  </div>
+
+  <div id="message-bar" class="message-bar" style="display:none;"></div>
+
+  <div class="content">
+    <div class="state-empty active" id="state-empty">
+      <div class="empty-hint">
+        <div class="empty-icon">📬</div>
+        <div>暂无进行中的申领任务<br>从邮箱池申领一个邮箱开始使用</div>
+      </div>
+      <button class="btn btn-primary" id="btn-claim">
+        <span>📧</span> 申领邮箱
+      </button>
+    </div>
+
+    <div class="state-task" id="state-task">
+      <div class="email-card">
+        <div class="card-label">当前申领邮箱</div>
+        <div class="status-badge badge-waiting">
+          <span class="badge-dot"></span>等待使用
+        </div>
+        <div class="email-row">
+          <span class="email-address" id="current-email"></span>
+          <button class="btn-copy" id="btn-copy-email">📋 复制</button>
+        </div>
+      </div>
+
+      <div id="fetch-warning" style="display:none; background:rgba(230,126,34,.1); border:1px solid rgba(230,126,34,.3); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:8px; font-size:12px; color:var(--clr-warn); text-align:center;">
+        ⚠️ 等待验证码期间请勿关闭面板
+      </div>
+
+      <button class="btn btn-outline" id="btn-get-code">
+        <span>🔢</span> 获取最新验证码
+      </button>
+      <button class="btn btn-ghost" id="btn-get-link" style="margin-top:6px">
+        <span>🔗</span> 获取验证链接
+      </button>
+
+      <div class="result-box" id="result-box">
+        <div class="result-label" id="result-label">验证码</div>
+        <div class="result-row">
+          <span class="result-value" id="result-value"></span>
+          <button class="btn-copy" id="btn-copy-result">📋 复制</button>
+        </div>
+        <button class="btn btn-outline" id="btn-open-link" style="display:none; margin-top:8px; font-size:12px;">
+          🔗 在新标签页中打开
+        </button>
+      </div>
+
+      <hr class="divider">
+      <div class="btn-row">
+        <button class="btn btn-jade" id="btn-complete">✅ 完成（成功）</button>
+        <button class="btn btn-danger-outline" id="btn-release">↩ 释放邮箱</button>
+      </div>
+    </div>
+
+    <div class="state-settings" id="state-settings">
+      <div class="settings-title">⚙️ 服务配置</div>
+      <div class="settings-group">
+        <label class="form-label">服务器地址</label>
+        <input class="form-input" type="url" id="cfg-server" placeholder="https://your-server.com">
+      </div>
+      <div class="settings-group">
+        <label class="form-label">API Key（X-API-Key）</label>
+        <input class="form-input" type="password" id="cfg-apikey" placeholder="your-api-key-here">
+        <p class="form-hint">在主应用「系统设置 → 对外 API → API 安全」获取 Legacy Key</p>
+      </div>
+      <div class="settings-group">
+        <label class="form-label">默认项目 Key（可选）</label>
+        <input class="form-input" type="text" id="cfg-project" placeholder="留空则不传 project_key">
+      </div>
+      <button class="btn btn-primary" id="btn-save">💾 保存配置</button>
+      <button class="btn btn-ghost" id="btn-back" style="margin-top:6px">← 返回</button>
+    </div>
+  </div>
+
+  <div class="history-section">
+    <div class="history-header" id="history-header">
+      <div class="history-title">
+        📋 历史记录
+        <span class="history-count" id="history-count">0</span>
+      </div>
+      <span class="history-caret" id="history-caret">▼</span>
+    </div>
+    <div class="history-list" id="history-list"></div>
+  </div>
+</div>
+
+<script src="storage.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

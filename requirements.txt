@@ -1,5 +1,6 @@
 flask>=3.0.0
 flask-wtf>=1.2.0
+flask-cors>=4.0.0
 werkzeug>=3.0.0
 requests[socks]>=2.25.0
 APScheduler>=3.10.0

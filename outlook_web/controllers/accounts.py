@@ -920,7 +920,7 @@ def _resolve_auto_group(
     return default_id
 
 
-def _overwrite_account(existing: Dict, detect_result: Dict, group_id: int) -> bool:
+def _overwrite_account(existing: Dict, detect_result: Dict, group_id: int, add_to_pool: bool = False) -> bool:
     """覆盖更新已存在账号的凭据字段，保留 remark/tags/status。"""
     fields: Dict[str, Any] = {"group_id": group_id}
     d = detect_result
@@ -939,6 +939,10 @@ def _overwrite_account(existing: Dict, detect_result: Dict, group_id: int) -> bo
         fields["imap_port"] = f.get("imap_port", 993)
         fields["account_type"] = "imap"
         fields["provider"] = prov
+
+    # 若勾选了"加入邮箱池"且该账号尚未处于 available 状态（含 NULL / claimed 等），则同步设置 pool_status
+    if add_to_pool and existing.get("pool_status") != "available":
+        fields["pool_status"] = "available"
 
     return accounts_repo.update_account_credentials(existing["id"], **fields)
 
@@ -1144,7 +1148,7 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
                 by_provider[prov]["skipped"] += 1
                 continue
             elif duplicate_strategy == "overwrite":
-                ok = _overwrite_account(existing, result, group_id)
+                ok = _overwrite_account(existing, result, group_id, add_to_pool=add_to_pool)
                 if ok:
                     imported += 1
                     by_provider[prov]["imported"] += 1

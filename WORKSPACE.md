@@ -1,1071 +1,675 @@
-# WORKSPACE — 工作区操作记录
+﻿# WORKSPACE — 工作区操作记录
 
 > 本文档记录项目开发过程中的操作日志，按日期倒序排列。
 
 ---
 
+## 2026-04-18
+
+### 操作记录
+
+#### 159. UI/UX 优化：删除独立浮窗、主界面移除项目Key、宽度自适应
+
+**时间**：2026-04-18
+
+**修改**：
+
+| 文件 | 修改内容 |
+|------|---------|
+| `popup.html` | 删除 `⤢` 独立浮窗按钮；移除主界面「项目 Key」输入框；`body.width` 改为 `min-width: 340px; width: 100%` |
+| `popup.js` | 删除 detach button 逻辑；`handleClaim` 直接读 `config.defaultProjectKey`，不再读 UI 输入框 |
+| `manifest.json` | 权限从 `["storage","tabs","windows"]` → `["storage","tabs"]`（windows 权限仅用于独立浮窗，已无需保留） |
+
+**背景**：项目 Key 仅需在设置页配置，不应在主界面操作时每次手动填写。独立浮窗功能用户不需要。宽度改为自适应内容宽度。
+
+#### 158. 主项目 README 补充浏览器扩展、项目 Key、完成/释放说明
+
+**时间**：2026-04-18
+
+**内容**（`README.md` + `README.en.md`）：
+- 新增「浏览器扩展」章节（位于"外部接口与邮箱池集成"之后）
+- 项目 Key：多租户隔离、填/不填的行为、成功复用路径
+- 完成 vs 释放：状态对比表、适用场景
+
+#### 157. 完善浏览器扩展 README（项目 Key 说明 + 完成/释放区别）
+
+**时间**：2026-04-18
+
+**内容**（`browser-extension/README.md`）：
+- 新增「概念说明」章节
+- 项目 Key：多租户隔离机制、填写方式、不填时的回落行为
+- 完成 vs 释放：状态机区别、适用场景对比表、简单记法
+
+#### 156. 修复插件验证码/验证链接提取 bug（API 响应层级错误）
+
+**时间**：2026-04-18
+
+**根因**：
+- `verification-code` API 实际响应结构为 `{success, code:"OK", data:{verification_code:..., verification_link:...}}`
+- `popup.js` 的 `handleGetCode` 检查并读取 `result.code`，该字段值永远是字符串 `"OK"`（状态码），不是验证码
+- `handleGetLink` 读取 `result.link`，顶层无此字段，为 `undefined`
+
+**修改**（`browser-extension/popup.js`）：
+
+| 函数 | 旧写法 | 新写法 |
+|------|--------|--------|
+| `handleGetCode` | `result.code` | `result.data.verification_code` |
+| `handleGetLink` | `result.link` | `result.data.verification_link` |
+
+#### 155. 修复插件申领邮箱核心 bug（result.data 层级错误）
+
+**时间**：2026-04-18
+
+**根因**：API 响应结构为 `{success:true, data:{email, account_id, claim_token, ...}}`，但 popup.js 在取字段时直接访问 `result.email`（顶层），导致 `undefined` → 报"服务器未返回邮箱地址"。
+
+同时 `apiRelease` / `apiComplete` 只发送 `task_id`，缺少 `account_id`、`claim_token`、`caller_id`，服务端验证必失败。
+
+**修改**（`browser-extension/popup.js`）：
+
+| 位置 | 修改内容 |
+|------|---------|
+| `handleClaim` | 从 `result.data` 取 `email`/`account_id`/`claim_token`，存入 task 对象 |
+| `apiComplete` | 签名改为接受 task 对象，body 补充 `account_id`/`claim_token`/`caller_id` |
+| `apiRelease` | 同上 |
+| `handleComplete` | 传入 `currentTask` 而非 `currentTask.taskId` |
+| `handleRelease` | 同上 |
+
+#### 154. 修復 _overwrite_account 边界条件（claimed 状态不被重置）
+
+**時間**：2026-04-18
+
+**問題**：`_overwrite_account` 原條件 `not existing.get("pool_status")` 對 `claimed` 帳號無效（'claimed' 是 truthy，條件為 False），覆蓋導入時 `add_to_pool=True` 不會重置已 claimed 的帳號。
+
+**修復**：
+
+```python
+# 修復前
+if add_to_pool and not existing.get("pool_status"):
+# 修復後
+if add_to_pool and existing.get("pool_status") != "available":
+```
+
+**文件**：`outlook_web/controllers/accounts.py`，`_overwrite_account` 函數
+
+#### 153. 診斷並修復：重導入後插件仍無法申領
+
+**時間**：2026-04-18
+
+**根因**：7 個帳號 `pool_status='claimed'` 卡住（之前測試時已申領但從未釋放/完成）。用戶重刪再導入時，這些帳號可能仍保留在 DB 中（軟刪除或未徹底清除），導致 claim 失敗。
+
+**另一個相關隱患**：我們修復的 `_overwrite_account` bug 有邊界情況：
+- `not existing.get("pool_status")` 在 `pool_status='claimed'` 時為 False（不會重置為 available）
+- 即覆蓋導入時若賬號已是 `claimed` 狀態，`add_to_pool=True` 也不會解除 claim
+
+**本次修復**：
+- SQL 重置 7 個卡住帳號：`UPDATE accounts SET pool_status='available', claimed_by=NULL, claimed_at=NULL, claim_token=NULL WHERE pool_status='claimed' AND status='active'`
+- 結果：14 個帳號全部 `available`
+- 驗證：claim-random 返回 HTTP 200 成功
+
+**建議後續**：長期方案應在 claim 時設置 `lease_expires_at`，到期後自動歸還（Pool 已有此字段，可定時任務掃描過期 claim）。
+
+#### 152. 文档同步更新（FD/TD/TDD）
+
+**时间**：2026-04-18
+
+| 文档 | 修改内容 |
+|------|---------|
+| `docs/FD/2026-04-18-浏览器扩展邮箱池快捷操作面板FD.md` | 本期包含新增：深色主题、420px宽度、⤢独立浮窗、错误提示优化、API Key引导 |
+| `docs/TD/2026-04-18-浏览器扩展邮箱池快捷操作面板TD.md` | manifest.json permissions 加入 `windows`；验收口径7更新说明 |
+| `docs/TDD/2026-04-18-浏览器扩展邮箱池快捷操作面板TDD.md` | 手工矩阵新增 TC-13（独立浮窗）、TC-14（主题切换）；验收条件更新为 TC-01~TC-14 |
+
+#### 151. 修复 pool_status 相关 bug + 邮箱池激活
+
+**时间**：2026-04-18
+
+| 修改 | 文件 | 说明 |
+|------|------|------|
+| SQL 直接激活 | 数据库 | `UPDATE accounts SET pool_status='available' WHERE status='active' AND pool_status IS NULL` — 14 个账号 |
+| 重复导入 pool_status bug | `controllers/accounts.py` | `_overwrite_account` 增加 `add_to_pool` 参数，覆盖时同步设置 `pool_status='available'` |
+| 重复导入 pool_status bug | `controllers/accounts.py` | 调用处传入 `add_to_pool=add_to_pool` |
+| 允许更新 pool_status | `repositories/accounts.py` | `update_account_credentials` 的 `allowed` 集合加入 `pool_status` |
+
+**验证**：`claim-random` API 返回 HTTP 200 + `{"success":true,"data":{"email":"AlexandraBailey3593@outlook.in",...}}`
+
+#### 150. 独立浮窗 + 错误提示修复
+
+**时间**：2026-04-18
+
+| 修改 | 文件 | 说明 |
+|------|------|------|
+| 新增 `windows` 权限 | `manifest.json` | 支持 `chrome.windows.create` |
+| 独立浮窗按钮 `⤢` | `popup.html` | 右上角 header-actions 区域 |
+| 浮窗逻辑 | `popup.js` | 点击 `⤢` → `chrome.windows.create({type:'popup', width:420, height:600})` |
+| 窗口模式检测 | `popup.js` | `?mode=window` 时隐藏 detach 按钮，避免嵌套开窗 |
+| 错误提示优化 | `popup.js` | handleClaim 先检查 `result.success===false`，优先显示 `result.message` |
+
+**遗留问题（用户需操作）：**
+- pool_enabled 仍为 `false` → 用户需在主应用「设置 → 对外 API」手动启用
+- 用户输入的 Key（`YKYbgUV...`）与数据库 Legacy Key 不匹配 → 需重新复制
+
+#### 149. Popup 尺寸 + UI 主题修复
+
+**时间**：2026-04-18
+
+| 修改 | 文件 | 说明 |
+|------|------|------|
+| 宽度 380→420px | `popup.html` | `body { width: 420px }` |
+| CSS 变量名对齐 | `popup.html` | `--text-sec` → `--text-secondary`，`--font` → `--font-sans` |
+| 变量值对齐 | `popup.html` | `--radius` 8→10px，`--radius-sm` 5→6px，`--transition` 0.22s ease |
+| 新增变量 | `popup.html` | `--clr-jade-light`、`--clr-success`、`--bg-hover`、`--bg-secondary` |
+| 深色模式 | `popup.html` | 新增 `[data-theme="dark"]` 完整变量块 |
+| 深色模式 body | `popup.html` | `color: var(--text)`、`transition: background/color` |
+| 主题切换按钮 | `popup.html` | 新增 `🌙/☀️` 按钮，`.header-actions` 包装 |
+| API Key 引导 | `popup.html` | 设置面板 API Key 下方加 `.form-hint` 提示 |
+| 主题初始化 | `popup.js` | DOMContentLoaded 读 `localStorage['ol_theme']` 设置 `data-theme` |
+| 主题切换逻辑 | `popup.js` | 点击主题按钮切换 dark/light，同步写 localStorage |
+
+#### 148. TC 验收实测 — 发现 2 个配置问题
+
+**时间**：2026-04-18
+
+| # | 问题 | 根因 | 修复动作 |
+|---|------|------|---------|
+| 1 | 扩展 API Key 校验失败（401） | 扩展里存的 Key 与服务器 Legacy Key（`test***-123`）不匹配 | 用户需在扩展设置里重填正确完整 Key |
+| 2 | Key 正确后仍无法申领（FEATURE_DISABLED） | 主应用 `external_pool_enabled = false`，邮箱池 API 未启用 | 用户需在主应用「设置 → 对外 API」开启邮箱池功能 |
+
+另：用户反馈 Popup 尺寸固定、UI 主题不跟主应用（无深色模式），待修复。
+
+#### 147. 全量回归测试（验收前）
+
+**时间**：2026-04-18  
+**命令**：`python -m unittest discover -s tests`  
+**结果**：✅ 全部通过
+
+| 指标 | 数值 |
+|------|------|
+| 总测试数 | 1197 |
+| 通过 | 1190 |
+| 失败 | 0 |
+| 错误 | 0 |
+| 跳过 | 7 |
+| 耗时 | 535.7s |
+
+**结论**：P1 修复未引入新问题，代码健康，可进行 D 层手工验收。
+
+#### 146. 代码审查结果 + P1 问题修复
+
+**时间**：2026-04-18
+
+**审查结论**（claude-sonnet-4.6）：
+
+- **P0**：无问题（CSP 合规、存储原子性、task_id 先写后发、65000ms 超时、失败后清空逻辑、optional_host_permissions 全部通过）
+- **P1 修复 2 处**：
+
+  | 问题 | 位置 | 修复方式 |
+  |------|------|---------|
+  | 错误提示被 `renderState('idle')` → `hideMessage()` 立即抹掉，用户静默回 idle 看不到错误 | `popup.js` handleComplete / handleRelease finally 块 | 将 `showError` 移到 `renderState('idle')` 之后执行 |
+  | `handleOpenLink` 未校验 URL scheme，可被恶意服务端用 `data:` / `file:` URL 攻击 | `popup.js` handleOpenLink | 添加 `new URL()` + protocol 白名单校验（仅允许 http/https） |
+
+- **P2**：无需补充
+
+#### 145. 启动代码审查子代理（claude-sonnet-4.6 审查扩展代码）
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+启动 claude-sonnet-4.6 code-review 子代理，对浏览器扩展 v0.1.0 核心文件进行审查（manifest.json / storage.js / popup.js / popup.html / README.md）。
+
+**审查重点**：
+- P0：MV3 CSP 合规、storage 写入原子性、task_id 先写后发、AbortController 65000ms、失败后清空逻辑
+- P1：7 状态机完整性、新标签打开、权限申请流程
+- P2：错误提示、历史排序
+
+**状态**：等待子代理完成，将通过寸止汇报结果。
+
+#### 144. 调研 GitHub Copilot CLI 子代理 thinking budget 支持情况
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+查阅 GitHub Copilot CLI 官方文档和网络资料，调研 `task` 子代理工具是否支持指定"思考程度"（thinking budget）。
+
+**调研结论**：
+
+`task` 工具当前**不支持**直接配置 thinking budget。可用参数仅包含 `name/prompt/description/agent_type/mode/model`，无 `thinking_budget` 等参数。
+
+**替代方案**：通过选择模型来隐式控制思考深度：
+- 深度思考 → `claude-opus-4.6`
+- 标准 → `claude-sonnet-4.6` / `gpt-5.4`
+- 快速轻量 → `gpt-5.4-mini`
+
+官方文档支持：`Ctrl+T` 切换推理过程可见性（不影响实际思考深度）。
+
+#### 143. 启动扩展代码开发子代理（gpt-5.4 执行 E-01 ~ E-07）
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+启动 gpt-5.4 子代理，依据 `browser-extension/PROMPTS_PACK.md` 中的提示词集合，逐步创建浏览器扩展 v0.1.0 全部核心文件（E-01~E-07）。
+
+**执行顺序**：E-01 → E-02 → E-03 → E-04（含 E-05 重命名）→ E-07；E-06 图标独立执行。
+
+**目标产出**：
+- `browser-extension/manifest.json`
+- `browser-extension/storage.js`
+- `browser-extension/popup.js`
+- `browser-extension/popup.html`（正式版，CSP 合规）
+- `browser-extension/popup.preview.html`（预览原型，原 popup.html 重命名）
+- `browser-extension/icons/icon16.png`、`icon48.png`、`icon128.png`
+- `browser-extension/README.md`
+
+**状态**：✅ 完成（gpt-5.4，耗时约 7.5 分钟）
+
+**执行结果**（全部成功）：
+
+| 文件 | 状态 |
+|------|------|
+| `manifest.json` | ✅ 创建，JSON 合法，通过校验 |
+| `storage.js` | ✅ 创建 |
+| `popup.js` | ✅ 创建（7 状态机 + 5 API + 完整事件处理） |
+| `popup.html` | ✅ 创建（正式版，无内联 JS，CSP 合规） |
+| `popup.preview.html` | ✅ 原 popup.html 重命名保留 |
+| `icons/icon16.png` | ✅ 合法 PNG，16×16 |
+| `icons/icon48.png` | ✅ 合法 PNG，48×48 |
+| `icons/icon128.png` | ✅ 合法 PNG，128×128 |
+| `README.md` | ✅ 创建 |
+
+#### 142. 更新 CLAUDE.md — 新增子代理模型分配规则
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+在 `CLAUDE.md` 末尾新增 `Sub-Agent Model Selection（子代理模型分配规则）` 章节，记录项目中子代理任务类型与对应模型的映射规则。
+
+**规则摘要**：
+
+| 任务类型 | 优先模型 |
+|---------|--------|
+| 探索类 | `gpt-5.4-mini` |
+| 前端 UI 设计/开发 | `claude-sonnet-4.6` 或 `gpt-5.4`（Gemini 不可用时替代） |
+| 后端探索/实现 | `claude-sonnet-4.6` 或 `gpt-5.4` |
+| 思考整合/头脑风暴/复杂设计 | `claude-opus-4.6` |
+| 其余小任务 | `gpt-5.4-mini` |
+
+#### 141. 生成浏览器扩展 E-01 ~ E-07 AI 执行提示词集合（Prompts Pack）
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+读取 FD / TD / TODO / popup.html 预览版四份文档，为浏览器扩展子项目 v0.1.0 的 7 个开发任务（E-01 ~ E-07）生成完整的自包含 AI 执行提示词集合。
+
+**涉及文档**：
+- `docs/FD/2026-04-18-浏览器扩展邮箱池快捷操作面板FD.md`
+- `docs/TD/2026-04-18-浏览器扩展邮箱池快捷操作面板TD.md`
+- `browser-extension/TODO.md`
+- `browser-extension/popup.html`（预览版，作为 CSS 参考）
+
+**产出**：7 个自包含提示词（E-01 manifest.json / E-02 storage.js / E-03 popup.js / E-04 popup.html 正式版 / E-05 预览版重命名 / E-06 图标生成 / E-07 README.md），通过 MCP 寸止工具输出给用户。
+
+**依赖顺序**：E-01 → E-02 → E-03 → E-04（含 E-05 重命名）→ E-07；E-06 可独立执行。
+
+#### 140. 回归测试 + 四文档联调（PRD 基准对齐）
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+**一、回归测试**：运行 141 个已有测试（test_external_pool + test_external_api + test_external_pool_e2e + test_smoke_contract）全部通过，确认 CORS 改动无破坏性。
+
+**二、文档联调发现问题（以 PRD 为基准）并全部修正**：
+
+| 编号 | 问题位置 | 问题描述 | 修复 |
+|------|----------|---------|------|
+| 联调-01 | FD §1.2 | 快捷键说明缺默认值（PRD UC-2 明确了 `Ctrl+Shift+E`） | FD 补充完整描述 |
+| 联调-02 | TDD §4.4 | 手工冒烟矩阵用 M-01~M-12，与 §6.2 TC-01~TC-12 冲突 | §4.4 统一改为 TC-01~TC-12 |
+| 联调-03 | TDD §6.2 TC-10 | 缺少 101 条历史上限验证（§4.4 M-11 有此场景） | TC-10 补充第 3/4 步 |
+| 联调-04 | TODO.md | 缺少 README.md 任务（FD §2.1 + TD §3.1 均列有此文件） | 新增 E-07 |
+
+**当前文档体系**：PRD / FD / TD / TDD 全链路已经完成联调，与 PRD 保持一致。
+
+#### 139. 创建浏览器扩展子项目 TODO 文档
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+创建 `browser-extension/TODO.md`，梳理扩展子项目 v0.1.0 的完整任务清单。
+
+**已完成（标记 ✅）**：D-01~D-05（文档体系）、B-01~B-02（主应用 CORS）、T-01（CORS 测试）
+
+**待完成（核心扩展代码）**：
+
+| 编号 | 任务 | 依赖 |
+|------|------|------|
+| E-01 | `manifest.json`（MV3）| — |
+| E-02 | `storage.js`（chrome.storage 封装）| E-01 |
+| E-03 | `popup.js`（主交互逻辑）| E-01, E-02 |
+| E-04 | `popup.html`（正式版，MV3 CSP 合规）| E-03 |
+| E-05 | 预览版改名为 `popup.preview.html` | E-04 |
+| E-06 | 图标文件（16/48/128px）| — |
+
+**手工冒烟**：TC-01~TC-12（12 条），TC-05/TC-12 为高风险点
+
+#### 138. 编写 A 层 CORS 测试代码，实施主应用 CORS 改动
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+根据 TDD §4.1/§5 编写实际测试代码并实施主应用 CORS 改动：
+
+- 新增：`requirements.txt` 追加 `flask-cors>=4.0.0`
+- 修改：`outlook_web/app.py` 在 Blueprint 注册后增加 CORS 配置（仅对 `/api/external/*`）
+- 新建：`tests/test_extension_cors.py`（A 层 CORS 测试，10 个测试方法）
+
+**CORS 配置方案**：
+
+```python
+# 仅允许 chrome-extension:// 来源访问 /api/external/* 路径
+CORS(app, resources={
+    r"/api/external/*": {
+        "origins": [re.compile(r"^chrome-extension://.*$")],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "X-API-Key"],
+        "supports_credentials": False,
+    }
+})
+```
+
+**测试结果**：10 个测试全部通过（10/10 OK，耗时 3.3s）
+
+覆盖场景：CR-01~CR-08（含 claim-random/release/complete/verification-code/verification-link 5 个端点，OPTIONS 预检，4xx 响应时 CORS 头存在，内部 API 不受影响）
+
+#### 137. 编写浏览器扩展 TDD 文档，补充 FD 关联
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+创建 TDD 文档，并同步更新 FD 增加 TDD 关联字段：
+
+- 文档路径：`docs/TDD/2026-04-18-浏览器扩展邮箱池快捷操作面板TDD.md`
+- FD 更新：增加「关联 TDD」字段
+
+**TDD 核心设计**：
+
+测试分层策略：
+
+| 层级 | 方式 | 是否 v0.1.0 必须 |
+|------|------|----------------|
+| A. 主应用 CORS（Python）| `tests/test_extension_cors.py` | ✅ 必须 |
+| B. Storage 封装（Jest）| `browser-extension/tests/storage.test.js` | ❌ 可选 |
+| C. 状态机 & 流程（Jest）| `browser-extension/tests/popup.test.js` | ❌ 可选 |
+| D. 手工冒烟（TC-01~12）| 12 条测试用例 | ✅ 必须 |
+
+关键测试矩阵数量：
+- A 层 CORS 矩阵：8 个场景（CR-01 ~ CR-08）
+- B 层 Storage：7 个场景（ST-01 ~ ST-07）
+- C 层状态机：13 个场景（SM-01 ~ SM-13）
+- D 层手工冒烟：12 条测试用例（TC-01 ~ TC-12）
+
+高风险测试点：TC-05（Popup 关闭恢复）、TC-12（权限拒绝处理），v0.1.0 前必须人工确认。
+
+**当前状态**：
+- TDD v1.0 已创建
+- 文档体系全链路完整：PRD → FD → TD → TDD
+
+#### 136. PRD-FD-TD 文档联调
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+对三个文档进行联调，发现并修正 FD 中 4 处不一致：
+
+| # | 位置 | 问题 | 修正内容 |
+|---|------|------|---------|
+| 1 | FD 2.1 文件结构 | 缺少 `storage.js` 和 `popup.preview.html` | 同步补充（与 TD 3.1 文件结构一致） |
+| 2 | FD 2.3 caller_id 注释 | 写了「可在设置中自定义」，但 PRD/FD 设置面板均无该字段 | 改为「v1 硬编码，不提供配置项」 |
+| 3 | FD 2.4 超时处理 | 描述为「若支持 wait 则依赖服务端超时，否则加兜底」逻辑不明 | 改为「始终加 65s AbortController 兜底」（与 TD 一致） |
+| 4 | FD 2.7 设置面板 | 缺少「保存时触发 chrome.permissions.request」步骤 | 补充完整权限申请流程（包含用户拒绝处理） |
+
+**三文档结论**：
+
+- PRD：产品需求层面无需变更（权限申请属实现细节，PRD 不展开）
+- FD：4 处已修正，与 TD 设计对齐
+- TD：无需变更，逻辑原本正确
+
+**当前状态**：PRD → FD → TD 三文档已联调完毕，描述一致
+
+#### 135. 创建浏览器扩展 TD 文档，恢复 FD 关联
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+用户要求编写 TD 文档，深入分析技术难点。执行以下操作：
+
+1. 恢复 `FD` 文档中「关联 TD」字段（此前条目 134 删除了该字段）
+2. 创建 TD 文档：`docs/TD/2026-04-18-浏览器扩展邮箱池快捷操作面板TD.md`
+
+**TD 核心内容 — 9 大技术难点**：
+
+| 难点 | 核心问题 | 选定方案 |
+|------|---------|---------|
+| 1. 动态地址 vs host_permissions | MV3 要求静态声明权限，用户自填地址无法预知 | `optional_host_permissions: <all_urls>` + `chrome.permissions.request` 在保存时动态申请 |
+| 2. Popup 生命周期 vs wait=60 | 关闭 Popup 时 fetch 被中断 | UI 提示「勿关闭」+ AbortController 兜底 + 重新打开可重试 |
+| 3. Manifest V3 CSP | 禁止内联 JS，预览版无法直接用 | 正式版 popup.html 只含 DOM，全部 JS 移入 popup.js；预览版改名 popup.preview.html |
+| 4. Extension ID 不稳定 | 重装后 ID 变化导致 CORS 白名单失效 | 服务端匹配 `chrome-extension://` 前缀（正则），不写死 ID |
+| 5. 主应用 CORS 改动 | flask-cors 需支持 chrome-extension:// 来源 | 视现状选 flask-cors 正则 origins 或手动 after_request headers |
+| 6. storage 原子性 | 多次异步写入顺序问题 | 封装 Storage 助手，所有操作 async/await 串行 |
+| 7. task_id 可靠生成 | 内存变量在 Popup 关闭后丢失 | 生成后立即写 storage，API 请求在 storage 写完之后发起 |
+| 8. 错误类型区分 | CORS 拦截与网络不通在前端表现一致 | 分层提示，引导用户检查配置 |
+| 9. 图标资源 | 需 3 种尺寸 PNG | SVG 设计后转换，或代码生成 |
+
+**额外设计产出**：
+- 完整 `manifest.json` 设计（含 commands 快捷键、permissions、optional_host_permissions）
+- `popup.js` 模块结构（5 层：常量、UI 渲染、Storage、API、事件处理器 + init）
+- 主应用 CORS 3 种改动场景（全局 flask-cors / Blueprint after_request / 无现有配置）
+
+**当前状态**：
+- TD v1.0 已创建，文档体系完整（PRD → FD → TD）
+- 下一步：实际编写扩展代码 or 先做主应用 CORS 改动
+
+#### 134. 更新浏览器扩展 FD —— 移除 TD 关联
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+用户明确本项目**不单独出 TD 文档**，设计与实现细节直接在 FD 内展开。
+
+- 更新 `docs/FD/2026-04-18-浏览器扩展邮箱池快捷操作面板FD.md` 元数据头：
+  - 删除「关联 TD」引用行
+  - 修改「当前范围」描述为「含必要实现细节，不另出 TD」
+
+**当前状态**：
+- FD 已更新，无 TD 关联
+- 下一步待确认：是否直接开始编写实际扩展代码
+
+#### 133. 编写浏览器扩展 FD 文档
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+用户确认 UI 预览（国风配色版）效果满意，进入 FD 阶段。创建功能设计文档：
+
+- 文档路径：`docs/FD/2026-04-18-浏览器扩展邮箱池快捷操作面板FD.md`
+- 文档版本：v1.0
+- 关联 PRD：`docs/PRD/2026-04-18-浏览器扩展邮箱池快捷操作面板PRD.md`
+
+**FD 核心内容**：
+
+1. **功能定义**：本期包含扩展骨架、状态机、申领/获取/完成/释放全流程、历史记录、主应用 CORS 改动；明确排除 DOM 注入、Background SW 等
+2. **行为设计**：
+   - 扩展文件结构（manifest.json / popup.html / popup.js / icons/）
+   - Popup 7 种状态（idle / claiming / claimed / fetching / result_code / result_link / settings）
+   - 各流程详细步骤（申领 → 验证码 → 验证链接 → 完成/释放）
+   - `task_id` 使用 `crypto.randomUUID()` 生成，`caller_id` 固定为 `"browser-extension"`
+3. **接口契约**：主应用 CORS 改动（`chrome-extension://` 前缀匹配）+ 5 个外部 API 调用规范
+4. **数据语义**：`chrome.storage.local` 完整数据结构（config / currentTask / history）
+5. **兼容与边界**：扩展与主应用解耦、Extension ID 变更应对方案、popup.html 预览版定位说明
+6. **验收口径**：10 条可验证的验收标准
+
+**当前状态**：
+- FD v1.0 已创建，等待进一步实现阶段决策
+
+#### 131. 创建浏览器扩展 PRD 文档
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+根据设计讨论结果（条目 130），编写浏览器扩展功能 PRD：
+
+- 文档路径：`docs/PRD/2026-04-18-浏览器扩展邮箱池快捷操作面板PRD.md`
+- 文档版本：v1.0
+- 定位：独立伴生子项目，不依附主应用版本号
+
+**PRD 核心内容**：
+- 背景：Web 界面操作割裂，注册场景需频繁切换页面
+- 目标：快捷键唤起 Popup，一键申领邮箱 + 获取验证码/链接
+- Use Case：UC-1（配置）~ UC-8（历史记录）共 8 个用例
+- 非目标：明确排除 DOM 自动识别、Content Script 注入等复杂能力
+- 服务端关联改动：主应用需补充 `chrome-extension://` CORS 支持
+
+**当前状态**：
+- PRD v1.0 已创建，处于需求讨论阶段
+
+#### 132. 创建浏览器扩展目录与 UI 预览文件
+
+**时间**：2026-04-18
+
+**本次操作**：
+
+1. 新建独立目录：`browser-extension/`
+2. 创建交互式 UI 预览文件：`browser-extension/popup.html`
+
+**popup.html 功能说明**：
+- 可直接在浏览器中打开进行 UI 预览（无需安装扩展）
+- 包含所有状态的完整交互演示：
+  - 「无任务」状态 → 申领邮箱 → loading 动画 → 进入「申领中」状态
+  - 「申领中」状态 → 获取验证码 / 获取验证链接 → 结果展示框（一键复制）
+  - 完成 / 释放邮箱 → 自动返回「无任务」状态
+  - 设置面板（服务器地址、API Key、默认项目Key）
+  - 历史记录区（可折叠展开）
+- 底部预览切换栏：无任务 / 申领中 / 有验证码 / 有链接 / 设置
+
+**当前状态**：
+- UI 预览文件已完成，可供前端效果评审
+
+
+
+**时间**：2026-04-18
+
+**第一轮讨论（初始方案）**：
+
+针对「Chrome/Edge 浏览器插件」方向进行可行性评估，初始设想包含自动 DOM 识别和自动填充能力。
+
+**第二轮讨论（方案收敛）**：
+
+经用户明确后，**不做 DOM 自动识别 / 自动填充**，定位为轻量快捷操作面板。
+
+**第三轮讨论（设计定稿）**：
+
+确认采用**方案 A：极简 Popup**，完整设计如下：
+
+**触发方式**：
+- 快捷键唤起 Popup（如 `Ctrl+Shift+E`），弹出小窗
+
+**核心操作流（极简）**：
+1. 点「申领邮箱」→ 从邮箱池申领一个邮箱，显示地址并一键复制
+2. 用户手动将邮箱地址填入注册页面
+3. 点「获取验证码」→ 拉取该邮箱最新验证码，一键复制
+4. 可选：点「释放邮箱」→ 归还邮箱池
+
+**本地历史记录**（关键特性）：
+- 即使邮箱已释放，申领记录（邮箱地址 + 最新验证码）**保留在插件本地存储中**
+- 用户可随时翻阅历史，方便复用
+
+**插件架构（定稿）**：
+- 仅 `Popup` 页面 + `chrome.storage.local`，**无 Content Script、无 Background SW**
+- 快捷键通过 `manifest.json` `commands` 配置
+- 分区：① 服务配置（服务器地址 + API Key）② 当前任务（申领/验证码/释放）③ 历史记录
+
+**对接接口**：
+| 操作 | 接口 |
+|---|---|
+| 申领邮箱 | `POST /api/external/pool/claim-random` |
+| 获取最新验证码 | `GET /api/external/verification-code` |
+| 释放邮箱 | `POST /api/external/pool/claim-release` |
+| 完成邮箱 | `POST /api/external/pool/claim-complete` |
+
+**后端改动**：
+- 补充 CORS 支持，允许 `chrome-extension://` 来源
+
+**存放位置**：独立子目录 `browser-extension/`
+
+**当前状态**：
+- 设计讨论已完成，方案定稿，**尚未决定是否开始实施**
+
+
+#### 161. 合并 main -> dev + 全量测试验证
+
+**时间**：2026-04-18
+
+**背景**：main 分支包含 v1.19.0 多项修复（refresh 逻辑、SSE issue#45、版本检测等），dev 包含浏览器扩展 v0.1.0，需合并确认兼容性。
+
+**操作**：
+- `git merge main -X ours --no-ff`（WORKSPACE.md 冲突以 dev 为准）
+- 合并引入 13 个文件变更，1079 insertions
+
+**测试结果**：
+- 共运行 **1204 个测试**（比合并前多 7 个，来自 main 新测试），耗时 377s
+- 通过：1196 个
+- 跳过：7 个
+- 失败：1 个（`test_pool_cf_real_e2e::test_04_claim_complete_timeout_skips_delete`，CF Worker E2E，环境限制，与代码无关）
+
+**结论**：合并后所有功能性测试全部通过，浏览器扩展代码与 main 分支兼容 ✅
+
+**注意**：本次 merge commit 仅本地，未推送。
+
+---
+#### 160. 全量测试 + git push 到远端
+
+**时间**：2026-04-18
+
+**操作**：
+`ash
+python -m unittest discover -s tests -v
+git push origin dev
+`
+
+**结果**：
+- 共运行 **1197 个测试**，耗时 360s
+- 通过：1189 个
+- 跳过：7 个
+- 失败：1 个（`test_pool_cf_real_e2e::test_04_claim_complete_timeout_skips_delete`）
+
+**失败分析**：该测试需要真实 CF Worker API（https://temp.zerodotsix.top），本地无网络访问，属于预期内的环境限制，与本次代码变更无关。
+
+**Push**：`e13fcf4 → origin/dev` 推送成功
+
+---
 ## 2026-04-16
 
 ### 操作记录
 
-#### 155. 发布执行（v1.19.0）：版本同步、分批回归、构建产物完成
+#### 129. 同步 main 最新提交 a9381f8（冲突按当前分支记录保留）
 
 **时间**：2026-04-17
 
 **本次操作**：
 
-1. 发布口径确认
-   - 按仓库 `RELEASE.md` 执行 Python + Docker 发布流程（非 Tauri 流程）
-   - 目标版本：`v1.19.0`
-
-2. 版本与发布文档同步
-   - 更新：`outlook_web/__init__.py`（`1.18.0 -> 1.19.0`）
-   - 更新：`tests/test_version_update.py`（版本断言与展示）
-   - 更新：`README.md`、`README.en.md`（稳定版本号）
-   - 更新：`CHANGELOG.md`（新增 `v1.19.0` 章节）
-   - 更新：`docs/DEVLOG.md`（新增 `v1.19.0` 记录）
-   - 生成：`dist/release-notes-v1.19.0.md`
-
-3. 测试验证（失败即停止策略，本轮均通过）
-   - 版本回归：`python -m unittest tests.test_version_update -v`
-     - 结果：`Ran 51 tests in 9.689s`，`OK`
-   - 全量分批回归（每批 timeout=300000ms）：
-     - Batch1：`Ran 303 tests in 146.333s`，`OK`
-     - Batch2：`Ran 266 tests in 58.760s`，`OK`
-     - Batch3：`Ran 273 tests in 44.991s`，`OK (skipped=7)`
-     - Batch4：`Ran 352 tests in 83.978s`，`OK`
-
-4. 构建与产物
-   - 镜像构建：`docker build -t outlook-email-plus:v1.19.0 .` 成功
-   - 镜像 ID：`sha256:bc56878addf59549a2871319039f8d192bcb0b487578c274cfd3fe051983883b`
-   - 导出产物：
-     - `dist/outlook-email-plus-v1.19.0-docker.tar`
-       - size=`205110784`
-       - sha256=`2192206c35b53baffb30d669f01f3712682518a94c07057e5efc716d5d296410`
-     - `dist/outlookEmailPlus-v1.19.0-src.zip`
-       - size=`4153423`
-       - sha256=`c6e03de9b5e6c36f980544464bcfea152bd1e28c4557cc097ae99333bbea6778`
-
-5. 主线同步
-   - 已提交：`8f578da release: prepare v1.19.0 refresh guidance update`
-   - 已推送：`git push origin main`（`772d540..8f578da`）
-
-6. 当前状态
-   - 版本准备、测试、构建均已完成，下一步为打 tag 并创建 GitHub Release。
-
-#### 156. 发布收口（v1.19.0）：tag 推送、Release 页面更新与附件校验完成
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 主线同步
-   - 提交：`45a00d4 docs(release): record v1.19.0 verification and artifacts`
-   - 推送：`git push origin main`（`8f578da..45a00d4`）
-
-2. tag 发布
-   - 创建：`git tag -a v1.19.0 -m "v1.19.0"`
-   - 推送：`git push origin v1.19.0`
-
-3. GitHub Release 操作
-   - 首次执行 `gh release create v1.19.0 ...` 返回 `HTTP 422 Release.tag_name already exists`
-   - 处理：改为对已有 release 执行覆盖更新
-     - `gh release upload v1.19.0 ... --clobber`
-     - `gh release edit v1.19.0 --notes-file dist/release-notes-v1.19.0.md`
-
-4. Release 结果校验
-   - 发布页：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.19.0`
-   - 附件：
-     - `outlook-email-plus-v1.19.0-docker.tar`
-       - size=`205110784`
-       - digest=`sha256:2192206c35b53baffb30d669f01f3712682518a94c07057e5efc716d5d296410`
-     - `outlookEmailPlus-v1.19.0-src.zip`
-       - size=`4153423`
-       - digest=`sha256:c6e03de9b5e6c36f980544464bcfea152bd1e28c4557cc097ae99333bbea6778`
-
-5. 当前状态
-   - `v1.19.0` 发布日志已同步到 GitHub Release 页面
-   - 两个发布产物已上传并完成 digest 校验
-
-#### 157. CI/CD 状态巡检（v1.19.0 发布后）
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 巡检范围
-   - 查询最近 20 条 Actions 运行：`gh run list --limit 20 ...`
-   - 聚焦 Docker 发布与 Release 工作流：
-     - `Build and Push Docker Image`
-     - `Create GitHub Release`
-
-2. 关键结论
-   - `Create GitHub Release`（tag `v1.19.0`，run `24551939289`）= `success`
-   - `Build and Push Docker Image`（tag `v1.19.0`，run `24551939307`）= `failure`
-     - 失败点：`quality-gate -> Run formatter checks`
-     - 结果：`build-and-push` job 被跳过
-   - `Build and Push Docker Image`（main，run `24551848819`）同样在 `quality-gate -> Run formatter checks` 失败
-   - `Code Quality`（main，run `24551848813`）失败点一致：`Run Black (Code Formatter Check)`
-   - 最新提交 `53b67ac` 对应 `SonarCloud Scan`（run `24552023774`）当前 `in_progress`
-
-3. 影响评估
-   - GitHub Release 页面与附件已成功发布，但 Docker 工作流未全绿。
-   - 当前阻塞主因为格式化门禁（Black/formatter）未通过。
-
-4. 文档同步
-   - 本条已回填 `WORKSPACE.md`
-
-#### 158. CI 失败修复：按远端日志执行 Black 格式化并通过本地校验
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 读取失败日志定位根因
-   - 读取 run：`24551848813`（Code Quality）失败日志
-   - 失败点：`Run Black (Code Formatter Check)`
-   - 受影响文件（日志明确）：
-     - `outlook_web/services/refresh.py`
-     - `tests/test_refresh_outlook_only.py`
-     - `tests/test_refresh_selected_issue45.py`
-     - `tests/test_frontend_account_type_and_refresh_suggestions_contract.py`
-
-2. 执行修复
-   - 命令：
-     - `python -m black <上述4个文件>`
-   - 结果：4 个文件全部完成格式化。
-
-3. 本地门禁复核
-   - `python -m black --check outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py` -> `All done`（通过）
-   - `python -m isort --check-only --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py` -> 通过
-   - 定向回归：
-     - `python -m unittest tests.test_refresh_outlook_only tests.test_refresh_selected_issue45 tests.test_frontend_account_type_and_refresh_suggestions_contract -v`
-     - 结果：`Ran 20 tests in 5.536s`，`OK`
-
-4. 当前状态
-   - 本地已完成与 CI 失败点一致的 formatter 修复与回归验证。
-   - 下一步：提交并推送本次格式化修复，重新触发远端 CI/CD。
-
-#### 159. 格式化修复已推送并触发新一轮 CI（进行中）
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 提交与推送
-   - 提交：`7634d4b style: satisfy black checks for refresh release files`
-   - 推送：`git push origin main`
-
-2. 新触发工作流（head=`7634d4b`）
-   - `Code Quality`：`in_progress -> success`
-     - run：`24552187351`
-     - `Run Black`、`isort`、`flake8`、`mypy` 均通过
-   - `Python Tests`：`in_progress`（run `24552187349`）
-   - `Build and Push Docker Image`：`in_progress`（run `24552187340`）
-   - `SonarCloud Scan`：`in_progress`（run `24552187327`）
-
-3. 当前结论
-   - 关键阻塞点（formatter gate）已在新一轮 `Code Quality` 中确认修复。
-   - 其余工作流仍在运行，需继续跟踪到全部完成后再判定“全绿”。
-
-#### 160. CI 收口结果：主线工作流已恢复全绿
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 继续拉取最新 Actions 状态
-   - 命令：`gh run list --limit 20 ...`
-
-2. head=`7634d4b`（格式化修复提交）结果
-   - `Code Quality`：`success`（run `24552187351`）
-   - `Python Tests`：`success`（run `24552187349`）
-   - `Build and Push Docker Image`：`success`（run `24552187340`）
-   - `SonarCloud Scan`：`success`（run `24552187327`）
-
-3. 最新提交（文档同步）状态
-   - `docs: record formatter fix and ci retrigger status`（`baa0105`）对应 `SonarCloud Scan`：`success`（run `24552240216`）
-
-4. 结论
-   - 本轮 `v1.19.0` 发布后的 CI 阻塞（formatter gate）已被修复并验证。
-   - 当前主线关键工作流已恢复全绿。
-
-#### 154. 人工验收结论回填：本轮本地 Docker 验收通过
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 验收结果确认
-   - 用户已确认：`验收通过了`
-   - 验收环境：`http://127.0.0.1:5002`
-   - 对应容器：`outlook-email-plus-local-main`（重建后实例）
-
-2. 状态收口
-   - 本轮“main 合并后分批回归 + 本地 Docker 重构建 + 人工验收”闭环完成。
-   - 当前不新增代码实现变更，仅做会话文档状态更新。
-
-3. 文档同步
-   - 本条已回填 `WORKSPACE.md`
-   - BUG 文档同步追加“人工验收通过”结论
-
-#### 153. 本地 Docker 重构建并复用 5002 启动人工验收容器（按用户选择方案B）
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 现场确认
-   - Docker 可用：`Docker version 28.3.2`
-   - 原容器：`outlook-email-plus-local-main`（`5002->5000`）处于 `healthy`
-
-2. 按用户选择执行方案B（复用 5002）
-   - 停止并删除旧容器：
-     - `docker stop outlook-email-plus-local-main`
-     - `docker rm outlook-email-plus-local-main`
-
-3. 本地构建新镜像
-   - 命令：`docker build -t ghcr.io/zeropointsix/outlook-email-plus:local-main-20260417 .`
-   - 结果：`DONE`，镜像 ID `sha256:22c3e01515a19002d6c397872fb91b914f406d257dea4d67affea9ed887d8e52`
-
-4. 复用 5002 启动新容器（隔离数据目录）
-   - 运行目录：
-     - `.runtime/docker-data-main-20260417 -> /app/data`
-     - `.runtime/docker-run-main-20260417 -> /app/.runtime`
-   - 启动命令：`docker run -d --name outlook-email-plus-local-main -p 5002:5000 ...`
-   - 新容器 ID：`ef9da16ca02e19b88307027682762d102024dc14ca41dd6da4e1b6d7caca4360`
-
-5. 启动后核验
-   - `docker ps`：`outlook-email-plus-local-main   Up ... (healthy)   0.0.0.0:5002->5000`
-   - 健康检查：`GET http://127.0.0.1:5002/healthz` 返回
-     - `{"boot_id":"1776406310777-7","status":"ok","version":"1.18.0"}`
-
-6. 当前可用状态
-   - 人工验收地址：`http://127.0.0.1:5002`
-
-#### 151. main 合并后全量回归复核：单次全量执行超时，改为分批方案继续
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 分支现场复核
-   - `Buggithubissue`：`## Buggithubissue...origin/Buggithubissue`（已对齐、工作树干净）
-   - `main`：`## main...origin/main [ahead 4]`
-
-2. 在本地 `main` 执行全量 unittest
-   - 命令：`python -m unittest discover -v`
-   - 超时：`300000ms`
-   - 实际结果：命令在超时上限前未完成，日志未出现最终 `Ran X tests` / `OK` / `FAILED` 汇总行
-   - 输出文件：`C:\Users\PLA30\.local\share\opencode\tool-output\tool_d99c3135e001g8oijcrhMfXi5k`
-
-3. 当前结论与后续
-   - 当前无法给出“合并后全量通过/失败”的最终结论（因超时中断）
-   - 用户已选择下一步方案：按分批方式继续跑完并汇总
-
-#### 152. main 合并后分批全量回归完成：4 分片全部通过
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 按分批方案执行 unittest（每批 timeout=300000ms）
-   - 分片1：`Ran 303 tests in 189.896s`，`OK`
-   - 分片2：`Ran 266 tests in 47.230s`，`OK`
-   - 分片3：`Ran 273 tests in 43.359s`，`OK (skipped=7)`
-   - 分片4：`Ran 352 tests in 82.976s`，`OK`
-
-2. 汇总结论
-   - 四个分片均通过，未出现 FAIL/ERROR。
-   - 在当前单命令 300000ms 约束下，分批方式已完成 `main` 合并后的全量回归闭环。
-
-3. 当前分支状态
-   - `main...origin/main [ahead 4]`（本地领先远端 4 个提交，尚未 push）
-
-4. 文档同步
-   - 本条已回填 `WORKSPACE.md`
-   - BUG 文档同步追加“main 合并后分批全量回归通过”状态
-
-#### 150. 按用户要求仅执行推送：本地分支已同步到远端
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 推送前状态
-   - 分支：`Buggithubissue`
-   - 状态：`ahead 1`（本地领先远端 1 个提交）
-   - 最新提交：`402c04a fix refresh failure guidance and validate lock recovery flow`
-
-2. 执行推送
-   - 命令：`git push origin Buggithubissue`
-   - 结果：`772d540..402c04a  Buggithubissue -> Buggithubissue`
-
-3. 推送后验证
-   - `git status -sb`：`## Buggithubissue...origin/Buggithubissue`（已对齐）
-   - `git log -1 --oneline`：`402c04a ...`
-
-4. 文档同步
-   - 本条已回填 `WORKSPACE.md`
-   - BUG 文档同步补充“已推送远端分支”状态
-
-#### 149. 按用户要求执行“单账号重试验证”时的现场阻塞：脚本登录口令不匹配
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 验证准备
-   - 目标失败账号：`MistyBaker7602@hotmail.com`
-   - 账号 ID：`226`
-
-2. 执行尝试
-   - 尝试通过本地脚本会话调用：`POST /api/accounts/226/retry-refresh`
-   - 先按默认口令执行登录：`POST /login`（password=`12345678`）
-
-3. 实际结果
-   - 登录返回：`401 LOGIN_INVALID_PASSWORD`
-   - 后续重试接口返回：`401 AUTH_REQUIRED`
-   - 结论：当前环境登录口令已非默认值，导致脚本态无法直接代用户发起“单账号重试”。
-
-4. 当前状态
-   - 单账号重试验证尚未完成，需改为：
-     - 用户在已登录前端手工点“重试该账号”，我后台实时抓取 run/log；或
-     - 用户提供当前口令后再由脚本继续。
-
-5. 文档同步
-   - 本条已回填 `WORKSPACE.md`。
-   - BUG 文档同步追加“单账号重试验证阻塞点”。
-
-#### 148. 对“1 个失败账号”做复盘分析：确认为外部 TLS 链路瞬时异常
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 失败样本复盘
-   - 目标 run：`9e56581aef1544168d254b1a32cedb59`
-   - run 结果：`completed`，`100 success / 1 failed`
-   - 失败账号：`MistyBaker7602@hotmail.com`（`account_id=226`）
-
-2. 失败明细与账号上下文
-   - 失败错误：
-     - `HTTPSConnectionPool ... SSLError(SSLEOFError ... UNEXPECTED_EOF_WHILE_READING)`
-   - 账号信息：
-     - `provider=outlook`、`account_type=outlook`、`status=active`
-     - 所属分组 `group_id=1`（默认分组），`proxy_url=null`
-
-3. 历史分布核查
-   - `scheduled + failed` 聚合仅命中该账号 1 次（`fail_count=1`）
-   - 未发现系统性批量失败模式
-
-4. 结论
-   - 当前证据更符合“外部网络/TLS 瞬时波动”导致的单点失败，非代码逻辑普遍缺陷。
-   - 与此前“锁遗留导致立即冲突”属于不同类别问题。
-
-5. 文档同步
-   - 本条已回填 `WORKSPACE.md`
-   - BUG 文档已追加“单失败账号根因复盘”小节
-
-#### 147. 验收完成态快照：本轮全量刷新已完成（100 成功 / 1 失败，锁已释放）
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 按用户要求获取“完成态快照”
-   - 目标 run：`9e56581aef1544168d254b1a32cedb59`
-   - 最终状态：
-     - `status=completed`
-     - `started_at=2026-04-17 03:48:03`
-     - `finished_at=2026-04-17 03:58:35`
-     - `total=101`
-     - `success_count=100`
-     - `failed_count=1`
-     - `message=完成：成功 100，失败 1`
-
-2. 锁状态确认
-   - `LOCK_EXISTS=False`（刷新结束后锁已正常释放）
-
-3. 刷新日志聚合
-   - `account_refresh_logs`（run_id 对应）
-     - `total=101`
-     - `success=100`
-     - `failed=1`
-
-4. 失败明细
-   - 失败账号：`MistyBaker7602@hotmail.com`
-   - 错误类型：请求过程 SSL EOF 网络异常
-   - 错误摘录：
-     - `SSLError(SSLEOFError ... UNEXPECTED_EOF_WHILE_READING)`
-
-5. 结论
-   - 本轮全量刷新闭环正常：任务完成、锁释放、绝大多数账号成功。
-   - 单个失败属于外部网络/SSL链路波动类问题，不是刷新流程卡死问题。
-
-6. 文档同步
-   - 本条已回填 `WORKSPACE.md`
-   - BUG 文档同步追加本轮“完成态快照 + 单失败归因”
-
-#### 146. 人工验收实时跟踪（继续）：全量刷新任务持续成功推进中
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 按用户要求继续后台读取运行状态
-   - 当前锁存在且正常：
-     - `name=refresh_all_tokens`
-     - `owner_id=cb396ea3e1e1400c9bae1bf8546e7902`
-     - `expires_in_sec≈6609.94`
-   - 最新 run：
-     - `id=9e56581aef1544168d254b1a32cedb59`
-     - `trigger_source=scheduled_manual`
-     - `status=running`
-     - `total=101`
-
-2. 刷新日志增量观察
-   - `account_refresh_logs` 最新 15 条全部为：
-     - `refresh_type=scheduled`
-     - `status=success`
-     - `run_id=9e56581aef1544168d254b1a32cedb59`
-
-3. 结论
-   - 当前全量刷新执行健康，正在按批次持续成功处理账号。
-   - 执行期间若触发其他刷新入口，命中冲突提示属互斥保护预期行为。
-
-4. 文档同步
-   - 本条已回填 `WORKSPACE.md`。
-   - BUG 文档同步补充“验收进行中持续 success”观测结果。
-
-#### 145. 按用户要求执行一次全量 unittest 验证（通过）
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 执行全量测试
-   - 命令：`python -m unittest discover -v`
-   - 超时设置：`300000ms`
-
-2. 结果汇总
-   - `Ran 1194 tests in 290.291s`
-   - `OK (skipped=7)`
-   - 本轮未发现失败用例（无 FAIL / ERROR）
-
-3. 结论
-   - 当前工作树（包含本会话的刷新冲突与权限提示修复）在全量 unittest 下通过。
-
-4. 文档同步
-   - 本条已回填 `WORKSPACE.md`
-   - BUG 文档同步追加“全量回归通过”记录
-
-#### 144. 后台实时跟踪用户本次全量刷新：当前任务已实际在跑（非立即冲突）
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 按用户要求后台读取当前运行态
-   - `distributed_locks`：存在当前锁
-     - `name=refresh_all_tokens`
-     - `owner_id=cb396ea3e1e1400c9bae1bf8546e7902`
-   - `refresh_runs` 最新记录：
-     - `id=9e56581aef1544168d254b1a32cedb59`
-     - `trigger_source=scheduled_manual`
-     - `status=running`
-     - `total=101`
-
-2. 刷新日志增量（同一 run_id）
-   - `account_refresh_logs` 最新 10 条均为 `refresh_type=scheduled` 且 `status=success`
-   - 说明本次全量刷新已进入实质处理阶段，并持续产出成功记录
-
-3. 当前判断
-   - 这次不是“点击即冲突”；任务已正常启动并在执行。
-   - 任务执行中再触发其它刷新入口会命中冲突提示属于预期互斥行为。
-
-4. 附加观察
-   - 通过脚本访问 `/api/system/health` 返回 401（未带有效登录态），不影响上述数据库侧运行态判断。
-
-5. 文档同步
-   - 本条执行结果已回填 `WORKSPACE.md`。
-   - BUG 文档同步追加“本次实时跟踪结果：run 正在执行且持续 success”。
-
-#### 143. 现场恢复已执行：清理遗留刷新锁并收尾卡住的 running 任务
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 执行前快照与备份
-   - 执行前状态（`data/outlook_accounts.db`）：
-     - `distributed_locks` 存在 `refresh_all_tokens` 1 条
-     - `refresh_runs` 存在 `status=running` 1 条（`id=f2da7e91a4ef43d9ad10b0533d7ea737`）
-   - 备份数据库：
-     - `data/outlook_accounts.before_lock_cleanup_20260417_114329.db`
-
-2. 现场恢复动作（已执行）
-   - 删除遗留锁：`DELETE FROM distributed_locks WHERE name='refresh_all_tokens'`
-   - 收尾遗留 run：将 `status='running'` 的刷新任务标记为 `failed`，补 `finished_at` 与 message
-   - 实际结果：
-     - `DELETED_LOCKS=1`
-     - `UPDATED_RUNS=1`
-
-3. 执行后核验
-   - `AFTER_LOCKS=0`（刷新锁已清空）
-   - 目标 run 状态更新为：
-     - `status=failed`
-     - `finished_at=2026-04-17 03:44:30`
-     - `message=Recovered after stale running lock cleanup`
-
-4. 风险信息（关键）
-   - 当前配置估算刷新锁 TTL：
-     - `refresh_delay_seconds=5`
-     - 可刷新 Outlook 活跃账号约 `101`
-     - 预计锁 TTL = `7200s`（120 分钟）
-   - 这意味着一旦刷新任务异常中断，用户会在较长时间内持续命中“前面有人”。
-
-5. 文档同步
-   - 本条已写入 `WORKSPACE.md`
-   - BUG 文档已追加“现场恢复执行记录 + TTL 风险”说明
-
-#### 142. 深入读取日志+数据库定位“单次全量也冲突”根因：遗留运行态锁未释放
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 复核日志（按用户要求）
-   - 继续读取 `manual_acceptance_5000*.err.log`
-   - 观察到多次 `trigger-scheduled-refresh?force=true` 后出现冲突/权限两类问题
-
-2. 读取数据库锁与刷新运行态（`data/outlook_accounts.db`）
-   - `distributed_locks` 当前存在：
-     - `name=refresh_all_tokens`
-     - `owner_id=361421e017704da395890e5543c6aabe`
-     - `expires_at` 仍在未来（会持续拦截新的刷新请求）
-   - `refresh_runs` 发现遗留记录：
-     - `id=f2da7e91a4ef43d9ad10b0533d7ea737`
-     - `trigger_source=scheduled_manual`
-     - `status=running`
-     - `finished_at=NULL`
-     - 开始时间对应用户现场触发窗口
-
-3. 根因结论
-   - 用户“单次全量刷新就提示前面有人”并非误报。
-   - 直接原因是：**历史刷新任务进入 running 后未正常收尾，导致分布式锁仍有效**，后续刷新均命中 `REFRESH_CONFLICT`。
-
-4. 当前状态
-   - 问题已从“现象不清楚”收敛为“锁遗留 + run 未收尾”的确定性根因。
-   - 下一步可选：
-     - 仅清理现场（删锁+标记遗留 run failed）先恢复可用；
-     - 或追加代码级自愈策略，避免后续再次出现同类卡死。
-
-5. 文档同步
-   - 本条已写入 `WORKSPACE.md`
-   - BUG 文档同步补充“锁遗留根因”分析与证据
-
-#### 141. 人工验收前确认服务状态：5000 已在运行并可直接验证
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 按用户“启动服务验证”要求检查运行态
-   - 端口检查：`0.0.0.0:5000` 处于 `Listen`
-   - OwningProcess：`49344`
-
-2. 进程核对
-   - 应用进程：`python.exe start.py`（PID=`49344`）
-   - 后台包装进程：`powershell.exe`（PID=`15408`）
-
-3. 结论
-   - 服务已处于可用状态，无需重复启动。
-   - 可直接进入前端做“单次全量刷新失败提示（NO_MAIL_PERMISSION）”人工验收。
-
-4. 文档同步
-   - 本条运行态确认已回填 `WORKSPACE.md`。
-   - BUG 文档同步补充“当前验收服务仍在监听”的状态说明。
-
-#### 140. 继续修复单次全量刷新失败提示：补 NO_MAIL_PERMISSION 可执行指引（前端）并回归
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 目标（对应用户现场反馈）
-   - 单次全量刷新失败时，避免前端只显示笼统“刷新失败”。
-   - 对日志中已确认的 `NO_MAIL_PERMISSION`（403）给出可执行步骤。
-
-2. 前端实现
-   - 更新：`static/js/main.js`
-   - 新增：`buildRefreshAllPermissionErrorSummary(errorPayload)`
-   - 在 `refreshAllAccounts()` 的 SSE `type=error` 分支新增：
-     - 若 `errCode === 'NO_MAIL_PERMISSION'`：
-       - 展示结构化摘要（含 `[Code] NO_MAIL_PERMISSION`）
-       - 明确提示重新授权并授予 `Mail.Read / Mail.ReadWrite`
-       - 带 Trace ID 反馈指引（若存在）
-     - 其余错误保持原有分支逻辑（冲突 warning、其他 error）
-
-3. 测试补强
-   - 更新：`tests/test_frontend_account_type_and_refresh_suggestions_contract.py`
-   - 新增用例：`test_refresh_all_no_mail_permission_uses_actionable_summary`
-   - 断言点：
-     - 存在 `buildRefreshAllPermissionErrorSummary`
-     - 存在 `NO_MAIL_PERMISSION` 专门分支
-     - 文案包含 `Mail.Read 或 Mail.ReadWrite`
-
-4. 回归结果
-   - `python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v`
-     - `Ran 9 tests ... OK`
-   - `python -m unittest tests.test_refresh_outlook_only -v`
-     - `Ran 10 tests ... OK`
-
-5. 当前状态
-   - “单次全量刷新失败但无可执行细节”的前端体验已补强到 `NO_MAIL_PERMISSION` 场景。
-   - 冲突类（`REFRESH_CONFLICT`）与权限类（`NO_MAIL_PERMISSION`）现均有明确行动提示。
-
-#### 139. 按用户要求复读多轮人工验收日志并重新判因（单次全量刷新也会失败）
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 复读日志范围
-   - `manual_acceptance_5000_20260417_102854.err.log`
-   - `manual_acceptance_5000_20260417_104541.err.log`
-   - `manual_acceptance_5000_20260417_110841.err.log`
-   - `manual_acceptance_5000_20260417_112303.err.log`
-   - `manual_acceptance_5000.err.log`
-
-2. 关键事实（按时间线）
-   - 10:53 轮：存在 `REFRESH_CONFLICT`（`POST /api/accounts/refresh-failed` -> 409）
-   - 11:22 轮：在**单次** `GET /api/accounts/trigger-scheduled-refresh?force=true` 之后出现
-     - `code=NO_MAIL_PERMISSION status=403 type=PermissionError`
-     - details 显示 scope 不含邮件读取权限（Mail.Read / Mail.ReadWrite）
-
-3. 重新判因
-   - 用户现场“单次全量刷新也提示失败”与“重复触发冲突”是两类问题：
-     - A 类：锁冲突（`REFRESH_CONFLICT`）
-     - B 类：账号权限不足（`NO_MAIL_PERMISSION`）
-   - 当前前端“全量刷新”错误展示仍可能退化为通用失败提示，导致 B 类问题感知为“没详细信息”。
-
-4. 当前结论
-   - 不能仅按“全量刷新重复触发”解释用户现场。
-   - 需要继续补齐“全量刷新单次失败时”的前端可执行提示（尤其权限不足场景）以避免只见笼统报错。
-
-5. 文档同步
-   - 本条已写入 `WORKSPACE.md`
-   - BUG 文档已同步追加“日志复盘与双根因（冲突 + 权限）”说明
-
-#### 138. 按用户要求直接启动验收服务（5000）并同步现场状态
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 按用户要求直接启动本地服务用于人工测试
-   - 先确认端口：`5000` 初始无监听（`NO_LISTENER`）
-
-2. 启动尝试与现场结果（按真实过程记录）
-   - 尝试 A：`Start-Process python start.py`（带 stdout/stderr 重定向）
-     - 返回：`PID=23604`
-     - 日志：
-       - `manual_acceptance_5000_20260417_110841.out.log`
-       - `manual_acceptance_5000_20260417_110841.err.log`
-     - 进程后续退出，但日志证明服务曾成功拉起并处理请求（含 `trigger-scheduled-refresh?force=true`）
-   - 尝试 B：`cmd /c python start.py 1>>... 2>>...`
-     - 返回：`PID=46892`
-     - 日志：
-       - `manual_acceptance_5000_20260417_112303.out.log`
-       - `manual_acceptance_5000_20260417_112303.err.log`
-     - 该尝试同样出现“启动成功日志”，但监听未保持
-   - 尝试 C（最终生效）：通过后台 PowerShell 包装进程拉起 `python start.py`
-     - 包装进程 PID：`15408`
-     - 当前监听：`0.0.0.0:5000`，OwningProcess=`49344`（Listen）
-
-3. 当前可用状态
-   - 人工验收地址：`http://127.0.0.1:5000`
-   - 当前端口 5000 处于监听中，可继续按冲突场景进行前端体验验证
-
-4. 关联说明
-   - 本轮为“启动服务配合人工测试”动作，不涉及新增业务代码改动。
-   - 已将本轮服务启动轨迹与关键 PID / 日志路径回填到 `WORKSPACE.md`。
-
-#### 137. Plan 模式落地修复：统一刷新冲突可执行提示（后端+前端）并补回归
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 先分析用户现场问题（不是只跑测试）
-   - 复核人工验收日志：`manual_acceptance_5000_20260417_104541.err.log` 出现
-     - `code=REFRESH_CONFLICT status=409`
-     - `POST /api/accounts/refresh-failed`
-   - 结论：用户当前主要痛点是“刷新冲突时提示不够可执行”，且并非仅 selected 链路。
-
-2. 后端修复（`outlook_web/services/refresh.py`）
-   - 统一三条冲突分支的错误语义（scheduled / selected / retry_failed）：
-     - `message` 统一为：`当前已有刷新任务执行中，请等待当前任务完成后再重试`
-     - 补齐 `message_en`：`Another refresh task is already running. Wait for it to finish and retry.`
-   - 目标：保证前端无论命中哪条刷新入口，都拿到一致且可执行的冲突提示。
-
-3. 前端修复（`static/js/main.js`）
-   - `refreshAllAccounts()` 补上 SSE `data.type === 'error'` 显式分支：
-     - 对 `REFRESH_CONFLICT` 使用 `warning` + 错误详情弹窗（含 trace / details）
-     - 其他错误继续 `error`
-   - `retryFailedAccounts()` 针对 `REFRESH_CONFLICT` 单独走可执行文案 warning 提示，不再落到笼统“重试失败”。
-
-4. 测试补强
-   - 更新 `tests/test_refresh_outlook_only.py`：新增 3 个冲突语义回归
-     - `test_manual_trigger_scheduled_refresh_conflict_returns_actionable_message`
-     - `test_selected_refresh_conflict_returns_actionable_message`
-     - `test_retry_failed_accounts_conflict_returns_actionable_message`
-   - 更新 `tests/test_frontend_account_type_and_refresh_suggestions_contract.py`：新增 2 个前端契约检查
-     - `test_refresh_all_sse_error_branch_handles_refresh_conflict`
-     - `test_retry_failed_conflict_branch_uses_warning_with_actionable_message`
-
-5. 回归结果
-   - `python -m unittest tests.test_refresh_outlook_only -v` -> `Ran 10 tests ... OK`
-   - `python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v` -> `Ran 8 tests ... OK`
-
-6. 当前状态
-   - 用户反馈的“刷新冲突时只见笼统失败”已在后端语义与前端展示两端同时收敛。
-   - 相关自动化回归已覆盖并通过。
-
-#### 136. Plan 模式继续推进：定向三组回归复跑并同步文档
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 行动前上下文复核（按会话约束）
-   - 先检索关键实现是否仍在：
-     - 后端 `outlook_web/services/refresh.py` 仍包含 `REFRESH_CONFLICT`、`REFRESH_SELECTED_STREAM_FAILED`
-     - 前端 `static/js/main.js` 仍包含：
-       - `buildSelectedRefreshActionGuide(errorPayload)`
-       - `buildSelectedRefreshErrorSummary(errorPayload)`
-       - SSE 错误分支统一调用上述模板
-
-2. 按用户选择执行“定向回归测试”
-   - `python -m unittest tests.test_refresh_selected_issue45 -v` -> `Ran 1 test ... OK`
-   - `python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` -> `Ran 4 tests ... OK`
-   - `python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v` -> `Ran 6 tests ... OK`
-
-3. 结论
-   - Issue #45 selected 刷新关键链路回归通过
-   - OAuth Tool 账号列表空态与鉴权相关回归通过
-   - 前端刷新失败建议与契约测试回归通过
-
-4. 文档同步
-   - 已更新 `WORKSPACE.md`（本条）
-   - 已更新 `docs/BUG/2026-04-16-批量刷新Selected账号-SSE提前失败BUG.md`，补充本轮定向复跑结果
-
-#### 135. 继续推进：Selected 刷新失败提示统一化（前端+后端联动）并完成回归
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 背景
-   - 用户在人工验收中反馈：selected 刷新出现失败时，前端提示仍不够清晰，缺少统一可执行指引。
-
-2. 后端（selected 刷新专用）错误语义增强
-   - 更新：`outlook_web/services/refresh.py`
-   - 调整点：
-     - 冲突场景 `REFRESH_CONFLICT` 的 `message/message_en` 更明确为“等待当前任务完成后再重试”
-     - selected 流水线兜底异常码从通用 `REFRESH_FAILED` 细化为 `REFRESH_SELECTED_STREAM_FAILED`
-     - 兜底异常补充更清晰 `message/message_en`
-     - `details` 改为结构化信息（`cause + hint`），便于前端统一渲染“可执行步骤”
-
-3. 前端统一提示模板
-   - 更新：`static/js/main.js`
-   - 新增：
-     - `buildSelectedRefreshActionGuide(errorPayload)`
-     - `buildSelectedRefreshErrorSummary(errorPayload)`
-   - 行为：
-     - 针对 `REFRESH_CONFLICT` / `REFRESH_SELECTED_STREAM_FAILED` 输出统一“三步处理建议”
-     - 自动带上错误码与 Trace ID（若存在），方便用户反馈与后端排查
-     - SSE error 统一走模板，不再只给“刷新执行失败”短句
-
-4. 回归验证
-   - `python -m unittest tests.test_refresh_selected_issue45 -v` -> `OK`
-   - `python -m unittest tests.test_refresh_outlook_only -v` -> `OK`
-   - `python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v` -> `OK`
-
-5. 当前状态
-   - selected 刷新失败场景已具备“统一错误码 + 清晰可执行提示 + Trace ID 反馈指引”。
-   - 代码与回归均通过，待用户继续人工验收确认文案体验。
-
-#### 134. 按用户要求继续：4 分片全量通过 + 人工验收服务启动核验
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 按“分片全量”方案执行 unittest（4 分片）
-   - 分片1：`Ran 303 tests in 140.802s`，`OK`
-   - 分片2：`Ran 263 tests in 48.194s`，`OK`
-   - 分片3：`Ran 270 tests in 45.180s`，`OK (skipped=7)`
-   - 分片4：`Ran 352 tests in 74.162s`，`OK`
-   - 结论：本轮分片全量未出现失败与超时。
-
-2. 按用户指定启动人工验收服务（端口 5000）
-   - 启动方式：`Start-Process python start.py`（后台独立进程）
-   - 启动信息：`PID=30976`，日志：
-     - `manual_acceptance_5000.out.log`
-     - `manual_acceptance_5000.err.log`
-   - 日志显示服务曾成功启动并对外提供页面与接口访问（含 `/login`、`/api/settings`、`/token-tool` 等请求）。
-
-3. 启动后状态核验
-   - 以端口监听检查当前时点状态：`5000` 未检测到 listener（`NO_LISTENER`）。
-   - 说明：本轮已完成“启动并人工访问验证”动作，当前时点服务未保持监听，需在后续会话确认是否要再次拉起并保持运行。
-
-4. 文档同步
-   - 本条执行事实已回填 `WORKSPACE.md`。
-   - 相关 BUG 文档将同步补充“本轮分片全量结果 + 人工验收启动记录”。
-
-#### 133. 收尾继续：清理测试产物并复跑关键回归
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 清理临时测试产物
-   - 删除：`test_output.txt`
-   - 目的：保持工作树干净，避免把临时日志误带入后续提交。
-
-2. 复核当前关键改动仍在
-   - `outlook_web/services/refresh.py`：selected 查询补 `provider`，过滤使用 `row["provider"]`
-   - `tests/test_oauth_tool.py`：`setUp()` 清理 `account_claim_logs / account_project_usage / account_refresh_logs / accounts`
-   - `tests/test_refresh_selected_issue45.py`：Issue #45 混合账号 selected 刷新回归用例
-
-3. 关键回归复跑
-   - `python -m unittest tests.test_refresh_selected_issue45 -v` -> `OK`
-   - `python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` -> `OK`
-
-4. 当前状态
-   - 核心修复与关键回归维持通过。
-   - 目前工作树仅保留本次需求相关改动与文档更新，已去除临时测试产物。
-
-#### 132. 继续推进：Issue #45 + OAuth 隔离修复复核，并完成全量分片回归（含超时分裂执行）
-
-**时间**：2026-04-17
-
-**本次操作**：
-
-1. 继续按当前真实工作树推进
-   - 保留并复核两处核心修复：
-     - `outlook_web/services/refresh.py`：selected 刷新查询包含 `provider`，过滤使用 `row["provider"]`
-     - `tests/test_oauth_tool.py`：`setUp()` 清理 `account_claim_logs / account_project_usage / account_refresh_logs / accounts`
-   - 目的：同时覆盖 Issue #45 根因与 OAuth 列表空态的跨用例污染。
-
-2. 定向回归复验
-   - `python -m unittest tests.test_refresh_selected_issue45 -v` -> `OK`
-   - `python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` -> `OK`
-   - `python -m unittest tests.test_refresh_outlook_only tests.test_oauth_tool tests.test_refresh_selected_issue45 -v`
-     - 结果：`Ran 79 tests ... OK`
-
-3. 全量分片回归（严格 300000ms 超时上限）
-   - 4 分片执行结果：
-     - 分片 1：`Ran 435 tests ... OK (skipped=6)`
-     - 分片 2：`Ran 168 tests ... OK (skipped=1)`
-     - 分片 3：首次执行在 `300000ms` 超时（非断言失败）
-     - 分片 4：`Ran 243 tests ... OK`
-   - 对超时分片 3 进行二次分裂后复验：
-     - 3A：`Ran 210 tests in 216.372s ... OK`
-     - 3B：`Ran 132 tests in 12.155s ... OK`
-   - 结论：分片 3 的问题为执行时长超时，不是功能失败；分裂后对应测试集合全部通过。
-
-4. 文档同步
-   - 已将本轮“分片超时→分裂复验通过”的事实回填到 `WORKSPACE.md`
-   - 后续同步到 BUG 文档中的“补充验证”小节，确保文档口径与当前执行结果一致。
-
-5. 当前状态
-   - Issue #45 修复、OAuth 测试隔离修复、selected 独立回归测试均处于通过状态。
-   - 全量分片回归在现有超时约束下已完成闭环验证。
-
-#### 131. A+B 联动落地：OAuth 隔离修复 + Issue #45 恢复修复并补独立回归
-
-**时间**：2026-04-16
-
-**本次操作**：
-
-1. 按会话选择执行策略
-   - 用户通过寸止明确选择：`A+B都落地（先A后B）`
-
-2. A：OAuth Tool 测试隔离修复（先做）
-   - 更新：`tests/test_oauth_tool.py`
-   - `OAuthToolTestBase.setUp()` 清理策略从“仅删 `@oauth-test` 邮箱”升级为“清理账号与关联表”：
-     - `DELETE FROM account_claim_logs`
-     - `DELETE FROM account_project_usage`
-     - `DELETE FROM account_refresh_logs`
-     - `DELETE FROM accounts`
-   - 目的：避免分片/顺序执行时共享临时 DB 残留污染 `test_accounts_list_empty`
-
-3. B：Issue #45 selected 刷新恢复修复
-   - 更新：`outlook_web/services/refresh.py`
-   - 修复点：
-     - selected 查询补齐 `provider` 列
-     - `row.get("provider")` 改为 `row["provider"]`
-
-4. 新增独立回归测试（避免改动既有大文件导致格式化噪音）
-   - 新增：`tests/test_refresh_selected_issue45.py`
-   - 用例：`test_selected_refresh_mixed_accounts_streams_outlook_only_and_skips_imap`
-   - 覆盖：Outlook+IMAP 混选下，selected 刷新应只处理 Outlook，IMAP 被跳过，SSE 返回 `start/progress/complete`
-
-5. 执行验证
-   - `python -m unittest tests.test_refresh_selected_issue45 -v` → `OK`
-   - `python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` → `OK`
-   - `python -m unittest tests.test_refresh_outlook_only tests.test_oauth_tool -v` → `Ran 78 tests ... OK`
-
-6. 文档同步
-   - 更新：`docs/BUG/2026-04-16-批量刷新Selected账号-SSE提前失败BUG.md`
-   - 状态从“待恢复修复”更新为“已恢复修复（会话内二次落地并复验）”
-   - 补充本轮新增回归与验证命令结果
-
-7. 当前状态
-   - A（OAuth 隔离）与 B（Issue #45）均已在代码层完成落地并通过定向回归。
-
-#### 130. 继续推进（按用户选择先做A）：复核当前真实状态并先修复 OAuth Tool 测试隔离污染
-
-**时间**：2026-04-16
-
-**本次操作**：
-
-1. 基线复核（先读 WORKSPACE + 关键代码）
-   - 按用户要求先复读 `WORKSPACE.md`，并复查：
-     - `outlook_web/services/refresh.py`
-     - `tests/test_refresh_outlook_only.py`
-     - `tests/test_oauth_tool.py`
-   - 复核结论：
-     - Issue #45 的根因代码在当前工作树仍可见（selected 刷新分支仍是 `row.get("provider")`，且 selected 查询未选 `provider` 列）
-     - OAuth Tool 的 `test_accounts_list_empty` 失败主要来自共享测试库下的跨用例账号残留污染
-
-2. 会话文档按“当前真实状态”修正
-   - 更新：`docs/BUG/2026-04-16-批量刷新Selected账号-SSE提前失败BUG.md`
-   - 修正点：
-     - 文档状态从“已修复”下调为“待恢复修复（历史已验证，但当前分支未落地）”
-     - 新增“当前真实状态”说明，明确该修复在当前分支未保持
-
-3. A 路线尝试（测试隔离修复）
-   - 尝试更新：`tests/test_oauth_tool.py`
-   - 尝试内容：在 `OAuthToolTestBase.setUp()` 中，将原先仅删除 `email LIKE '%@oauth-test%'` 的局部清理改为全量测试隔离清理：
-     - `DELETE FROM settings WHERE key LIKE 'oauth_tool_%'`
-     - `DELETE FROM account_claim_logs`
-     - `DELETE FROM account_project_usage`
-     - `DELETE FROM accounts`
-   - 目标：消除与其它测试共享临时 DB 时的账号残留，稳定 `test_accounts_list_empty`
-
-4. 验证结果（基于尝试补丁）
-   - 先复现污染场景（修复前）：
-     - `python -m unittest tests.test_refresh_outlook_only tests.test_oauth_tool.OAuthToolApiAccountListTests.test_accounts_list_empty -v`
-     - 结果：`FAIL`（`test_accounts_list_empty` 读到此前用例残留账号）
-   - 修复后定向回归：
-     - `python -m unittest tests.test_refresh_outlook_only tests.test_oauth_tool.OAuthToolApiAccountListTests -v`
-     - 结果：`Ran 11 tests ... OK`
-   - OAuth Tool 模块回归：
-     - `python -m unittest tests.test_oauth_tool -v`
-     - 结果：`Ran 71 tests ... OK`
-
-5. 当前状态
-   - 文档真实性回填已完成（`WORKSPACE.md` + BUG 文档）
-   - A 路线代码补丁在验证后**已回滚**（当前工作树未保留 `tests/test_oauth_tool.py` 的代码改动）
-   - 回滚原因：需先与用户确认是否接受该文件的额外格式化差异，再决定采用何种落地方式
-   - 待继续：
-     - 先确定 A 路线的最终落地策略（保留补丁 vs 调整方案）
-     - Issue #45 的 selected 刷新最小修复仍需在当前分支重新落地并补回归验证
-
-#### 129. Issue #45 修复后全量回归执行记录（分片）
-
-**时间**：2026-04-16
-
-**本次操作**：
-
-1. 回归目标
-   - 按会话要求执行全量回归，验证 Issue #45（selected 批量刷新）修复是否引入回归
-
-2. 全量执行与超时
-   - 执行：`python -m unittest discover -v`
-   - 结果：受会话执行上限影响，命令在 `300000ms` 处超时（非测试失败终止）
-
-3. 分片执行（4 分片）
-   - 分片 1：`Ran 328 tests`，`FAILED (failures=1, skipped=6)`
-     - 失败用例：`tests.test_oauth_tool.OAuthToolApiAccountListTests.test_accounts_list_empty`
-     - 该失败为”列表应为空”断言，与本次 selected 刷新改动链路无直接耦合
-   - 分片 2：`Ran 231 tests`，`OK (skipped=1)`
-   - 分片 3：`Ran 350 tests`，`OK`
-   - 分片 4：`Ran 279 tests`，`OK`
-
-4. 失败项复核
-   - 单独复跑：`python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests.test_accounts_list_empty -v` -> `OK`
-   - 单独复跑类：`python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` -> `OK`
-   - 结论：失败表现为分片执行顺序下的测试隔离/顺序依赖问题，非本次功能改动直接回归
-
-5. 本需求相关测试
-   - `python -m unittest tests.test_refresh_outlook_only -v` -> `Ran 8 tests ... OK`
-   - 新增 selected 回归用例在独立与模块级执行均通过
-
-#### 128. Issue #45 深度定位：Selected 批量刷新 SSE 提前失败根因确认并补回归
-
-**时间**：2026-04-16
-
-**本次操作**：
-
-1. 问题定位（基于 issue + 访问日志 + 代码链路）
-   - 关联 issue：`https://github.com/ZeroPointSix/outlookEmailPlus/issues/45`
-   - 现场日志确认 `POST /api/accounts/refresh/selected` 已到后端（HTTP 200），不是前端发起前拦截
-   - 定位到 `outlook_web/services/refresh.py` 的 selected 刷新链路在账号过滤阶段异常
-
-2. 根因
-   - selected 刷新过滤使用了 `row.get(“provider”)`
-   - 该分支 `row` 为 `sqlite3.Row`（`row_factory=sqlite3.Row`），不支持 `.get()`
-   - 导致 SSE 任务提前失败并回 `type=error`，前端侧仅见通用失败提示
-
-3. 代码修复
-   - 更新：`outlook_web/services/refresh.py`
-   - selected 查询补齐 `provider` 列
-   - `row.get(“provider”)` 改为 `row[“provider”]`
-
-4. 回归测试
-   - 更新：`tests/test_refresh_outlook_only.py`
-   - 新增用例：`test_refresh_selected_mixed_accounts_streams_outlook_only_and_skips_imap`
-   - 覆盖点：混合账号（Outlook+IMAP）下 selected 刷新应只处理 Outlook，并完整返回 SSE `start/progress/complete`
-   - 执行结果：`python -m unittest tests.test_refresh_outlook_only.RefreshOutlookOnlyTests.test_refresh_selected_mixed_accounts_streams_outlook_only_and_skips_imap -v` -> `OK`
-
-5. 会话文档同步
-   - 新增 BUG 文档：`docs/BUG/2026-04-16-批量刷新Selected账号-SSE提前失败BUG.md`
-   - 已记录问题现象、证据链、根因、影响范围与修复建议
-
-#### 128b. 其它本地分支及对应远端已直接对齐到 main 目标提交 772d540
-
-**时间**：2026-04-16
-
-**本次操作**：
-
-1. 目标确认
-   - 按用户确认方案，采用”**直接移动分支指针**”而非 merge / cherry-pick
-   - 覆盖范围：除 `main` 外的全部本地分支
-   - 实际目标提交：`772d540` `docs(workspace): record docs push`
-
-2. 本地分支对齐
-   - 已对齐本地分支：
-     - `Buggithubissue`
-     - `dev`
-     - `feature`
-   - 处理方式：分别在对应 worktree 执行 `git reset --hard 772d540`
-
-3. 远端分支对齐
-   - 已执行：`git push --force-with-lease origin Buggithubissue dev feature`
-   - 对应远端分支已同步到相同提交：`772d540`
-
-4. 现场说明
-   - `Buggithubissue` worktree 中存在未跟踪文件：`test_output.txt`
-   - 本次仅移动分支提交指针，未删除该未跟踪文件
-
-5. 当前状态
-   - 当前 `Buggithubissue` / `dev` / `feature` 的本地分支与远端分支，均已对齐到用户指定目标提交 `772d540`
-   - 为保持”其它分支对齐到 `772d540`”这一结果，本条 `WORKSPACE.md` 记录暂未单独提交到 `main`
+1. 按会话要求将 `origin/main` 最新提交 `a9381f8` 同步到 `dev`。
+2. `cherry-pick` 过程中仅 `WORKSPACE.md` 冲突；按确认策略保留当前分支已有记录并补本条说明。
+3. 完成后继续 `cherry-pick` 流程并推送远端。
 
 #### 127. 文档同步提交已推送到 origin/main
 
