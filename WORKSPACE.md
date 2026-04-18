@@ -615,6 +615,27 @@ CORS(app, resources={
 - 设计讨论已完成，方案定稿，**尚未决定是否开始实施**
 
 
+#### 161. 合并 main -> dev + 全量测试验证
+
+**时间**：2026-04-18
+
+**背景**：main 分支包含 v1.19.0 多项修复（refresh 逻辑、SSE issue#45、版本检测等），dev 包含浏览器扩展 v0.1.0，需合并确认兼容性。
+
+**操作**：
+- `git merge main -X ours --no-ff`（WORKSPACE.md 冲突以 dev 为准）
+- 合并引入 13 个文件变更，1079 insertions
+
+**测试结果**：
+- 共运行 **1204 个测试**（比合并前多 7 个，来自 main 新测试），耗时 377s
+- 通过：1196 个
+- 跳过：7 个
+- 失败：1 个（`test_pool_cf_real_e2e::test_04_claim_complete_timeout_skips_delete`，CF Worker E2E，环境限制，与代码无关）
+
+**结论**：合并后所有功能性测试全部通过，浏览器扩展代码与 main 分支兼容 ✅
+
+**注意**：本次 merge commit 仅本地，未推送。
+
+---
 #### 160. 全量测试 + git push 到远端
 
 **时间**：2026-04-18
