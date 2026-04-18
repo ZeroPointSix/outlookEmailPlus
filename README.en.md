@@ -38,7 +38,7 @@ The repository already includes some screenshots, and more can be added later.
 
 Highlights include:
 
-- Current stable version: `v1.19.0`
+- Current stable version: `v2.0.0`
 
 **OAuth Token Tool**
 - Added a dedicated popup-style token tool for **compatibility-mode account import**
@@ -397,3 +397,4 @@ Apache License 2.0
 ## Contact
 
 For project-related issues or collaboration opportunities, feel free to reach out via email: [outlookmailplus@163.com](mailto:outlookmailplus@163.com)
+

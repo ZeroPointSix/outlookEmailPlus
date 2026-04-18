@@ -615,6 +615,77 @@ CORS(app, resources={
 - 设计讨论已完成，方案定稿，**尚未决定是否开始实施**
 
 
+#### 165. CI/CD 全绿 - v2.0.0 发布验证
+
+**时间**：2026-04-18
+
+**触发**：black 格式化修复 commit `b58ec73`（`style: black格式化 v2.0.0 版本文件`）
+
+**结果**：
+| Workflow | 状态 |
+|---------|------|
+| Code Quality | ✅ success |
+| Python Tests | ✅ success |
+| Build and Push Docker Image | ✅ success |
+| SonarCloud Scan | ✅ success |
+
+**v2.0.0 发布完整链路验证完毕** ✅
+
+---
+
+#### 164. 发布 v2.0.0 GitHub Release
+
+**时间**：2026-04-18
+
+**版本号**：`1.19.0` → `2.0.0`（浏览器扩展为大版本里程碑）
+
+**修改文件**：`outlook_web/__init__.py`、`README.md`、`README.en.md`、`tests/test_version_update.py`、`CHANGELOG.md`、`docs/DEVLOG.md`
+
+**操作**：
+- `git commit` release 准备提交（`d3f94fc`）+ 推送
+- `gh release create v2.0.0` → https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v2.0.0
+
+**结果**：v2.0.0 Release 页面已上线 ✅
+
+---
+
+#### 163. main 分支全量测试 - 全部通过
+
+**时间**：2026-04-18
+
+**操作**：
+`python -m unittest discover -s tests -v`（main 工作树）
+
+**结果**：
+``r
+Ran 1194 tests in 354.407s
+OK (skipped=7)
+`  
+
+- ✅ **全部通过**，0 个失败，7 个跳过
+- 浏览器扩展 v0.1.0 合并到 main 后无任何功能回归
+
+---
+
+#### 162. 合并 dev -> main 发布浏览器扩展 v0.1.0
+
+**时间**：2026-04-18
+
+**操作**：
+- main 工作树执行 `git merge origin/dev --no-ff`，合并 20 个文件，4930 insertions
+- `git push origin main`（`a9381f8` → `663f1ff`）
+
+**合并内容**：
+- 浏览器扩展完整代码（`browser-extension/`）
+- CORS 支持（`outlook_web/app.py`）
+- pool_status 修复（`controllers/accounts.py`、`repositories/accounts.py`）
+- FD/TD/TDD 设计文档
+- README.md / README.en.md 浏览器扩展章节
+
+**结果**：浏览器扩展 v0.1.0 已发布到 main ✅
+
+---
+
 #### 161. 合并 main -> dev + 全量测试验证
 
 **时间**：2026-04-18

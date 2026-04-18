@@ -4,6 +4,23 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.0.0] - 2026-04-18
+
+### 新增功能 / New Features
+
+- **浏览器扩展（Chrome/Edge MV3）v0.1.0**：全新 `browser-extension/` 子目录，提供邮箱池快捷操作面板，支持一键申领邮箱、自动提取验证码/验证链接、完成/释放邮箱，与 OutlookMail Plus 外部 API 无缝集成。
+- **后端 CORS 支持**：`/api/external/*` 接口支持 `chrome-extension://` 来源跨域访问，扩展可直接调用后端。
+
+### 修复 / Bug Fixes
+
+- 修复账号覆盖导入（overwrite 模式）时 `pool_status` 未正确更新的 bug（`_overwrite_account` 参数透传遗漏）。
+- 修复 `update_account_credentials` 不允许更新 `pool_status` 字段导致导入后邮箱池状态异常的问题。
+
+### 重要变更 / Breaking Changes
+
+- 版本号从 `1.19.0` 升级至 `2.0.0`（浏览器扩展为项目重大里程碑）。
+- `requirements.txt` 新增 `flask-cors>=4.0.0`。
+
 ## [v1.19.0] - 2026-04-17
 
 ### 新增功能 / New Features

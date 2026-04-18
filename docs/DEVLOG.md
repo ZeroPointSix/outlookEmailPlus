@@ -1,5 +1,30 @@
 # DEVLOG
 
+## v2.0.0 - 浏览器扩展 v0.1.0 发布
+
+发布日期：2026-04-18
+
+### 新增功能
+
+- 新增 Chrome/Edge MV3 浏览器扩展（`browser-extension/`）：邮箱池快捷操作面板，支持一键申领邮箱、验证码/验证链接自动提取、完成/释放邮箱，与后端外部 API 无缝集成。
+- 新增后端 CORS 支持：`outlook_web/app.py` 集成 `flask-cors`，`/api/external/*` 允许 `chrome-extension://` 来源跨域访问。
+
+### 修复
+
+- 修复账号覆盖导入时 `pool_status` 未正确传递的 bug，确保 claimed/used 状态邮箱在重新导入时能正确重置为 available。
+- 修复 `update_account_credentials` 中 allowed 集合缺少 `pool_status` 字段，导致状态更新静默失败。
+
+### 重要变更
+
+- 版本号从 `1.19.0` 升级至 `2.0.0`，标志浏览器扩展能力正式进入主线。
+- 同步更新版本口径文件：`README.md`、`README.en.md`、`tests/test_version_update.py`、`CHANGELOG.md`。
+- `requirements.txt` 新增 `flask-cors>=4.0.0`。
+
+### 测试/验证
+
+- main 分支全量测试：`Ran 1194 tests in 354.407s  OK (skipped=7)` 全绿 ✅
+- dev 合并 main 后全量测试：`Ran 1204 tests in 377.181s  FAILED (failures=1, skipped=7)`，唯一失败为 CF Worker 真实 E2E（需外部网络），与本次代码变更无关。
+
 ## v1.19.0 - 刷新失败可执行提示与 Selected SSE 稳定性修复
 
 发布日期：2026-04-17

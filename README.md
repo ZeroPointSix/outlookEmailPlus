@@ -42,7 +42,7 @@ OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 
 重点包括：
 
-- 当前稳定版本：`v1.19.0`
+- 当前稳定版本：`v2.0.0`
 
 **OAuth Token 获取工具**
 - 新增独立 Token 工具窗口，以**兼容账号导入模式**获取 Microsoft refresh token
@@ -410,3 +410,4 @@ Apache License 2.0
 ## 联系方式
 
 如果你在使用过程中遇到问题，或有合作意向，欢迎通过邮件联系：[outlookmailplus@163.com](mailto:outlookmailplus@163.com)
+
