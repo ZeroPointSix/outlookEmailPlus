@@ -4,6 +4,10 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+### 修复 / Bug Fixes
+
+- **发布质量门禁修复（未重新发版）**：对 overview / verification 相关文件执行 `black` / `isort` 对齐，拆分 `external_api.get_verification_result` 降低 complexity，并补齐 mypy 类型收窄，修复 `main` 分支后续 `Code Quality` / `Build and Push Docker Image` 链路被质量门禁阻断的问题。
+
 ## [v2.1.0] - 2026-04-20
 
 ### 新增功能 / New Features
