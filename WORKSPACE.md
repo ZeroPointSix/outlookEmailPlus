@@ -947,6 +947,45 @@
 
 - 下一步将基于这一用户授权，把上述文件连同本条记录一起正式提交到本地 `main`
 
+#### 201. v2.1.0 版本准备完成 — 版本锚点、全量测试与发布产物已就绪
+
+**时间**：2026-04-20
+
+**本次背景**：
+
+- 在 `main` / `dev` 已对齐、用户明确版本号选定为 `v2.1.0` 后，开始进入正式发版前的版本准备与产物构建阶段。
+
+**本次执行结果**：
+
+1. 版本锚点统一升级：
+   - `outlook_web/__init__.py`：`2.0.0` → `2.1.0`
+   - `README.md` / `README.en.md`：当前稳定版本与版本亮点同步到 `v2.1.0`
+   - `CHANGELOG.md` / `docs/DEVLOG.md`：新增 `v2.1.0` 发布记录
+   - `tests/test_version_update.py`：版本断言同步到 `2.1.0 / v2.1.0`
+   - `package.json` / `package-lock.json`：NPM 元数据版本同步到 `2.1.0`
+   - `browser-extension/manifest.json`：扩展版本 `0.1.0` → `0.2.0`
+
+2. 全量测试：
+   - 命令：`python -m unittest discover -s tests -v`
+   - 结果：`Ran 1243 tests in 302.912s`
+   - 状态：`OK (skipped=7)`
+
+3. 发布产物构建：
+   - 初次执行前发现本机 Docker Engine 未启动；后续通过启动 Docker Desktop 恢复引擎可用。
+   - 构建命令：`docker build -t outlook-email-plus:v2.1.0 .`
+   - 生成产物：
+     - `dist/outlook-email-plus-v2.1.0-docker.tar`（177,893,376 bytes）
+       - `sha256:108042af3e740b607efc0b4a305a07a9f0f3433805be21b9c95b68eb1a19e497`
+     - `dist/outlookEmailPlus-v2.1.0-src.zip`（4,335,587 bytes）
+       - `sha256:2d93c6102eb85651524571c2b9cbfd2fa6805066c8d3b0d5a057ef7e4b35df56`
+     - `dist/browser-extension-v0.2.0.zip`（38,097 bytes）
+       - `sha256:a237c1796c662e8c5bba205dfea0db8017812478f499c66b4f11d2e4e6416033`
+
+**当前状态**：
+
+- `v2.1.0` 的版本文件、测试结果与本地 release assets 已全部就绪。
+- 下一步进入 release commit、`main` 快进、push/tag 与 GitHub Release 创建。
+
 ---
 
 ## 2026-04-18

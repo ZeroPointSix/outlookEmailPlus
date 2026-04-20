@@ -1,5 +1,44 @@
 # DEVLOG
 
+## v2.1.0 - 数据概览大盘与提取链路观测增强
+
+发布日期：2026-04-20
+
+### 新增功能
+
+- 新增 5 Tab 数据概览大盘：统一展示总览、验证码提取、对外 API、邮箱池、系统活动五类运营数据。
+- 新增 `verification_extract_logs` 与共享日志 helper：统一沉淀普通账号、临时邮箱、external API 提取链路的时延、通道、AI fallback 与错误码。
+- 新增 overview 前端实时重拉与完整 i18n 收口：页头、Tab、KPI、表头、hover note、timeline/channel/status 等可见文案统一纳入翻译。
+
+### 修复
+
+- 修复浏览器扩展复制到脱敏 API Key 导致的“API 无效”问题，复制按钮现可获取真实明文 Key。
+- 修复普通账号前端提取接入 shared logging 后的 Web 兼容语义回归，继续保持 `EMAIL_NOT_FOUND / 404`、`IMAP_AUTH_FAILED / 401` 等既有契约。
+- 修复 overview 页头/Tab 模板静态文案未接 i18n、`刷新` / `邮箱池` 漏词条、残留英文短标签与动态机器值直出问题。
+
+### 重要变更
+
+- 版本号从 `2.0.0` 升级至 `2.1.0`。
+- 浏览器扩展 Manifest 版本从 `0.1.0` 升级到 `0.2.0`。
+- 数据库 schema 升级到 `v23`，新增 `verification_extract_logs`。
+- 当前发布链路继续沿用 Python + Docker（Docker tar + 源码 zip），不引入 Tauri/MSI/NSIS。
+
+### 测试/验证
+
+- 全量测试：
+  - `python -m unittest discover -s tests -v`
+  - 结果：`Ran 1243 tests in 302.912s`
+  - 状态：`OK (skipped=7)`
+- 构建验证：
+  - `docker build -t outlook-email-plus:v2.1.0 .` → 成功
+  - 产物：
+    - `dist/outlook-email-plus-v2.1.0-docker.tar`（177,893,376 bytes）
+      - `sha256:108042af3e740b607efc0b4a305a07a9f0f3433805be21b9c95b68eb1a19e497`
+    - `dist/outlookEmailPlus-v2.1.0-src.zip`（4,335,587 bytes）
+      - `sha256:2d93c6102eb85651524571c2b9cbfd2fa6805066c8d3b0d5a057ef7e4b35df56`
+    - `dist/browser-extension-v0.2.0.zip`（38,097 bytes）
+      - `sha256:a237c1796c662e8c5bba205dfea0db8017812478f499c66b4f11d2e4e6416033`
+
 ## v2.0.0 - 浏览器扩展 v0.1.0 发布
 
 发布日期：2026-04-18

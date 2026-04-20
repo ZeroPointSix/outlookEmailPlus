@@ -36,12 +36,13 @@ The repository already includes some screenshots, and more can be added later.
 
 ## Version Highlights
 
-Current stable version: `v2.0.0`
+Current stable version: `v2.1.0`
 
 ### Recent Version Overview
 
 | Version | Date | Key New Features |
 |---------|------|-----------------|
+| **v2.1.0** | 2026-04 | 📊 **Overview Dashboard**: a 5-tab unified board (Summary / Verification / External API / Mailbox Pool / Activity), plus `verification_extract_logs` for shared observability, browser-extension API-key copy fix, and overview real-time/i18n polish |
 | **v2.0.0** | 2026-04 | 🌐 **Browser Extension** (Chrome/Edge MV3): one-click claim → auto-extract verification code/link → complete/release, no tab-switching needed; backend adds `chrome-extension://` CORS support |
 | **v1.19.0** | 2026-04 | 🔧 Structured refresh-failure hints (error code + actionable steps + trace guide); fixed Selected account refresh early-exit (Issue #45) |
 | **v1.18.0** | 2026-04 | 🔄 Mail pool **project-scoped success reuse**: with explicit `project_key + caller_id + task_id`, `success` returns mailbox to `available` for immediate cross-project reuse (DB v22) |
@@ -53,6 +54,13 @@ Current stable version: `v2.0.0`
 | **v1.9.0** | 2026-03 | 🌐 **Bilingual UI** (Chinese/English); unified notification dispatch (Email + Telegram); demo-site password lock |
 
 ---
+
+### v2.1.0 — Overview Dashboard & Observability
+
+- Added a 5-tab overview dashboard to replace the old dashboard page
+- Added `verification_extract_logs` to unify observability across regular-mailbox, temp-mail, and external-API verification extraction paths
+- Fixed the real browser-extension “API invalid” causes: copying masked API keys and misunderstanding `external pool` / `pool_access` prerequisites
+- Completed overview real-time refresh and i18n polish, so header / tabs / hover notes / timeline now stay consistent with the main cards
 
 ### v2.0.0 — Browser Extension (New)
 

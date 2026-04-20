@@ -4,6 +4,40 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.1.0] - 2026-04-20
+
+### 新增功能 / New Features
+
+- **数据概览大盘正式上线**：新增 5 Tab 统一运营看板，覆盖总览、验证码提取、对外 API、邮箱池、系统活动，并用纯 CSS 图表/进度块/时间线替换旧 dashboard。
+- **验证码提取日志统一观测**：新增 `verification_extract_logs` 表与共享写库 helper，普通账号、临时邮箱、external API、邮箱池相关提取链路统一落日志，支持时延、通道、AI fallback、错误码等维度分析。
+- **Overview 前端实时联动与多语言补齐**：提取成功后会主动失效 overview 缓存并重拉相关 Tab；overview 页头、Tab、KPI、表头、hover note、timeline/channel/status 等可见文案已全部纳入 i18n。
+
+### 修复 / Bug Fixes
+
+- **浏览器扩展“API 无效”修复**：主应用设置页复制 External API Key 时，已从“复制脱敏值”改为登录态拉取真实明文后再复制，避免扩展天然拿到错误 Key。
+- **浏览器扩展前置条件口径澄清**：补齐 `external pool` / `pool_access` 真实依赖，避免把所有“API 无效”都误判成同一个 API Key 问题。
+- **内部 Web 提取兼容回归修复**：普通账号前端提取接入 shared logging 后，重新补齐 IMAP generic patch 点与旧错误语义，继续保持 `EMAIL_NOT_FOUND / 404` 与 `IMAP_AUTH_FAILED / 401` 兼容口径。
+- **Overview 页面细节修复**：修复页头/Tab 模板静态文本未走 i18n、`刷新` / `邮箱池` 漏词条、残留英文短标签与动态机器值直出等问题。
+
+### 重要变更 / Important Changes
+
+- **版本升级**：`outlook_web.__version__` 从 `2.0.0` 升级为 `2.1.0`。
+- **扩展版本同步**：`browser-extension/manifest.json` 从 `0.1.0` 升级为 `0.2.0`，与本次扩展可用性修复一并发布。
+- **数据库升级**：schema 升级到 `v23`，新增 `verification_extract_logs` 表；其中 `account_id > 0` 表示 `accounts.id`，`account_id < 0` 表示负数编码后的 `temp_emails.id`。
+- **发布口径保持不变**：当前仓库继续采用 **Python + Docker** 发布链路，正式产物仍以 Docker 镜像 tar 与源码 zip 为主，不引入 Tauri / Cargo / MSI / NSIS 构建链路。
+
+### 测试/验证 / Testing & Verification
+
+- 全量回归：
+  - `python -m unittest discover -s tests -v`
+  - 结果：`Ran 1243 tests in 302.912s`
+  - 状态：`OK (skipped=7)`
+- 构建验证：
+  - `docker build -t outlook-email-plus:v2.1.0 .` → 成功
+  - `dist/outlook-email-plus-v2.1.0-docker.tar`（177,893,376 bytes）
+  - `dist/outlookEmailPlus-v2.1.0-src.zip`（4,335,587 bytes）
+  - `dist/browser-extension-v0.2.0.zip`（38,097 bytes）
+
 ## [v2.0.0] - 2026-04-18
 
 ### 新增功能 / New Features

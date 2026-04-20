@@ -40,12 +40,13 @@ OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 
 ## 版本亮点
 
-当前稳定版本：`v2.0.0`
+当前稳定版本：`v2.1.0`
 
 ### 近期版本速览
 
 | 版本 | 日期 | 核心新功能 |
 |------|------|-----------|
+| **v2.1.0** | 2026-04 | 📊 **数据概览大盘**：5 Tab 统一看板（总览 / 验证码提取 / 对外 API / 邮箱池 / 系统活动），新增 `verification_extract_logs` 统一观测链路，并修复浏览器扩展 API Key 复制与 overview i18n/实时刷新问题 |
 | **v2.0.0** | 2026-04 | 🌐 **浏览器扩展**（Chrome/Edge MV3）：一键申领邮箱 → 自动提取验证码/链接 → 完成/释放，无需切换标签页；后端新增 `chrome-extension://` CORS 跨域支持 |
 | **v1.19.0** | 2026-04 | 🔧 刷新失败提示结构化增强（错误码 + 可执行步骤 + trace 反馈指引）；Selected 账号刷新提前失败修复（Issue #45） |
 | **v1.18.0** | 2026-04 | 🔄 邮箱池**项目成功复用**：显式携带 `project_key + caller_id + task_id` 时，success 后直接回到 `available`，支持跨项目立即复用（DB v22）|
@@ -57,6 +58,13 @@ OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 | **v1.9.0** | 2026-03 | 🌐 **双语界面**（中/英）；统一通知分发（Email + Telegram）；演示站点登录密码保护 |
 
 ---
+
+### v2.1.0 — 数据概览大盘与观测增强
+
+- 新增 5 Tab 数据概览大盘，替换旧 dashboard
+- 新增 `verification_extract_logs`，统一观测普通账号 / 临时邮箱 / external API 提取链路
+- 修复浏览器扩展“API 无效”的真实根因：复制脱敏 API Key 与 external pool / pool_access 前置条件认知偏差
+- overview 前端补齐实时重拉与完整 i18n，页头 / Tab / hover note / timeline 现与主体卡片保持一致
 
 ### v2.0.0 — 浏览器扩展（新）
 

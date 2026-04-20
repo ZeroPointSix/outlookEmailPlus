@@ -25,7 +25,7 @@ from tests._import_app import clear_login_attempts, import_web_app_module
 URLOPEN_PATH = "urllib.request.urlopen"
 
 
-def _mock_github_response(tag_name="v2.0.0", html_url="https://github.com/test"):
+def _mock_github_response(tag_name="v2.1.0", html_url="https://github.com/test"):
     """构造 mock urlopen 返回值"""
     mock_resp = MagicMock()
     mock_resp.read.return_value = json.dumps(
@@ -63,7 +63,7 @@ class VersionGtTests(unittest.TestCase):
 
     def test_major_greater(self):
         gt = self._import_fn()
-        self.assertTrue(gt("2.0.0", "1.9.9"))
+        self.assertTrue(gt("2.1.0", "1.9.9"))
 
     def test_minor_greater(self):
         gt = self._import_fn()
@@ -152,7 +152,7 @@ class VersionCheckAPITests(unittest.TestCase):
         data = resp.get_json()
         self.assertTrue(data["has_update"])
         self.assertEqual(data["latest_version"], "99.0.0")
-        self.assertEqual(data["current_version"], "2.0.0")
+        self.assertEqual(data["current_version"], "2.1.0")
         self.assertTrue(data["success"])
 
     def test_has_update_false_when_same(self):
@@ -163,7 +163,7 @@ class VersionCheckAPITests(unittest.TestCase):
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(
                 {
-                    "tag_name": "v2.0.0",
+                    "tag_name": "v2.1.0",
                     "html_url": "https://github.com/test",
                 }
             ).encode()
@@ -173,7 +173,7 @@ class VersionCheckAPITests(unittest.TestCase):
             resp = client.get("/api/system/version-check")
         data = resp.get_json()
         self.assertFalse(data["has_update"])
-        self.assertEqual(data["latest_version"], "2.0.0")
+        self.assertEqual(data["latest_version"], "2.1.0")
 
     def test_has_update_false_when_older(self):
         """GitHub 版本更低时 has_update=False"""
@@ -206,8 +206,8 @@ class VersionCheckAPITests(unittest.TestCase):
         data = resp.get_json()
         self.assertTrue(data["success"])
         self.assertFalse(data["has_update"])
-        self.assertEqual(data["current_version"], "2.0.0")
-        self.assertEqual(data["latest_version"], "2.0.0")
+        self.assertEqual(data["current_version"], "2.1.0")
+        self.assertEqual(data["latest_version"], "2.1.0")
         self.assertEqual(data["release_url"], "")
 
     def test_response_field_names(self):
@@ -218,7 +218,7 @@ class VersionCheckAPITests(unittest.TestCase):
             mock_resp = MagicMock()
             mock_resp.read.return_value = json.dumps(
                 {
-                    "tag_name": "v2.0.0",
+                    "tag_name": "v2.1.0",
                     "html_url": "https://github.com/test",
                 }
             ).encode()
@@ -248,7 +248,7 @@ class VersionCheckAPITests(unittest.TestCase):
         def fake_urlopen(*a, **kw):
             nonlocal call_count
             call_count += 1
-            return _mock_github_response("v2.0.0")
+            return _mock_github_response("v2.1.0")
 
         with patch(URLOPEN_PATH, side_effect=fake_urlopen):
             resp1 = client.get("/api/system/version-check")
@@ -277,7 +277,7 @@ class VersionCheckAPITests(unittest.TestCase):
             def fake_urlopen(*a, **kw):
                 nonlocal call_count
                 call_count += 1
-                return _mock_github_response("v2.0.0")
+                return _mock_github_response("v2.1.0")
 
             with patch(URLOPEN_PATH, side_effect=fake_urlopen):
                 client.get("/api/system/version-check")
@@ -583,7 +583,7 @@ class HTMLTemplateTests(unittest.TestCase):
         self._login(client)
         resp = client.get("/")
         html = resp.get_data(as_text=True)
-        self.assertIn("v2.0.0", html)
+        self.assertIn("v2.1.0", html)
 
 
 class CSSStyleTests(unittest.TestCase):
