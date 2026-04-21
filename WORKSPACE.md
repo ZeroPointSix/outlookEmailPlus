@@ -1080,6 +1080,43 @@ fix: 修复标准模式小窗 UI 排版错乱（Issue #50）- 响应式断点适
 
 ---
 
+#### 256. `main` fast-forward 合入 `dev` — 主干工作树复测通过并保留本地 `WORKSPACE` stash
+
+**时间**：2026-04-21
+
+**背景**：
+在 `dev` 上完成插件化前端收口、人工验收通过和相关提交后，用户进一步要求把这些改动合并到 `main`，并在 `main` 分支上重新跑一遍完整全量。执行前发现 `main` 工作树（`E:\\hushaokang\\Data-code\\outlookEmail`）本身有一份未提交的 `WORKSPACE.md` 本地记录，因此不能直接 merge。
+
+**本次处理**：
+1. 先将 `main` 工作树里的 `WORKSPACE.md` 本地改动安全暂存：
+   - `stash@{0}: On main: main-worktree-workspace-before-dev-merge`
+2. 在 `main` 工作树执行：
+   - `git merge --no-edit dev`
+3. 由于 `main` 是 `dev` 的祖先，本次合并为 **fast-forward**，未产生新的 merge 冲突。
+4. 随后在 `main` 工作树重新执行完整全量：
+   - 命令：`python -m unittest discover -s tests -v`
+   - 结果：`Ran 1357 tests in 463.280s`
+   - 结论：`OK (skipped=7)`
+
+**本次文档同步**：
+1. `docs/TODO/2026-04-21-临时邮箱插件化TODO.md`
+   - 将最新完整回归基线更新为 `Ran 1357 tests in 463.280s`、`OK (skipped=7)`
+2. `docs/TODO/2026-04-21-插件Provider域名选择泛化与设置入口解耦TODO.md`
+   - 补记最新回归来自 `main` 工作树的 fast-forward 合并后结果
+3. `docs/FD/2026-04-21-临时邮箱插件化FD.md`
+   - 更新顶部当前实施状态中的完整回归结果
+4. `docs/TD/2026-04-21-临时邮箱插件化TD.md`
+   - 更新技术现状中的最新完整回归结果
+5. `docs/BUG/2026-04-21-插件Provider域名选择未泛化与设置入口耦合BUG.md`
+   - 更新当前状态中的最新完整全量结果
+
+**当前状态**：
+1. `main` 已经包含 `dev` 上本轮所有插件化收口改动。
+2. 主干工作树最新完整全量结果为 `Ran 1357 tests in 463.280s`、`OK (skipped=7)`。
+3. `main` 工作树原有的那份本地 `WORKSPACE.md` 记录仍安全保存在 stash 中，未被覆盖也未被丢弃。
+
+---
+
 #### 220. 临时邮箱 Provider 插件化 — 记录浏览器 unittest 延后修复决策
 
 **时间**：2026-04-21

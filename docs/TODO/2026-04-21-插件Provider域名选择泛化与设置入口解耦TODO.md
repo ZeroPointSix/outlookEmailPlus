@@ -386,5 +386,5 @@
    - `static/js/main.js` 已把插件 provider 接入设置页独立面板切换
    - `static/js/features/plugins.js` 已将插件配置表单迁到独立面板，插件卡片改为“打开设置”
    - `static/js/features/temp_emails.js` 已改为按 provider options 决定域名下拉，并增加按 provider 的 options cache + 请求防串号保护
-4. 本会话随后已额外执行 `python -m unittest discover -s tests -v`，并在将 `main` 合并到当前分支、解决 `WORKSPACE.md` 冲突，以及梳理未跟踪插件夹具测试后再次完整回归；最新结果已更新为 `Ran 1357 tests in 409.925s`、`OK (skipped=7)`。
+4. 本会话随后已额外执行 `python -m unittest discover -s tests -v`，并在 `main` 工作树中 fast-forward 合入 `dev`、保留本地 `WORKSPACE.md` 改动到 stash、以及切回主干后重新执行完整回归；最新结果已更新为 `Ran 1357 tests in 463.280s`、`OK (skipped=7)`。
 5. 当前人工验收实例也已按 `2.1.1` 版本重新拉起到 `http://127.0.0.1:5097`，后续剩余工作继续收敛为页面级人工点击确认。
