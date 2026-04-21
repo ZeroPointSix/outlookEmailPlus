@@ -58,14 +58,23 @@
    - 只在确有必要时补少量配套代码
 3. **遵守当前真实路径口径**
    - 运行时插件目录实际是：`<DATABASE_PATH 上级目录>/plugins/temp_mail_providers/`
-4. **错误处理要显式**
+   - 当前加载器只扫描该目录下一层的 `*.py`，不要把插件做成嵌套目录结构
+4. **理解当前前端限制**
+   - 插件 provider 虽然会被注入临时邮箱页面的 Provider 下拉
+   - 但当前 `temp_emails.js` 仍把“域名下拉是否可用”硬编码在 `cloudflare_temp_mail`
+   - 如果你的任务包含“让插件支持手动选域名”，就不能只写 Provider 插件，还需要单独改前端逻辑
+5. **错误处理要显式**
    - 不要 silent fallback
    - 不要把失败伪装成成功
-5. **返回结构要兼容平台**
+6. **返回结构要兼容平台**
    - `get_options()` 提供 domains / prefix_rules / provider 元信息
    - `create_mailbox()` 返回 `{ success, email, meta }` 或 `{ success: False, error, error_code }`
    - `list_messages()` 返回平台标准消息结构
-6. **让插件管理 UI 可用**
+7. **区分插件管理与运行时设置**
+   - 当前实现会把 `config_schema` 渲染在插件管理卡片中
+   - 但产品方向应是：插件管理只负责安装 / 卸载 / 应用变更，业务配置应放到对应 Provider 设置位
+   - 如果本次任务涉及 UI 改造，不要继续把复杂业务设置堆进安装界面
+8. **让当前 UI 兼容可用**
    - 如果需要配置，必须给出 `config_schema`
    - 保存配置后，“测试连接”应能通过 `get_options()` 做最小连通性检查
 
@@ -174,6 +183,11 @@ plugin.[provider_name].[field_key]
 6. 能读取邮件
 7. 失败时不会影响内置 Provider
 8. 如果故障加载，UI 会显示 `load_failed` 错误态
+
+> 如果本次任务还包含“插件域名可手动选择”，请额外确认：
+>
+> - 临时邮箱页在选中该插件时会正确启用域名下拉
+> - 域名列表来自该插件的 `get_options()`，而不是写死 provider 名称
 
 请直接开始实现，不要只给方案。
 ```

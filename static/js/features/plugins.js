@@ -29,6 +29,39 @@ const PluginManager = (() => {
         return Array.from(group.querySelectorAll('input[name="tempMailProvider"]')).find(el => el.value === value) || null;
     }
 
+    function _getPluginByName(name) {
+        return _plugins.find(item => item && item.name === name) || null;
+    }
+
+    function _getInstalledPluginByName(name) {
+        return _plugins.find(item => item && item.name === name && item.status === 'installed') || null;
+    }
+
+    function _getProviderConfigElements() {
+        return {
+            panel: document.getElementById('pluginProviderConfigPanel'),
+            title: document.getElementById('pluginProviderConfigTitle'),
+            body: document.getElementById('pluginProviderConfigBody'),
+        };
+    }
+
+    function _resetProviderConfigPanel() {
+        const { panel, title, body } = _getProviderConfigElements();
+        if (panel) panel.style.display = 'none';
+        if (title) title.textContent = '🧩 插件 Provider 配置';
+        if (body) {
+            body.innerHTML = '<div class="form-hint">请选择一个已安装插件 Provider。</div>';
+        }
+        _activeConfig = null;
+    }
+
+    function _scrollToProviderConfigPanel() {
+        const { panel } = _getProviderConfigElements();
+        if (panel && typeof panel.scrollIntoView === 'function') {
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
     // ── 折叠卡片 ─────────────────────────────────────────────────────────────
 
     function toggleCard() {
@@ -92,7 +125,7 @@ const PluginManager = (() => {
 
         html += `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:0.8rem 1rem;margin-top:1rem;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border-light);">
-                <span style="font-size:0.78rem;color:var(--text-muted);">安装或配置变更后，点击应用使插件生效</span>
+                <span style="font-size:0.78rem;color:var(--text-muted);">安装、卸载或更新插件文件后，点击应用使插件生效</span>
                 <button class="btn btn-sm btn-primary" onclick="PluginManager.applyChanges()">🔄 应用变更</button>
             </div>`;
 
@@ -114,7 +147,7 @@ const PluginManager = (() => {
 
         if (status === 'installed') {
             badge   = '<span style="background:rgba(58,125,68,0.1);color:var(--clr-jade);padding:0.15rem 0.55rem;border-radius:20px;font-size:0.65rem;font-weight:500;">已安装</span>';
-            actions = `<button class="btn btn-sm" onclick="PluginManager.toggleConfig('${name}')">配置</button>
+            actions = `<button class="btn btn-sm" onclick="PluginManager.toggleConfig('${name}')">打开设置</button>
                        <button class="btn btn-sm btn-outline-danger" onclick="PluginManager.confirmUninstall('${name}','${displayName}')">卸载</button>`;
         } else if (status === 'load_failed') {
             badge       = '<span style="background:rgba(192,57,43,0.1);color:var(--clr-danger);padding:0.15rem 0.55rem;border-radius:20px;font-size:0.65rem;font-weight:500;">加载失败</span>';
@@ -129,9 +162,6 @@ const PluginManager = (() => {
             ? `<div style="border-top:1px solid rgba(192,57,43,0.15);padding:0.6rem 0.85rem;margin-top:0.7rem;background:rgba(192,57,43,0.04);border-radius:6px;font-size:0.78rem;color:var(--clr-danger);">
                    ⚠️ 加载失败：${escapeHtml(String(p.error))}
                </div>` : '';
-
-        const configBlock = (status === 'installed')
-            ? `<div id="plugin-cfg-${name}" style="border-top:1px solid var(--border-light);padding-top:0.9rem;margin-top:0.9rem;display:none;"></div>` : '';
 
         return `
             <div class="plugin-item" id="plugin-item-${name}"
@@ -150,29 +180,43 @@ const PluginManager = (() => {
                     </div>
                     <div style="display:flex;gap:0.4rem;flex-shrink:0;">${actions}</div>
                 </div>
-                ${errorBlock}${configBlock}
+                ${errorBlock}
             </div>`;
     }
 
     // ── 配置面板 ──────────────────────────────────────────────────────────────
 
-    async function toggleConfig(name) {
-        const panel = document.getElementById(`plugin-cfg-${name}`);
-        if (!panel) return;
+    function toggleConfig(name) {
+        const group = document.querySelector('.provider-radio-group');
+        const radio = group ? _findProviderRadio(group, name) : null;
+        if (radio) {
+            radio.checked = true;
+        }
 
-        if (panel.style.display !== 'none') {
-            panel.style.display = 'none';
+        if (typeof onTempMailProviderChange === 'function') {
+            onTempMailProviderChange(name);
+        } else {
+            showProviderConfig(name);
+        }
+        _scrollToProviderConfigPanel();
+    }
+
+    async function showProviderConfig(name) {
+        const { panel, title, body } = _getProviderConfigElements();
+        if (!panel || !title || !body) return;
+        const plugin = _getInstalledPluginByName(name);
+
+        panel.style.display = 'block';
+        if (!plugin) {
+            title.textContent = '🧩 插件 Provider 配置';
+            body.innerHTML = `<div class="form-hint">未找到已安装的插件 Provider：${escapeHtml(String(name || ''))}</div>`;
             _activeConfig = null;
             return;
         }
 
-        if (_activeConfig && _activeConfig !== name) {
-            const other = document.getElementById(`plugin-cfg-${_activeConfig}`);
-            if (other) other.style.display = 'none';
-        }
         _activeConfig = name;
-        panel.style.display = 'block';
-        panel.innerHTML = '<div style="text-align:center;padding:0.8rem 0;color:var(--text-muted);font-size:0.83rem;">加载配置…</div>';
+        title.textContent = `🧩 ${plugin.display_name || plugin.name} 配置`;
+        body.innerHTML = '<div style="text-align:center;padding:0.8rem 0;color:var(--text-muted);font-size:0.83rem;">加载配置…</div>';
 
         try {
             const [schemaRes, configRes] = await Promise.all([
@@ -184,9 +228,11 @@ const PluginManager = (() => {
 
             const fields = (schemaRes.data.data && schemaRes.data.data.config_schema && schemaRes.data.data.config_schema.fields) || [];
             const config = (configRes.data.data && configRes.data.data.config) || {};
-            panel.innerHTML = _renderConfigForm(name, fields, config);
+            if (_activeConfig !== name) return;
+            body.innerHTML = _renderConfigForm(name, fields, config);
         } catch (err) {
-            panel.innerHTML = `<div style="color:var(--clr-danger);font-size:0.83rem;">加载失败：${escapeHtml(String(err.message || err))}</div>`;
+            if (_activeConfig !== name) return;
+            body.innerHTML = `<div style="color:var(--clr-danger);font-size:0.83rem;">加载失败：${escapeHtml(String(err.message || err))}</div>`;
         }
     }
 
@@ -244,7 +290,6 @@ const PluginManager = (() => {
             <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;">
                 <button class="btn btn-sm btn-ghost" onclick="PluginManager.testConnection('${escapeHtml(name)}','${testId}')">测试连接</button>
                 <div style="flex:1;"></div>
-                <button class="btn btn-sm" onclick="PluginManager.toggleConfig('${escapeHtml(name)}')">取消</button>
                 <button class="btn btn-sm btn-primary" onclick="PluginManager.saveConfig('${escapeHtml(name)}')">保存</button>
             </div>`;
     }
@@ -287,6 +332,9 @@ const PluginManager = (() => {
                 return;
             }
             showToast(data.message || '插件已卸载', 'success');
+            if (_activeConfig === name) {
+                _resetProviderConfigPanel();
+            }
             await loadPlugins();
         } catch (err) {
             showToast(String(err.message || '卸载失败'), 'error');
@@ -310,9 +358,7 @@ const PluginManager = (() => {
                 return;
             }
             showToast('配置已保存', 'success');
-            const panel = document.getElementById(`plugin-cfg-${name}`);
-            if (panel) panel.style.display = 'none';
-            _activeConfig = null;
+            await showProviderConfig(name);
         } catch (err) {
             showToast(String(err.message || '保存失败'), 'error');
         }
@@ -410,6 +456,7 @@ const PluginManager = (() => {
         const group = document.querySelector('.provider-radio-group');
         if (!group) return;
         const previousValue = _getCheckedProviderRadio(group)?.value || '';
+        const pendingValue = String(group.dataset.pendingProvider || '').trim();
         // 移除已有插件 radio
         group.querySelectorAll('.provider-radio[data-plugin]').forEach(el => el.remove());
         _plugins.filter(p => p.status === 'installed').forEach(p => {
@@ -426,11 +473,13 @@ const PluginManager = (() => {
         });
 
         const fallbackRadio = _findProviderRadio(group, previousValue)
+            || _findProviderRadio(group, pendingValue)
             || _getCheckedProviderRadio(group)
             || _findProviderRadio(group, 'legacy_bridge')
             || group.querySelector('input[name="tempMailProvider"]');
         if (fallbackRadio) {
             fallbackRadio.checked = true;
+            group.dataset.pendingProvider = '';
             if (typeof onTempMailProviderChange === 'function') {
                 onTempMailProviderChange(fallbackRadio.value);
             }
@@ -480,13 +529,18 @@ const PluginManager = (() => {
         confirmUninstall,
         uninstall,
         toggleConfig,
+        showProviderConfig,
+        hideProviderConfig: _resetProviderConfigPanel,
         saveConfig,
         testConnection,
         applyChanges,
         openCustomInstallModal,
         closeCustomInstallModal,
         customInstall,
+        hasInstalledProvider: name => !!_getInstalledPluginByName(name),
+        getPluginByName: name => _getPluginByName(name),
     };
 })();
 
+window.PluginManager = PluginManager;
 PluginManager.init();

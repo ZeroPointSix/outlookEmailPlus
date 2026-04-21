@@ -33,10 +33,16 @@
 - registry 文件：`<DATABASE_PATH 上级目录>/plugins/registry.json`
 - 插件目录：`<DATABASE_PATH 上级目录>/plugins/temp_mail_providers/`
 
+并且当前加载器的扫描口径是：
+
+- **只扫描插件目录下一层的 `*.py` 文件**
+- **不会递归扫描子目录**
+
 也就是说：
 
 1. **开发仓库里提交的插件样例/官方插件源**可以放在仓库根 `plugins/`
 2. **程序运行时真正扫描和安装的目录**是 `<DATABASE_PATH 上级目录>/plugins/...`
+3. 如果你放的是 `test_plugin/moemail.py` 这种嵌套结构，当前实现默认**不会自动加载**
 
 如果你是在部署环境里手工投放插件文件，请以运行时路径为准。
 
@@ -121,6 +127,13 @@ class DemoTempMailProvider(TempMailProviderBase):
 ### 4.2 `config_schema`
 
 设置页插件管理会根据 `config_schema.fields` 自动渲染配置表单。
+
+但要注意：这是**当前实现口径**。按本会话继续接入真实第三方插件后的复盘，这块后续更合理的方向是：
+
+1. **插件管理**只负责安装 / 卸载 / 应用变更 / 错误展示
+2. **插件运行时配置**迁移到对应 Provider 设置区或统一 Provider 设置面板
+
+也就是说，`config_schema` 现在仍然有价值，因为当前 UI 确实靠它渲染配置；只是不要把“插件管理卡片内嵌配置表单”误认为最终产品形态。
 
 当前前端已支持的字段类型：
 
@@ -240,6 +253,19 @@ plugin.{provider_name}.{field_key}
 <DATABASE_PATH 上级目录>/plugins/temp_mail_providers/{provider_name}.py
 ```
 
+注意：当前必须是**直接平铺的单个 `.py` 文件**。像下面这种嵌套目录布局，当前不会被默认加载：
+
+```text
+plugins/temp_mail_providers/test_plugin/moemail.py
+```
+
+另外，按这种“本地直接投放、没有 registry 条目”的方式接入时，当前 `/api/plugins` 仍会把插件识别为 `installed`，但列表里的 `display_name` / `version` 可能回退成：
+
+- `display_name = provider_name`
+- `version = null`
+
+这不会影响插件本体加载、schema 读取和后续配置/使用，但如果你希望插件管理列表展示完整元信息，最好同时提供 registry 条目。
+
 然后在页面点击：
 
 - 设置 → 临时邮箱 → 插件管理 → 应用变更
@@ -283,8 +309,13 @@ POST /api/system/reload-plugins
    - `status = load_failed`
    - 并带回 `error`
 4. 页面点击“应用变更”后，故障插件会真实显示“加载失败”卡片，而不是伪装成 installed
+5. `#tempEmailProviderSelect` 现在已经会注入已安装插件，但域名下拉的启用逻辑仍硬编码在 `cloudflare_temp_mail`
+6. 因此第三方插件即使 `get_options()` 返回 `domains`，当前临时邮箱页面也**不一定**能手动选择域名
 
-也就是说，接入新 Provider 时，如果导入失败，管理员现在能直接在 UI 中看到错误原因。
+也就是说，接入新 Provider 时：
+
+1. 如果导入失败，管理员现在能直接在 UI 中看到错误原因
+2. 如果插件有域名列表，也不要默认认为“页面一定已经支持手动选域名”，需要结合当前前端实现一起核对
 
 ---
 
@@ -300,7 +331,7 @@ POST /api/system/reload-plugins
 2. 写 Provider 类
 3. 本地放到运行时插件目录
 4. 点击“应用变更”确认已成功加载
-5. 在插件管理里完成配置保存与测试连接
+5. 在当前实现下，先在插件管理里完成配置保存与测试连接
 6. 到临时邮箱页面实际创建邮箱并读信
 7. 再走 external temp-mail 链路做一次任务侧验收
 

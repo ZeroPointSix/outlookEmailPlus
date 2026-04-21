@@ -1646,8 +1646,17 @@ ${details}
                     const mappedProvider = (rawProvider === 'custom_domain_temp_mail' || rawProvider === 'legacy_bridge' || rawProvider === 'legacy_gptmail' || rawProvider === 'gptmail')
                         ? 'legacy_bridge'
                         : rawProvider;
+                    const providerGroup = document.querySelector('.provider-radio-group');
+                    if (providerGroup) {
+                        providerGroup.dataset.pendingProvider = mappedProvider;
+                    }
                     const radioBtn = document.querySelector(`input[name="tempMailProvider"][value="${mappedProvider}"]`);
-                    if (radioBtn) radioBtn.checked = true;
+                    if (radioBtn) {
+                        radioBtn.checked = true;
+                        if (providerGroup) {
+                            providerGroup.dataset.pendingProvider = '';
+                        }
+                    }
                     if (typeof onTempMailProviderChange === 'function') {
                         onTempMailProviderChange(mappedProvider);
                     }
@@ -2948,17 +2957,32 @@ ${details}
         function onTempMailProviderChange(provider) {
             const gptmailPanel = document.getElementById('gptmailConfigPanel');
             const cfWorkerPanel = document.getElementById('cfWorkerConfigPanel');
+            const pluginPanel = document.getElementById('pluginProviderConfigPanel');
+            const pluginManager = typeof window !== 'undefined' && window.PluginManager ? window.PluginManager : null;
 
             if (provider === 'legacy_bridge') {
                 if (gptmailPanel) gptmailPanel.style.display = 'block';
                 if (cfWorkerPanel) cfWorkerPanel.style.display = 'none';
+                if (pluginManager && typeof pluginManager.hideProviderConfig === 'function') {
+                    pluginManager.hideProviderConfig();
+                } else if (pluginPanel) {
+                    pluginPanel.style.display = 'none';
+                }
             } else if (provider === 'cloudflare_temp_mail') {
                 if (gptmailPanel) gptmailPanel.style.display = 'none';
                 if (cfWorkerPanel) cfWorkerPanel.style.display = 'block';
+                if (pluginManager && typeof pluginManager.hideProviderConfig === 'function') {
+                    pluginManager.hideProviderConfig();
+                } else if (pluginPanel) {
+                    pluginPanel.style.display = 'none';
+                }
             } else {
-                // 插件 provider：两个内置面板都隐藏
                 if (gptmailPanel) gptmailPanel.style.display = 'none';
                 if (cfWorkerPanel) cfWorkerPanel.style.display = 'none';
+                if (pluginPanel) pluginPanel.style.display = 'block';
+                if (pluginManager && typeof pluginManager.showProviderConfig === 'function') {
+                    pluginManager.showProviderConfig(provider);
+                }
             }
         }
 

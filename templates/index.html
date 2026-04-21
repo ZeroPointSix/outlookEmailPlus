@@ -599,6 +599,16 @@
                             </div>
                         </div>
 
+                        <!-- 插件 Provider 配置面板 -->
+                        <div class="card" id="pluginProviderConfigPanel" style="display:none;margin-top:1rem;">
+                            <div class="card-header">
+                                <div class="card-title" id="pluginProviderConfigTitle">🧩 插件 Provider 配置</div>
+                            </div>
+                            <div class="card-body" id="pluginProviderConfigBody" style="padding: 1.5rem;">
+                                <div class="form-hint">请选择一个已安装插件 Provider。</div>
+                            </div>
+                        </div>
+
                         <!-- 插件管理 -->
                         <div class="card" id="pluginManagerCard" style="margin-top:1rem;">
                             <div class="card-header" onclick="PluginManager.toggleCard()" style="cursor:pointer;user-select:none;">
@@ -606,7 +616,7 @@
                                     <div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--clr-primary),var(--clr-accent));border-radius:8px;color:white;font-size:0.9rem;">🧩</div>
                                     <div>
                                         <div class="card-title">插件管理</div>
-                                        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.1rem;">安装第三方 Provider 插件扩展临时邮箱能力</div>
+                                        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.1rem;">安装、卸载并应用第三方 Provider 插件；运行时配置请在上方 Provider 设置区完成</div>
                                     </div>
                                 </div>
                                 <div style="display:flex;align-items:center;gap:0.6rem;">

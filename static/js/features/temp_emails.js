@@ -1,7 +1,8 @@
         // ==================== 临时邮箱相关 ====================
 
-        let tempEmailOptionsCache = null;
-        let tempEmailOptionsState = 'idle';
+        let tempEmailOptionsCache = new Map();
+        let tempEmailOptionsState = new Map();
+        let tempEmailOptionsRequestSeq = 0;
 
         // BUG-05: 快速切换临时邮箱/从普通邮箱切换到临时邮箱时，旧请求与轮询可能污染当前 UI。
         // - tempEmailMessagesRequestSeq / tempEmailDetailRequestSeq 用于丢弃过期请求的响应（stale guard）。
@@ -9,17 +10,49 @@
         let tempEmailMessagesRequestSeq = 0;
         let tempEmailDetailRequestSeq = 0;
 
-        async function loadTempEmailOptions(forceRefresh = false) {
-            if (!forceRefresh && tempEmailOptionsCache) {
-                renderTempEmailOptions({ status: 'loaded', options: tempEmailOptionsCache });
-                return tempEmailOptionsCache;
+        function getTempEmailOptionsProviderName(providerName = null) {
+            const explicitProvider = String(providerName || '').trim();
+            if (explicitProvider) return explicitProvider;
+            const providerSelect = document.getElementById('tempEmailProviderSelect');
+            return providerSelect && providerSelect.value ? providerSelect.value.trim() : '';
+        }
+
+        function getTempEmailOptionsCacheKey(providerName) {
+            return getTempEmailOptionsProviderName(providerName) || '__default__';
+        }
+
+        function getTempEmailProviderDisplayLabel(providerName, options) {
+            const select = document.getElementById('tempEmailProviderSelect');
+            if (select) {
+                const matchedOption = Array.from(select.options).find(option => option.value === providerName);
+                if (matchedOption && matchedOption.textContent) {
+                    return matchedOption.textContent.trim();
+                }
+            }
+            return String((options && (options.provider_label || options.provider_name)) || providerName || translateAppTextLocal('当前 Provider'));
+        }
+
+        function supportsManualDomainSelection(options, domains) {
+            if (!domains.length) return false;
+            const strategy = String((options && options.domain_strategy) || '').trim().toLowerCase();
+            if (!strategy) return true;
+            return strategy === 'manual' || strategy === 'manual_only' || strategy === 'auto_or_manual';
+        }
+
+        async function loadTempEmailOptions(forceRefresh = false, providerName = null) {
+            const resolvedProviderName = getTempEmailOptionsProviderName(providerName);
+            const cacheKey = getTempEmailOptionsCacheKey(resolvedProviderName);
+            const requestSeq = ++tempEmailOptionsRequestSeq;
+
+            if (!forceRefresh && tempEmailOptionsCache.has(cacheKey)) {
+                const cachedOptions = tempEmailOptionsCache.get(cacheKey);
+                renderTempEmailOptions({ status: 'loaded', options: cachedOptions, providerName: resolvedProviderName });
+                return cachedOptions;
             }
 
             try {
-                const providerSelect = document.getElementById('tempEmailProviderSelect');
-                const providerName = providerSelect && providerSelect.value ? providerSelect.value.trim() : '';
-                const url = providerName
-                    ? `/api/temp-emails/options?provider_name=${encodeURIComponent(providerName)}`
+                const url = resolvedProviderName
+                    ? `/api/temp-emails/options?provider_name=${encodeURIComponent(resolvedProviderName)}`
                     : '/api/temp-emails/options';
                 const response = await fetch(url);
                 if (!response.ok) {
@@ -27,9 +60,11 @@
                 }
                 const data = await response.json();
                 if (data.success && data.options) {
-                    tempEmailOptionsState = 'loaded';
-                    tempEmailOptionsCache = data.options;
-                    renderTempEmailOptions({ status: 'loaded', options: data.options });
+                    tempEmailOptionsState.set(cacheKey, 'loaded');
+                    tempEmailOptionsCache.set(cacheKey, data.options);
+                    if (requestSeq === tempEmailOptionsRequestSeq && getTempEmailOptionsProviderName() === resolvedProviderName) {
+                        renderTempEmailOptions({ status: 'loaded', options: data.options, providerName: resolvedProviderName });
+                    }
                     return data.options;
                 }
                 throw new Error(
@@ -38,13 +73,16 @@
                         : (data.error && data.error.message ? data.error.message : '加载失败')
                 );
             } catch (error) {
-                tempEmailOptionsState = 'error';
+                tempEmailOptionsState.set(cacheKey, 'error');
                 console.error('加载临时邮箱配置失败:', error);
-                renderTempEmailOptions({
-                    status: 'error',
-                    errorMessage: error && error.message ? error.message : translateAppTextLocal('请检查临时邮箱 options 接口')
-                });
-                showToast(translateAppTextLocal('临时邮箱配置加载失败'), 'warning');
+                if (requestSeq === tempEmailOptionsRequestSeq && getTempEmailOptionsProviderName() === resolvedProviderName) {
+                    renderTempEmailOptions({
+                        status: 'error',
+                        providerName: resolvedProviderName,
+                        errorMessage: error && error.message ? error.message : translateAppTextLocal('请检查临时邮箱 options 接口')
+                    });
+                    showToast(translateAppTextLocal('临时邮箱配置加载失败'), 'warning');
+                }
                 return null;
             }
         }
@@ -59,13 +97,16 @@
                 ? payload.status
                 : 'loaded';
             const options = renderStatus === 'loaded' && payload ? payload.options : null;
+            const providerName = getTempEmailOptionsProviderName(payload && payload.providerName ? payload.providerName : null);
+            const providerLabel = getTempEmailProviderDisplayLabel(providerName, options);
             const domains = Array.isArray(options?.domains) ? options.domains.filter(item => item && item.enabled !== false) : [];
+            const canSelectDomainManually = supportsManualDomainSelection(options, domains);
 
             if (renderStatus === 'error') {
                 domainSelect.disabled = true;
                 domainSelect.innerHTML = `<option value="">${escapeHtml(translateAppTextLocal('域名配置加载失败'))}</option>`;
                 if (hint) {
-                    hint.textContent = translateAppTextLocal('无法读取临时邮箱域名配置。');
+                    hint.textContent = translateAppTextLocal('无法读取当前 Provider 的域名配置。');
                 }
                 if (status) {
                     status.textContent = payload.errorMessage || translateAppTextLocal('请检查 /api/temp-emails/options 接口是否可用。');
@@ -74,29 +115,37 @@
                 return;
             }
 
-            domainSelect.disabled = false;
-            // BUG-07: 重建 innerHTML 前先保存当前选中值，重建后再恢复。
-            // 否则每次 loadTempEmails/renderTempEmailOptions 都会把用户选好的域名重置回"自动分配"。
             const prevDomainValue = domainSelect.value;
-            domainSelect.innerHTML = [
-                `<option value="">${escapeHtml(translateAppTextLocal('自动分配域名'))}</option>`,
-                ...domains.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`)
-            ].join('');
-            // 如果用户之前选择的域名在新列表里仍然存在，则恢复选中状态
-            if (prevDomainValue && domains.some(d => d.name === prevDomainValue)) {
-                domainSelect.value = prevDomainValue;
-            }
             if (status) {
                 status.textContent = '';
                 status.style.display = 'none';
             }
 
-            if (hint) {
-                if (domains.length > 0) {
-                    hint.textContent = `${translateAppTextLocal('可用域名：')}${domains.map(item => item.name).join(' / ')}`;
-                } else {
-                    hint.textContent = translateAppTextLocal('当前未配置可选域名；域名将由服务端自动分配。');
+            if (!canSelectDomainManually) {
+                domainSelect.disabled = true;
+                domainSelect.innerHTML = `<option value="">${escapeHtml(translateAppTextLocal('自动分配域名'))}</option>`;
+                domainSelect.value = '';
+                if (hint) {
+                    hint.textContent = domains.length > 0
+                        ? `${providerLabel}${translateAppTextLocal(' 当前由服务端自动分配域名。')}`
+                        : `${providerLabel}${translateAppTextLocal(' 当前未提供可选域名，域名将由服务端自动分配。')}`;
                 }
+                return;
+            }
+
+            domainSelect.disabled = false;
+            // BUG-07: 重建 innerHTML 前先保存当前选中值，重建后再恢复。
+            // 否则每次 loadTempEmails/renderTempEmailOptions 都会把用户选好的域名重置回"自动分配"。
+            domainSelect.innerHTML = [
+                `<option value="">${escapeHtml(translateAppTextLocal('自动分配域名'))}</option>`,
+                ...domains.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`)
+            ].join('');
+            if (prevDomainValue && domains.some(d => d.name === prevDomainValue)) {
+                domainSelect.value = prevDomainValue;
+            }
+
+            if (hint) {
+                hint.textContent = `${translateAppTextLocal('可用域名：')}${domains.map(item => item.name).join(' / ')}`;
             }
         }
 
@@ -114,19 +163,8 @@
             const pageContainer = document.getElementById('tempEmailContainer');
 
             const providerSelect = document.getElementById('tempEmailProviderSelect');
-            const domainSelect = document.getElementById('tempEmailDomainSelect');
-
-            // BUG-07: 原来这里调用 onTempEmailProviderChange()，
-            // 但那个函数是给用户手动切换 provider 时用的，会强制 forceRefresh=true 重新 fetch
-            // 并完全重建 domainSelect.innerHTML，导致用户选好的域名被重置。
-            // 改为只做必要的 disabled 状态同步，domain 选项加载由下面单次调用负责。
-            if (providerSelect && domainSelect) {
-                domainSelect.disabled = providerSelect.value !== 'cloudflare_temp_mail';
-            }
-
-            if (providerSelect && providerSelect.value === 'cloudflare_temp_mail') {
-                // 只调用一次，并尊重 forceRefresh 参数（非强制时优先用缓存，不会重建 innerHTML）
-                loadTempEmailOptions(forceRefresh);
+            if (providerSelect) {
+                loadTempEmailOptions(forceRefresh, providerSelect.value);
             }
 
             if (!forceRefresh && accountsCache['temp']) {
@@ -214,24 +252,8 @@
         }
 
         // 生成临时邮箱
-        // Provider 下拉框切换回调
-        // - cloudflare_temp_mail：启用域名下拉，加载 CF 配置的域名列表
-        // - legacy_bridge：禁用域名下拉（GPTMail 自动分配域名，不支持手动选择）
         function onTempEmailProviderChange(selectedProvider) {
-            const domainSelect = document.getElementById('tempEmailDomainSelect');
-            if (!domainSelect) return;
-            if (selectedProvider === 'cloudflare_temp_mail') {
-                // CF：启用域名选择，重新加载 settings 中配置的域名
-                domainSelect.disabled = false;
-                loadTempEmailOptions(true);
-            } else {
-                // GPTMail (legacy_bridge)：禁用域名选择，自动分配
-                domainSelect.disabled = true;
-                domainSelect.innerHTML = '<option value="">自动分配域名</option>';
-                domainSelect.value = '';
-                const hint = document.getElementById('tempEmailOptionsHint');
-                if (hint) hint.textContent = translateAppTextLocal('GPTMail 自动分配域名，无需手动选择。');
-            }
+            loadTempEmailOptions(false, selectedProvider);
         }
 
         async function generateTempEmail() {
