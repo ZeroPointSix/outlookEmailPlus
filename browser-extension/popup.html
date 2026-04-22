@@ -521,6 +521,17 @@
       cursor: default;
     }
 
+    .form-input.copy-on-click {
+      cursor: pointer;
+    }
+
+    .form-input.copy-on-click.copied {
+      background: rgba(58, 125, 68, 0.16);
+      border-color: rgba(58, 125, 68, 0.38);
+      color: var(--clr-jade-dark);
+      transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    }
+
     .form-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -866,7 +877,6 @@
           <button class="btn btn-primary" id="btn-generate-profile">🎲 生成资料</button>
           <button class="btn btn-outline" id="btn-generate-password">🔐 仅刷新密码</button>
           <button class="btn btn-jade" id="btn-save-profile">💾 保存当前资料</button>
-          <button class="btn btn-ghost" id="btn-copy-profile">📋 复制当前资料</button>
         </div>
 
         <div class="panel-card">
@@ -874,35 +884,35 @@
             <input type="hidden" id="profile-id">
             <div>
               <label class="form-label" for="profile-first-name">First Name</label>
-              <input class="form-input" type="text" id="profile-first-name">
+              <input class="form-input" type="text" id="profile-first-name" readonly>
             </div>
             <div>
               <label class="form-label" for="profile-last-name">Last Name</label>
-              <input class="form-input" type="text" id="profile-last-name">
+              <input class="form-input" type="text" id="profile-last-name" readonly>
             </div>
             <div class="full">
               <label class="form-label" for="profile-full-name">Full Name</label>
-              <input class="form-input" type="text" id="profile-full-name">
+              <input class="form-input" type="text" id="profile-full-name" readonly>
             </div>
             <div>
               <label class="form-label" for="profile-username">Username</label>
-              <input class="form-input" type="text" id="profile-username">
+              <input class="form-input" type="text" id="profile-username" readonly>
             </div>
             <div>
               <label class="form-label" for="profile-password">Password</label>
-              <input class="form-input" type="text" id="profile-password">
+              <input class="form-input" type="text" id="profile-password" readonly>
             </div>
             <div>
               <label class="form-label" for="profile-email">Email</label>
-              <input class="form-input" type="text" id="profile-email">
+              <input class="form-input" type="text" id="profile-email" readonly>
             </div>
             <div>
               <label class="form-label" for="profile-phone">Phone</label>
-              <input class="form-input" type="text" id="profile-phone">
+              <input class="form-input" type="text" id="profile-phone" readonly>
             </div>
             <div class="full">
               <label class="form-label" for="profile-company">Company</label>
-              <input class="form-input" type="text" id="profile-company">
+              <input class="form-input" type="text" id="profile-company" readonly>
             </div>
             <div>
               <label class="form-label" for="profile-country">Country</label>
@@ -910,23 +920,23 @@
             </div>
             <div>
               <label class="form-label" for="profile-state">State</label>
-              <input class="form-input" type="text" id="profile-state">
+              <input class="form-input" type="text" id="profile-state" readonly>
             </div>
             <div>
               <label class="form-label" for="profile-city">City</label>
-              <input class="form-input" type="text" id="profile-city">
+              <input class="form-input" type="text" id="profile-city" readonly>
             </div>
             <div>
               <label class="form-label" for="profile-postal">Postal Code</label>
-              <input class="form-input" type="text" id="profile-postal">
+              <input class="form-input" type="text" id="profile-postal" readonly>
             </div>
             <div class="full">
               <label class="form-label" for="profile-address1">Address Line 1</label>
-              <input class="form-input" type="text" id="profile-address1">
+              <input class="form-input" type="text" id="profile-address1" readonly>
             </div>
             <div class="full">
               <label class="form-label" for="profile-address2">Address Line 2</label>
-              <input class="form-input" type="text" id="profile-address2">
+              <input class="form-input" type="text" id="profile-address2" readonly>
             </div>
           </div>
           <button class="btn btn-ghost" id="btn-reset-profile" style="margin-top:10px;">↺ 清空编辑内容</button>

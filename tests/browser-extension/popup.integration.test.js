@@ -51,6 +51,47 @@ describe('browser-extension/popup integration', () => {
     expect(byId('page-profile').classList.contains('active')).toBe(false);
   });
 
+  test('profile fields are readonly and copy value on click with feedback', async () => {
+    await bootstrapPopup();
+
+    byId('nav-profile').click();
+    byId('btn-generate-profile').click();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const fieldIds = [
+      'profile-first-name',
+      'profile-last-name',
+      'profile-full-name',
+      'profile-username',
+      'profile-password',
+      'profile-email',
+      'profile-phone',
+      'profile-company',
+      'profile-country',
+      'profile-state',
+      'profile-city',
+      'profile-postal',
+      'profile-address1',
+      'profile-address2',
+    ];
+
+    fieldIds.forEach((fieldId) => {
+      expect(byId(fieldId).readOnly).toBe(true);
+    });
+
+    const firstNameInput = byId('profile-first-name');
+    const firstName = firstNameInput.value;
+    firstNameInput.click();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(firstName);
+    expect(firstNameInput.classList.contains('copied')).toBe(true);
+    expect(byId('message-bar').textContent).toContain('已复制');
+    expect(byId('message-bar').className).toContain('message-success');
+  });
+
   test('profile generation can reuse the currently claimed mailbox email', async () => {
     await bootstrapPopup({
       currentTask: {

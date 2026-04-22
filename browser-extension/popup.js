@@ -4,6 +4,22 @@
   const ACTION_TIMEOUT_MS = 10000;
   const MAX_HISTORY = 100;
   const CALLER_ID = 'browser-extension';
+  const PROFILE_COPY_FIELD_IDS = [
+    'profile-first-name',
+    'profile-last-name',
+    'profile-full-name',
+    'profile-username',
+    'profile-password',
+    'profile-email',
+    'profile-phone',
+    'profile-company',
+    'profile-country',
+    'profile-state',
+    'profile-city',
+    'profile-postal',
+    'profile-address1',
+    'profile-address2',
+  ];
   const DEFAULT_PROFILE_PASSWORD_LENGTH = 16;
   const StorageApi = window.ExtensionStorage;
 
@@ -279,25 +295,6 @@
     });
   }
 
-  function buildProfileCopyText(profile) {
-    return [
-      `full_name=${profile.fullName || ''}`,
-      `first_name=${profile.firstName || ''}`,
-      `last_name=${profile.lastName || ''}`,
-      `username=${profile.username || ''}`,
-      `password=${profile.password || ''}`,
-      `email=${profile.email || ''}`,
-      `phone=${profile.phone || ''}`,
-      `company=${profile.company || ''}`,
-      `country=${profile.country || ''}`,
-      `state=${profile.state || ''}`,
-      `city=${profile.city || ''}`,
-      `postal_code=${profile.postalCode || ''}`,
-      `address_line1=${profile.addressLine1 || ''}`,
-      `address_line2=${profile.addressLine2 || ''}`,
-    ].join('\n');
-  }
-
   function renderSavedProfiles(profiles) {
     const list = getEl('saved-profiles-list');
     const count = getEl('saved-profiles-count');
@@ -437,13 +434,35 @@
     }
     try {
       await navigator.clipboard.writeText(text);
-      const original = button.innerHTML;
-      button.innerHTML = '✓ 已复制';
-      button.classList.add('copied');
+      if (button) {
+        const original = button.innerHTML;
+        button.innerHTML = '✓ 已复制';
+        button.classList.add('copied');
+        setTimeout(() => {
+          button.innerHTML = original;
+          button.classList.remove('copied');
+        }, 1400);
+      }
+    } catch {
+      showError('复制失败，请手动复制');
+    }
+  }
+
+  async function handleCopyField(input) {
+    if (!input) return;
+    const value = input.value.trim();
+    if (!value) {
+      showError('没有可复制的内容');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      input.classList.add('copied');
+      showMessage('已复制', 'success');
       setTimeout(() => {
-        button.innerHTML = original;
-        button.classList.remove('copied');
-      }, 1400);
+        input.classList.remove('copied');
+      }, 700);
     } catch {
       showError('复制失败，请手动复制');
     }
@@ -854,6 +873,15 @@
     }, 450);
   }
 
+  function setupProfileCopyFields() {
+    PROFILE_COPY_FIELD_IDS.forEach((fieldId) => {
+      const input = getEl(fieldId);
+      if (!input) return;
+      input.classList.add('copy-on-click');
+      input.addEventListener('click', () => handleCopyField(input));
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
     const savedTheme = localStorage.getItem('ol_theme') || 'light';
     document.documentElement.dataset.theme = savedTheme;
@@ -887,9 +915,10 @@
     getEl('btn-generate-profile').addEventListener('click', handleGenerateProfile);
     getEl('btn-generate-password').addEventListener('click', handleGeneratePassword);
     getEl('btn-save-profile').addEventListener('click', handleSaveProfile);
-    getEl('btn-copy-profile').addEventListener('click', () => handleCopy(buildProfileCopyText(buildProfileFromForm()), getEl('btn-copy-profile')));
     getEl('btn-reset-profile').addEventListener('click', handleResetProfile);
     getEl('saved-profiles-list').addEventListener('click', handleSavedProfileAction);
+
+    setupProfileCopyFields();
 
     const allData = await StorageApi.getAll();
     const currentTask = allData.currentTask;
