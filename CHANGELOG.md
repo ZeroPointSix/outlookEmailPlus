@@ -4,9 +4,88 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.3.0] - 2026-04-23
+
+### 新增功能 / New Features
+
+- **Issue #49 失效账号检测与治理闭环**：
+  - 后端：刷新链路新增 `_classify_refresh_failure()` 统一判定 `invalid_grant / AADSTS70000` 错误；全量/定时/选中/重试四条刷新链路均扩展返回 `invalid_token_failed_count` 和 `invalid_token_failed_list`。
+  - 新增独立治理接口：`GET /api/accounts/invalid-token-candidates` 查询失效候选，`POST /api/accounts/batch-update-status` 批量更新状态（默认 `inactive`），含去重、存在性校验与审计日志。
+  - 前端：刷新模态框新增"失效 Token 治理面板"，支持检测摘要展示、候选列表、一键批量置 inactive、二次确认批量删除；"🔍 失效治理"手动入口按钮。
+  - 测试：新增 `tests/test_invalid_token_governance.py`（12 个用例），覆盖判定 helper、候选接口、批量状态接口、端到端闭环。
+- **浏览器扩展档案字段只读化 + 点击复制反馈**：Profile 生成器字段改为 `readonly`，点击后触发顶部消息栏"已复制"提示，避免误编辑；新增字段级复制 helper 与集成测试。
+
 ### 修复 / Bug Fixes
 
-- **发布质量门禁修复（未重新发版）**：对 overview / verification 相关文件执行 `black` / `isort` 对齐，拆分 `external_api.get_verification_result` 降低 complexity，并补齐 mypy 类型收窄，修复 `main` 分支后续 `Code Quality` / `Build and Push Docker Image` 链路被质量门禁阻断的问题；修复提交推送后，`main` 的 `Code Quality` / `Python Tests` / `SonarCloud Scan` / `Build and Push Docker Image` 已全部恢复成功。
+- **Issue #52 前端邮件列表排序与滚动位置**：`renderEmailList()` 新增 `scrollToTop` 参数（默认 `true`），在切换账号、切换文件夹、首次加载时自动回到列表顶部；补全所有缓存命中路径的 `sortEmailsByNewestFirst` 排序兜底；新增 `tests/test_v190_frontend_contract.py` 前端排序契约测试。
+- **浏览器扩展 UX 修复**：消息栏从 `display:none/block` 改为 `opacity` 过渡，彻底消除点击复制时的页面跳动；移除字段点击后的绿色背景/边框/文字色反馈，仅保留顶部消息栏提示。
+
+### 重要变更 / Important Changes
+
+- `dev` 分支（含 PR #48 + Issue #49 + UX 修复）已合并到 `main`。
+- 版本号从 `2.2.2` 升级至 `2.3.0`。
+
+## [v2.2.2] - 2026-04-22
+
+### 修复 / Bug Fixes
+
+- **CI 质量门禁彻底修复**：
+  - `isort` 排序失败：修复 `tests/test_settings_dynamic_provider_names.py` 内部 import 顺序，通过 `isort --check-only`。
+  - `coverage` 报告失败：在 `pyproject.toml` 中配置 `[tool.coverage.run]`，omit 测试期间动态创建的临时插件文件（`*/outlookEmail-tests-*/plugins/temp_mail_providers/*.py`），解决 `No source for code` 错误。
+  - 插件测试文件泄漏：将 `test_temp_mail_plugin_manager.py` 与 `test_temp_mail_plugin_api.py` 的 `tearDown` 中文件清理模式从 `mock_*.py` 放宽为 `*.py`，防止 `custom_one.py` 等临时文件残留。
+
+### 重要变更 / Important Changes
+
+- **版本升级**：`outlook_web.__version__` 从 `2.2.1` 升级为 `2.2.2`。
+
+## [v2.2.1] - 2026-04-22
+
+### 修复 / Bug Fixes
+
+- **CI 测试环境兼容性修复**：将 `tests/test_settings_dynamic_provider_names.py` 从 pytest 语法迁移至标准库 `unittest`，消除 CI 环境中因缺少 `pytest` 导致的 `ModuleNotFoundError`，修复 `Python Tests` 与 `Build and Push Docker Image` 质量门禁失败。
+
+### 重要变更 / Important Changes
+
+- **版本升级**：`outlook_web.__version__` 从 `2.2.0` 升级为 `2.2.1`。
+
+## [v2.2.0] - 2026-04-22
+
+### 新增功能 / New Features
+
+- **临时邮箱 Provider 插件化架构**：全新插件系统支持第三方临时邮箱 Provider 动态安装、卸载、配置与热加载。
+  - 核心模块：`temp_mail_registry`（全局注册表）、`temp_mail_plugin_manager`（生命周期管理）、`temp_mail_plugin_cli`（CLI 工具）、`plugins/registry.json`（源索引）。
+  - 内置 Provider：Cloudflare Workers（多域 + Admin Key 加密）、Custom API、GPTMail、Moemail。
+  - Web 管理 API：`/api/plugins`（列表/安装/卸载/配置/连接测试）。
+  - 设置页新增插件管理卡片，支持自定义安装模态框与 Provider 注入逻辑。
+  - Provider 设置与域名选择解耦：设置页不再硬编码 Provider 名称，改为动态从注册表获取。
+- **浏览器扩展 v0.3.0 增强**：
+  - 新增本地个人信息生成器（`profile-generator.js` + `profile-data-us.js`），支持一键生成姓名/地址/电话等注册所需字段。
+  - 新增完整 Jest 测试覆盖（popup、storage、profile-generator 的单元与集成测试）。
+- **登录鉴权增强**：`login_required` 装饰器现同时支持 `session["logged_in"]` 与 `session["user_id"]`，提升多场景兼容性与安全性。
+
+### 修复 / Bug Fixes
+
+- **发布质量门禁修复**：对新增插件化模块及既有文件执行 `black` / `isort` 对齐，修复 `Code Quality` / `Build and Push Docker Image` 链路被质量门禁阻断的问题；本地复测确认 `Code Quality` 等效命令已全部通过。
+- **版本测试动态化**：`tests/test_version_update.py` 改为跟随 `outlook_web.__version__` 动态断言，避免仅因版本号 bump 导致全量回归误报。
+
+### 重要变更 / Important Changes
+
+- **版本升级**：`outlook_web.__version__` 从 `2.1.0` 升级为 `2.2.0`。
+- **扩展版本同步**：`browser-extension/manifest.json` 从 `0.2.0` 升级为 `0.3.0`，与扩展新增能力一并发布。
+- **发布口径保持不变**：当前仓库继续采用 **Python + Docker** 发布链路，正式产物以 Docker 镜像 tar 与源码 zip 为主，不引入 Tauri / Cargo / MSI / NSIS 构建链路。
+
+### 测试/验证 / Testing & Verification
+
+- 全量回归：
+  - `python -m unittest discover -s tests -v`（CI 等效）
+  - 结果：`1,369 passed, 9 skipped, 0 failed`
+  - 状态：全绿 ✅
+- 构建验证：
+  - `docker build -t outlook-email-plus:v2.2.0 .` → 待执行
+  - 产物：
+    - `dist/outlook-email-plus-v2.2.0-docker.tar`
+    - `dist/outlookEmailPlus-v2.2.0-src.zip`
+    - `dist/browser-extension-v0.3.0.zip`
 
 ## [v2.1.0] - 2026-04-20
 

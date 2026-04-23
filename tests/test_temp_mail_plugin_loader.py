@@ -2,6 +2,7 @@
 
 验证 load_plugins() 和 reload_plugins() 的行为，重点是错误隔离。
 """
+
 from __future__ import annotations
 
 import sys
@@ -9,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-MOCK_PLUGIN_CODE = '''
+MOCK_PLUGIN_CODE = """
 from outlook_web.services.temp_mail_provider_base import TempMailProviderBase, register_provider
 
 @register_provider
@@ -24,13 +25,13 @@ class MockLoadProvider(TempMailProviderBase):
     def get_message_detail(self, mailbox, message_id): return None
     def delete_message(self, mailbox, message_id): return True
     def clear_messages(self, mailbox): return True
-'''
+"""
 
-BAD_SYNTAX_PLUGIN = '''
+BAD_SYNTAX_PLUGIN = """
 def this is bad syntax ( :
-'''
+"""
 
-IMPORT_ERROR_PLUGIN = '''
+IMPORT_ERROR_PLUGIN = """
 import nonexistent_module_xyz
 from outlook_web.services.temp_mail_provider_base import TempMailProviderBase
 class NoRegProvider(TempMailProviderBase):
@@ -42,9 +43,9 @@ class NoRegProvider(TempMailProviderBase):
     def get_message_detail(self, mailbox, message_id): return None
     def delete_message(self, mailbox, message_id): return True
     def clear_messages(self, mailbox): return True
-'''
+"""
 
-NO_DECORATOR_PLUGIN = '''
+NO_DECORATOR_PLUGIN = """
 from outlook_web.services.temp_mail_provider_base import TempMailProviderBase
 class NoDecorProvider(TempMailProviderBase):
     provider_name = "no_decor"
@@ -55,9 +56,9 @@ class NoDecorProvider(TempMailProviderBase):
     def get_message_detail(self, mailbox, message_id): return None
     def delete_message(self, mailbox, message_id): return True
     def clear_messages(self, mailbox): return True
-'''
+"""
 
-SECOND_PLUGIN_CODE = '''
+SECOND_PLUGIN_CODE = """
 from outlook_web.services.temp_mail_provider_base import TempMailProviderBase, register_provider
 
 @register_provider
@@ -72,7 +73,7 @@ class MockSecondProvider(TempMailProviderBase):
     def get_message_detail(self, mailbox, message_id): return None
     def delete_message(self, mailbox, message_id): return True
     def clear_messages(self, mailbox): return True
-'''
+"""
 
 
 class TestPluginLoader(unittest.TestCase):
@@ -86,8 +87,8 @@ class TestPluginLoader(unittest.TestCase):
                 file.unlink(missing_ok=True)
 
     def setUp(self):
-        from tests._import_app import import_web_app_module
         from outlook_web.services import temp_mail_provider_factory as factory
+        from tests._import_app import import_web_app_module
 
         self._app_mod = import_web_app_module()
         self._app = self._app_mod.app
@@ -95,6 +96,7 @@ class TestPluginLoader(unittest.TestCase):
         self._tmp_dir.mkdir(parents=True, exist_ok=True)
 
         from outlook_web.services.temp_mail_provider_base import _REGISTRY
+
         self._registry = _REGISTRY
         self._initial_keys = set(_REGISTRY.keys())
         factory._FAILED_PLUGIN_MTIMES.clear()

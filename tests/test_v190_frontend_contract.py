@@ -207,6 +207,37 @@ class V190FrontendContractTests(unittest.TestCase):
         self.assertIn("translateAppTextLocal('收件箱为空')", emails_js)
         self.assertIn("translateAppTextLocal('暂无邮件')", temp_emails_js)
 
+    def test_frontend_email_list_sorting_fallback_is_present_on_all_key_paths(self):
+        client = self.app.test_client()
+        emails_js = self._get_text(client, "/static/js/features/emails.js")
+        main_js = self._get_text(client, "/static/js/main.js")
+
+        # helper contract: timestamp fallback chain + stable newest-first sort
+        self.assertIn("function resolveEmailSortTimestamp(email)", emails_js)
+        self.assertIn(
+            "const rawDate = email && (email.receivedDateTime || email.date || email.created_at || email.received_at);",
+            emails_js,
+        )
+        self.assertIn("return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;", emails_js)
+        self.assertIn("function sortEmailsByNewestFirst(list)", emails_js)
+        self.assertIn(".sort((a, b) => (b.timestamp - a.timestamp) || (a.index - b.index))", emails_js)
+        self.assertIn("window.sortEmailsByNewestFirst = sortEmailsByNewestFirst;", emails_js)
+
+        # loadEmails(): fetch path + cache recovery path
+        self.assertIn("const sortedEmails = sortEmailsByNewestFirst(data.emails || []);", emails_js)
+        self.assertIn("currentEmails = sortEmailsByNewestFirst(cache.emails || []);", emails_js)
+
+        # loadMoreEmails(): merged pagination fallback in main.js
+        self.assertIn("currentEmails = (typeof sortEmailsByNewestFirst === 'function')", main_js)
+        self.assertIn("? sortEmailsByNewestFirst(mergedEmails)", main_js)
+
+        # switchFolder(): cache recovery fallback in main.js
+        self.assertIn("? sortEmailsByNewestFirst(cache.emails || [])", main_js)
+
+        # selectAccount() in accounts.js: cache recovery must also sort
+        accounts_js = self._get_text(client, "/static/js/features/accounts.js")
+        self.assertIn("? sortEmailsByNewestFirst(cache.emails || [])", accounts_js)
+
     def test_notification_copy_matches_channel_vs_account_model(self):
         client = self.app.test_client()
         self._login(client)

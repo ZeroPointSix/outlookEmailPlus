@@ -2,6 +2,7 @@
 
 验证 temp_mail_plugin_manager.py 的安装、卸载、配置、连通性测试、活跃邮箱检查。
 """
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-MOCK_PROVIDER_CODE = b'''
+MOCK_PROVIDER_CODE = b"""
 from outlook_web.services.temp_mail_provider_base import TempMailProviderBase, register_provider
 
 @register_provider
@@ -38,7 +39,7 @@ class MockMgrProvider(TempMailProviderBase):
     def get_message_detail(self, mailbox, message_id): return None
     def delete_message(self, mailbox, message_id): return True
     def clear_messages(self, mailbox): return True
-'''
+"""
 
 MOCK_REGISTRY_JSON = {
     "version": 1,
@@ -74,11 +75,12 @@ class TestPluginManagerInstall(unittest.TestCase):
 
     def tearDown(self):
         from outlook_web.services.temp_mail_provider_base import _REGISTRY
+
         _REGISTRY.pop("mock_mgr", None)
         for key in list(sys.modules.keys()):
             if key.startswith("_plugin_"):
                 del sys.modules[key]
-        for f in self._tmp_dir.glob("mock_*.py"):
+        for f in self._tmp_dir.glob("*.py"):
             f.unlink(missing_ok=True)
         if self._registry_file.exists():
             self._registry_file.unlink()
@@ -123,14 +125,21 @@ class TestPluginManagerInstall(unittest.TestCase):
         import hashlib
 
         correct_hash = hashlib.sha256(MOCK_PROVIDER_CODE).hexdigest()
-        self._registry_file.write_text(json.dumps({
-            "version": 1,
-            "plugins": [{
-                "name": "mock_mgr",
-                "download_url": "http://localhost:9999/mock_mgr.py",
-                "sha256": correct_hash,
-            }],
-        }), encoding="utf-8")
+        self._registry_file.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "plugins": [
+                        {
+                            "name": "mock_mgr",
+                            "download_url": "http://localhost:9999/mock_mgr.py",
+                            "sha256": correct_hash,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -149,14 +158,21 @@ class TestPluginManagerInstall(unittest.TestCase):
         """SHA256 不匹配时抛出 PLUGIN_INTEGRITY_CHECK_FAILED"""
         # 覆写 registry：提供一个格式合法（64 位十六进制）但与实际内容不匹配的 sha256
         wrong_sha256 = "a" * 64
-        self._registry_file.write_text(json.dumps({
-            "version": 1,
-            "plugins": [{
-                "name": "mock_mgr",
-                "download_url": "http://localhost:9999/mock_mgr.py",
-                "sha256": wrong_sha256,
-            }],
-        }), encoding="utf-8")
+        self._registry_file.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "plugins": [
+                        {
+                            "name": "mock_mgr",
+                            "download_url": "http://localhost:9999/mock_mgr.py",
+                            "sha256": wrong_sha256,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -258,6 +274,7 @@ class TestPluginManagerInstall(unittest.TestCase):
 
         try:
             from outlook_web.services.temp_mail_plugin_manager import install_plugin
+
             result = install_plugin("mock_mgr")
             self.assertTrue(self._tmp_dir.exists())
         finally:
@@ -292,6 +309,7 @@ class TestPluginManagerUninstall(unittest.TestCase):
         self._tmp_dir.mkdir(parents=True, exist_ok=True)
 
         from outlook_web.services.temp_mail_provider_base import _REGISTRY
+
         self._registry = _REGISTRY
         self._initial_keys = set(_REGISTRY.keys())
 
@@ -301,7 +319,7 @@ class TestPluginManagerUninstall(unittest.TestCase):
         for key in list(sys.modules.keys()):
             if key.startswith("_plugin_"):
                 del sys.modules[key]
-        for f in self._tmp_dir.glob("mock_*.py"):
+        for f in self._tmp_dir.glob("*.py"):
             f.unlink(missing_ok=True)
 
     # D-UNIN-01
@@ -412,6 +430,7 @@ class TestPluginManagerConfig(unittest.TestCase):
         self._app = self._app_mod.app
 
         from outlook_web.services.temp_mail_provider_base import _REGISTRY, register_provider
+
         self._registry = _REGISTRY
 
         @register_provider
@@ -433,6 +452,7 @@ class TestPluginManagerConfig(unittest.TestCase):
         for key in set(self._registry.keys()) - self._initial_keys:
             del self._registry[key]
         from outlook_web.repositories import settings as repo
+
         for k in ["plugin.config_test.url", "plugin.config_test.key", "plugin.config_test.desc"]:
             repo.set_setting(k, "")
 
@@ -502,8 +522,8 @@ class TestPluginManagerConfig(unittest.TestCase):
     # D-CONF-07
     def test_config_key_isolation(self):
         """不同插件同名字段互不影响"""
-        from outlook_web.services.temp_mail_provider_base import register_provider
         from outlook_web.services.temp_mail_plugin_manager import read_plugin_config, save_plugin_config
+        from outlook_web.services.temp_mail_provider_base import register_provider
 
         @register_provider
         class OtherProvider:
@@ -521,6 +541,7 @@ class TestPluginManagerConfig(unittest.TestCase):
         finally:
             self._registry.pop("other_test", None)
             from outlook_web.repositories import settings as repo
+
             repo.set_setting("plugin.other_test.url", "")
 
 

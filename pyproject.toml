@@ -12,3 +12,18 @@ warn_unused_ignores = true
 show_error_codes = true
 pretty = true
 follow_imports = "skip"
+
+[tool.coverage.run]
+omit = [
+    "*/outlookEmail-tests-*/plugins/temp_mail_providers/*.py",
+    "*/outlookEmail-tests-*/plugins/temp_mail_providers/test_plugin/*.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

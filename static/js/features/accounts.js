@@ -36,10 +36,14 @@
 
             if (emailListCache[cacheKey]) {
                 const cache = emailListCache[cacheKey];
-                currentEmails = cache.emails;
+                currentEmails = (typeof sortEmailsByNewestFirst === 'function')
+                    ? sortEmailsByNewestFirst(cache.emails || [])
+                    : (cache.emails || []);
                 hasMoreEmails = cache.has_more;
                 currentSkip = cache.skip;
                 currentMethod = cache.method || 'graph';
+
+                cache.emails = currentEmails;
 
                 const methodTag = document.getElementById('methodTag');
                 methodTag.textContent = currentMethod;

@@ -66,12 +66,7 @@ class CloudflareTempMailTestPluginTests(unittest.TestCase):
         from outlook_web.services import temp_mail_provider_factory as factory
         from outlook_web.services.temp_mail_provider_factory import get_available_providers, reload_plugins
 
-        plugin_dir = (
-            Path(__file__).resolve().parents[1]
-            / "plugins"
-            / "temp_mail_providers"
-            / "test_plugin"
-        )
+        plugin_dir = Path(__file__).resolve().parents[1] / "plugins" / "temp_mail_providers" / "test_plugin"
 
         with patch.object(factory, "_get_plugin_dir", return_value=plugin_dir):
             result = reload_plugins()

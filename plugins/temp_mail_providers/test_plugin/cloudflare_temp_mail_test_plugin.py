@@ -264,11 +264,7 @@ class CloudflareTempMailTestPluginProvider(TempMailProviderBase):
         content = str(payload.get("content") or payload.get("body") or payload.get("text") or "")
         html_content = str(payload.get("html") or payload.get("html_content") or payload.get("body_html") or "")
         from_address = str(
-            payload.get("from_address")
-            or payload.get("from")
-            or payload.get("sender")
-            or payload.get("source")
-            or ""
+            payload.get("from_address") or payload.get("from") or payload.get("sender") or payload.get("source") or ""
         ).strip()
         subject = str(payload.get("subject") or "")
 
@@ -289,9 +285,7 @@ class CloudflareTempMailTestPluginProvider(TempMailProviderBase):
             "html_content": html_content,
             "has_html": bool(html_content),
             "timestamp": _normalize_timestamp(
-                payload.get("timestamp")
-                or payload.get("created_at")
-                or payload.get("received_at")
+                payload.get("timestamp") or payload.get("created_at") or payload.get("received_at")
             ),
         }
 

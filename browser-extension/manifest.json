@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "邮箱池快捷操作",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "OutlookMail Plus 伴生扩展 — 快捷申领邮箱、获取验证码",
   "icons": {
     "16": "icons/icon16.png",

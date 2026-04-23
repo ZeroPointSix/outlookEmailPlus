@@ -1554,8 +1554,7 @@ def api_batch_update_status() -> Any:
         return jsonify(
             {
                 "success": True,
-                "message": f"成功更新 {updated_count} 个账号状态"
-                + (f"，失败 {failed_count} 个" if failed_count > 0 else ""),
+                "message": f"成功更新 {updated_count} 个账号状态" + (f"，失败 {failed_count} 个" if failed_count > 0 else ""),
                 "status": normalized_status,
                 "updated_count": updated_count,
                 "failed_count": failed_count,

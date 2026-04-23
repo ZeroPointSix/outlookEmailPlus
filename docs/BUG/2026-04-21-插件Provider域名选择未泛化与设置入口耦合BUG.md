@@ -30,7 +30,7 @@
 3. 临时邮箱页已去掉 `cloudflare_temp_mail` 的域名硬编码，改为按 `/api/temp-emails/options` 返回的 `domains` / `domain_strategy` 判定域名下拉。
 4. `temp_emails.js` 额外加入了按 Provider 维度的 options cache 与请求防串号保护，避免切换 Provider 后复用错误的旧 options。
 5. 设置页首次加载时，若保存的是插件 Provider，当前实现也会在插件 radio 延后注入后优先恢复该 Provider，而不是错误回退到 `legacy_bridge`。
-6. 为消除旧静态资源缓存干扰，当前人工验收实例已按 `2.1.1` 版本重新拉起到 `127.0.0.1:5097`；在将 `main` 合并回当前分支、解决 `WORKSPACE.md` 冲突，并梳理未跟踪插件夹具测试后，最新完整全量回归结果已更新为 `Ran 1357 tests in 409.925s`、`OK (skipped=7)`。
+6. 为消除旧静态资源缓存干扰，当前人工验收实例已按 `2.1.1` 版本重新拉起到 `127.0.0.1:5097`；在将 `dev` fast-forward 合入 `main`、保留 `main` 工作树原有 `WORKSPACE.md` 本地记录到 stash、并在主干工作树重新执行完整回归后，最新完整全量结果已更新为 `Ran 1357 tests in 463.280s`、`OK (skipped=7)`。
 
 当前剩余事项已不再包括页面级人工验收；本轮问题对应的前端主干、最新回归结果与人工验收结论都已经落地。
 

@@ -52,6 +52,7 @@ class InvalidTokenGovernanceTests(unittest.TestCase):
     def _insert_refresh_log(self, account_id, account_email, status, error_message, refresh_type="manual"):
         """直接向 account_refresh_logs 插入一条记录。"""
         from outlook_web.db import get_db
+
         db = get_db()
         db.execute(
             """
@@ -132,7 +133,9 @@ class InvalidTokenGovernanceTests(unittest.TestCase):
         self.assertTrue(data.get("success"))
         candidates = data.get("candidates", [])
         found = [c for c in candidates if c["account_id"] == account_id]
-        self.assertTrue(len(found) > 0, f"应至少有1条候选包含 account_id={account_id}，实际: {[c['account_id'] for c in candidates]}")
+        self.assertTrue(
+            len(found) > 0, f"应至少有1条候选包含 account_id={account_id}，实际: {[c['account_id'] for c in candidates]}"
+        )
         self.assertTrue(found[0].get("is_invalid_token"))
         self.assertEqual(found[0].get("reason_code"), "INVALID_GRANT_OR_AADSTS70000")
 

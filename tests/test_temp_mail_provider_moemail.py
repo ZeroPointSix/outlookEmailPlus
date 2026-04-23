@@ -10,13 +10,7 @@ from tests._import_app import clear_login_attempts, import_web_app_module
 
 
 def _load_moemail_module(module_name: str = "_test_plugin_moemail"):
-    plugin_path = (
-        Path(__file__).resolve().parents[1]
-        / "plugins"
-        / "temp_mail_providers"
-        / "test_plugin"
-        / "moemail.py"
-    )
+    plugin_path = Path(__file__).resolve().parents[1] / "plugins" / "temp_mail_providers" / "test_plugin" / "moemail.py"
     spec = importlib.util.spec_from_file_location(module_name, plugin_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("无法加载 moemail 插件模块")
@@ -66,12 +60,7 @@ class MoemailProviderPluginTests(unittest.TestCase):
         from outlook_web.services import temp_mail_provider_factory as factory
         from outlook_web.services.temp_mail_provider_factory import get_available_providers, reload_plugins
 
-        plugin_dir = (
-            Path(__file__).resolve().parents[1]
-            / "plugins"
-            / "temp_mail_providers"
-            / "test_plugin"
-        )
+        plugin_dir = Path(__file__).resolve().parents[1] / "plugins" / "temp_mail_providers" / "test_plugin"
         with patch.object(factory, "_get_plugin_dir", return_value=plugin_dir):
             result = reload_plugins()
 

@@ -2,6 +2,7 @@
 
 验证 _REGISTRY、register_provider 装饰器和 get_registry 的基础行为。
 """
+
 from __future__ import annotations
 
 import unittest
@@ -34,13 +35,26 @@ class TestPluginRegistry(unittest.TestCase):
             provider_label = "Test A"
             provider_version = "1.0.0"
 
-            def get_options(self): return {}
-            def create_mailbox(self, **kw): return {}
-            def delete_mailbox(self, mailbox): return True
-            def list_messages(self, mailbox): return []
-            def get_message_detail(self, mailbox, message_id): return None
-            def delete_message(self, mailbox, message_id): return True
-            def clear_messages(self, mailbox): return True
+            def get_options(self):
+                return {}
+
+            def create_mailbox(self, **kw):
+                return {}
+
+            def delete_mailbox(self, mailbox):
+                return True
+
+            def list_messages(self, mailbox):
+                return []
+
+            def get_message_detail(self, mailbox, message_id):
+                return None
+
+            def delete_message(self, mailbox, message_id):
+                return True
+
+            def clear_messages(self, mailbox):
+                return True
 
         self.assertIn("test_provider_a", self._registry)
         self.assertIs(self._registry["test_provider_a"], TestProviderA)
@@ -56,13 +70,26 @@ class TestPluginRegistry(unittest.TestCase):
             provider_label = "Empty"
             provider_version = "1.0.0"
 
-            def get_options(self): return {}
-            def create_mailbox(self, **kw): return {}
-            def delete_mailbox(self, mailbox): return True
-            def list_messages(self, mailbox): return []
-            def get_message_detail(self, mailbox, message_id): return None
-            def delete_message(self, mailbox, message_id): return True
-            def clear_messages(self, mailbox): return True
+            def get_options(self):
+                return {}
+
+            def create_mailbox(self, **kw):
+                return {}
+
+            def delete_mailbox(self, mailbox):
+                return True
+
+            def list_messages(self, mailbox):
+                return []
+
+            def get_message_detail(self, mailbox, message_id):
+                return None
+
+            def delete_message(self, mailbox, message_id):
+                return True
+
+            def clear_messages(self, mailbox):
+                return True
 
         self.assertNotIn("", self._registry)
 
@@ -75,13 +102,26 @@ class TestPluginRegistry(unittest.TestCase):
         class IntNameProvider(self._base_cls):
             provider_name = 123
 
-            def get_options(self): return {}
-            def create_mailbox(self, **kw): return {}
-            def delete_mailbox(self, mailbox): return True
-            def list_messages(self, mailbox): return []
-            def get_message_detail(self, mailbox, message_id): return None
-            def delete_message(self, mailbox, message_id): return True
-            def clear_messages(self, mailbox): return True
+            def get_options(self):
+                return {}
+
+            def create_mailbox(self, **kw):
+                return {}
+
+            def delete_mailbox(self, mailbox):
+                return True
+
+            def list_messages(self, mailbox):
+                return []
+
+            def get_message_detail(self, mailbox, message_id):
+                return None
+
+            def delete_message(self, mailbox, message_id):
+                return True
+
+            def clear_messages(self, mailbox):
+                return True
 
         self.assertNotIn(123, self._registry)
 
@@ -95,26 +135,52 @@ class TestPluginRegistry(unittest.TestCase):
             provider_name = "dup_provider"
             provider_version = "1.0.0"
 
-            def get_options(self): return {}
-            def create_mailbox(self, **kw): return {}
-            def delete_mailbox(self, mailbox): return True
-            def list_messages(self, mailbox): return []
-            def get_message_detail(self, mailbox, message_id): return None
-            def delete_message(self, mailbox, message_id): return True
-            def clear_messages(self, mailbox): return True
+            def get_options(self):
+                return {}
+
+            def create_mailbox(self, **kw):
+                return {}
+
+            def delete_mailbox(self, mailbox):
+                return True
+
+            def list_messages(self, mailbox):
+                return []
+
+            def get_message_detail(self, mailbox, message_id):
+                return None
+
+            def delete_message(self, mailbox, message_id):
+                return True
+
+            def clear_messages(self, mailbox):
+                return True
 
         @register_provider
         class ProviderV2(self._base_cls):
             provider_name = "dup_provider"
             provider_version = "2.0.0"
 
-            def get_options(self): return {}
-            def create_mailbox(self, **kw): return {}
-            def delete_mailbox(self, mailbox): return True
-            def list_messages(self, mailbox): return []
-            def get_message_detail(self, mailbox, message_id): return None
-            def delete_message(self, mailbox, message_id): return True
-            def clear_messages(self, mailbox): return True
+            def get_options(self):
+                return {}
+
+            def create_mailbox(self, **kw):
+                return {}
+
+            def delete_mailbox(self, mailbox):
+                return True
+
+            def list_messages(self, mailbox):
+                return []
+
+            def get_message_detail(self, mailbox, message_id):
+                return None
+
+            def delete_message(self, mailbox, message_id):
+                return True
+
+            def clear_messages(self, mailbox):
+                return True
 
         self.assertIs(self._registry["dup_provider"], ProviderV2)
         self.assertEqual(self._registry["dup_provider"].provider_version, "2.0.0")
@@ -131,13 +197,26 @@ class TestPluginRegistry(unittest.TestCase):
             provider_name = "snapshot_test"
             provider_version = "1.0.0"
 
-            def get_options(self): return {}
-            def create_mailbox(self, **kw): return {}
-            def delete_mailbox(self, mailbox): return True
-            def list_messages(self, mailbox): return []
-            def get_message_detail(self, mailbox, message_id): return None
-            def delete_message(self, mailbox, message_id): return True
-            def clear_messages(self, mailbox): return True
+            def get_options(self):
+                return {}
+
+            def create_mailbox(self, **kw):
+                return {}
+
+            def delete_mailbox(self, mailbox):
+                return True
+
+            def list_messages(self, mailbox):
+                return []
+
+            def get_message_detail(self, mailbox, message_id):
+                return None
+
+            def delete_message(self, mailbox, message_id):
+                return True
+
+            def clear_messages(self, mailbox):
+                return True
 
         snapshot2 = get_registry()
         self.assertNotIn("snapshot_test", snapshot1)

@@ -42,16 +42,8 @@ def api_get_plugins():
     installed = get_installed_plugins()
     available = get_available_plugins()
     load_state = get_plugin_load_state()
-    installed_by_name = {
-        str(item.get("name") or ""): item
-        for item in installed
-        if str(item.get("name") or "").strip()
-    }
-    available_by_name = {
-        str(item.get("name") or ""): item
-        for item in available
-        if str(item.get("name") or "").strip()
-    }
+    installed_by_name = {str(item.get("name") or ""): item for item in installed if str(item.get("name") or "").strip()}
+    available_by_name = {str(item.get("name") or ""): item for item in available if str(item.get("name") or "").strip()}
     all_names = sorted(set(available_by_name.keys()) | set(installed_by_name.keys()) | set(load_state.keys()))
 
     plugins: list[dict[str, Any]] = []

@@ -30,6 +30,8 @@ data/
 
 # 测试缓存
 .pytest_cache/
+.coverage
+coverage.xml
 
 # Codex / 本地过程留痕（不入库）
 .codex/

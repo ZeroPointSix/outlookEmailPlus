@@ -192,11 +192,7 @@ class MoemailTempMailProvider(TempMailProviderBase):
 
         domain_value = None
         if isinstance(data, dict):
-            domain_value = (
-                data.get("emailDomains")
-                or data.get("email_domains")
-                or data.get("domains")
-            )
+            domain_value = data.get("emailDomains") or data.get("email_domains") or data.get("domains")
 
         if isinstance(domain_value, list):
             return [str(item).strip() for item in domain_value if str(item).strip()]
@@ -248,18 +244,9 @@ class MoemailTempMailProvider(TempMailProviderBase):
         normalized_id = f"moemail_{raw_id}"
         content = str(message.get("content") or message.get("text") or message.get("body") or "")
         html_content = str(message.get("html") or message.get("html_content") or message.get("body_html") or "")
-        from_address = str(
-            message.get("from_address")
-            or message.get("from")
-            or message.get("sender")
-            or ""
-        ).strip()
+        from_address = str(message.get("from_address") or message.get("from") or message.get("sender") or "").strip()
 
-        timestamp = _normalize_timestamp(
-            message.get("received_at")
-            or message.get("sent_at")
-            or message.get("timestamp")
-        )
+        timestamp = _normalize_timestamp(message.get("received_at") or message.get("sent_at") or message.get("timestamp"))
 
         return {
             "id": normalized_id,

@@ -36,12 +36,13 @@ The repository already includes some screenshots, and more can be added later.
 
 ## Version Highlights
 
-Current stable version: `v2.1.0`
+Current stable version: `v2.2.2`
 
 ### Recent Version Overview
 
 | Version | Date | Key New Features |
 |---------|------|-----------------|
+| **v2.2.0** | 2026-04 | 🔌 **Temp Mail Provider Plugin System**: dynamic install/unload/configure/hot-reload for third-party providers; built-in Cloudflare / Custom / GPTMail / Moemail; provider settings decoupled from domain selection; browser extension adds local personal-info generator and full Jest coverage |
 | **v2.1.0** | 2026-04 | 📊 **Overview Dashboard**: a 5-tab unified board (Summary / Verification / External API / Mailbox Pool / Activity), plus `verification_extract_logs` for shared observability, browser-extension API-key copy fix, and overview real-time/i18n polish |
 | **v2.0.0** | 2026-04 | 🌐 **Browser Extension** (Chrome/Edge MV3): one-click claim → auto-extract verification code/link → complete/release, no tab-switching needed; backend adds `chrome-extension://` CORS support |
 | **v1.19.0** | 2026-04 | 🔧 Structured refresh-failure hints (error code + actionable steps + trace guide); fixed Selected account refresh early-exit (Issue #45) |

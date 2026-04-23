@@ -61,11 +61,7 @@ def load_plugins() -> list[dict[str, Any]]:
         _PLUGIN_LOAD_STATE.clear()
         return []
 
-    discovered_names = {
-        py_file.stem
-        for py_file in plugin_dir.glob("*.py")
-        if not py_file.name.startswith("_")
-    }
+    discovered_names = {py_file.stem for py_file in plugin_dir.glob("*.py") if not py_file.name.startswith("_")}
     for cached_name in list(_PLUGIN_LOAD_STATE.keys()):
         if cached_name not in discovered_names:
             _PLUGIN_LOAD_STATE.pop(cached_name, None)

@@ -3,6 +3,24 @@
         // 模块内变量：存储上次获取邮件失败的错误详情
         let lastFetchErrorDetails = {};
 
+        function resolveEmailSortTimestamp(email) {
+            const rawDate = email && (email.receivedDateTime || email.date || email.created_at || email.received_at);
+            const parsed = Date.parse(String(rawDate || ''));
+            return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+        }
+
+        function sortEmailsByNewestFirst(list) {
+            const source = Array.isArray(list) ? list : [];
+            return source
+                .map((item, index) => ({ item, index, timestamp: resolveEmailSortTimestamp(item) }))
+                .sort((a, b) => (b.timestamp - a.timestamp) || (a.index - b.index))
+                .map(entry => entry.item);
+        }
+
+        if (typeof window !== 'undefined') {
+            window.sortEmailsByNewestFirst = sortEmailsByNewestFirst;
+        }
+
         // 加载邮件列表
         async function loadEmails(email, forceRefresh = false) {
             const container = document.getElementById('emailList');
@@ -15,10 +33,12 @@
             const cacheKey = `${email}_${currentFolder}`;
             if (!forceRefresh && emailListCache[cacheKey]) {
                 const cache = emailListCache[cacheKey];
-                currentEmails = cache.emails;
+                currentEmails = sortEmailsByNewestFirst(cache.emails || []);
                 hasMoreEmails = cache.has_more;
                 currentSkip = cache.skip;
                 currentMethod = cache.method || 'graph';
+
+                cache.emails = currentEmails;
 
                 // 恢复 UI
                 const methodTag = document.getElementById('methodTag');
@@ -53,7 +73,8 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    currentEmails = data.emails;
+                    const sortedEmails = sortEmailsByNewestFirst(data.emails || []);
+                    currentEmails = sortedEmails;
                     currentMethod = data.method === 'Graph API' ? 'graph' : 'imap';
                     hasMoreEmails = data.has_more;
                     if (typeof syncAccountSummaryToAccountCache === 'function' && data.account_summary) {
@@ -79,7 +100,9 @@
 
                     document.getElementById('emailCount').textContent = `(${data.emails.length})`;
 
-                    renderEmailList(data.emails);
+                    document.getElementById('emailCount').textContent = `(${currentEmails.length})`;
+
+                    renderEmailList(currentEmails);
                 } else {
                     // 显示详细的多方法失败弹框
                     if (data.details) {
@@ -121,7 +144,7 @@
         let selectedEmailIds = new Set();
         let isBatchSelectMode = false;
 
-        function renderEmailList(emails) {
+        function renderEmailList(emails, options = {}) {
             const container = document.getElementById('emailList');
             const actionBar = document.getElementById('emailBatchActionBar');
 
@@ -134,6 +157,7 @@
                 `;
                 selectedEmailIds.clear();
                 updateEmailBatchActionBar();
+                if (options.scrollToTop !== false) container.scrollTop = 0;
                 return;
             }
 
@@ -161,6 +185,9 @@
                 </div>
             `}).join('');
 
+            // Issue #52: 加载/刷新后自动回到列表顶部，避免滚动位置乱跑
+            if (options.scrollToTop !== false) container.scrollTop = 0;
+
             updateEmailBatchActionBar();
         }
 
@@ -174,7 +201,7 @@
             // Re-render to update checkbox UI (or efficiently update DOM)
             // For simplicity, we just find the checkbox and update it
             // implementation below is cheap
-            renderEmailList(currentEmails);
+            renderEmailList(currentEmails, { scrollToTop: false });
         }
 
         function updateEmailBatchActionBar() {
@@ -439,7 +466,7 @@
                     currentEmails = currentEmails.filter(e => !deletedIds.has(e.id));
                     selectedEmailIds.clear();
 
-                    renderEmailList(currentEmails);
+                    renderEmailList(currentEmails, { scrollToTop: false });
 
                     // If current viewed email was deleted, clear view
                     if (currentEmailDetail && deletedIds.has(currentEmailDetail.id)) {
@@ -491,7 +518,7 @@
                 const deletedId = currentEmailDetail.id;
                 currentEmails = currentEmails.filter(email => email.id !== deletedId);
                 currentEmailDetail = null;
-                renderEmailList(currentEmails);
+                renderEmailList(currentEmails, { scrollToTop: false });
 
                 const tempContainer = document.getElementById('tempEmailMessageList');
                 if (tempContainer && typeof renderTempEmailMessageList === 'function') {

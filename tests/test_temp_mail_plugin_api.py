@@ -2,6 +2,7 @@
 
 验证 /api/plugins/* 和 /api/system/reload-plugins 端点的请求/响应格式和错误码。
 """
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-MOCK_PROVIDER_CODE = b'''
+MOCK_PROVIDER_CODE = b"""
 from outlook_web.services.temp_mail_provider_base import TempMailProviderBase, register_provider
 
 @register_provider
@@ -35,9 +36,9 @@ class MockApiProvider(TempMailProviderBase):
     def get_message_detail(self, mailbox, message_id): return None
     def delete_message(self, mailbox, message_id): return True
     def clear_messages(self, mailbox): return True
-'''
+"""
 
-BROKEN_PROVIDER_CODE = b'''
+BROKEN_PROVIDER_CODE = b"""
 import definitely_missing_test_plugin_dependency
 from outlook_web.services.temp_mail_provider_base import TempMailProviderBase
 
@@ -50,7 +51,7 @@ class BrokenProvider(TempMailProviderBase):
     def get_message_detail(self, mailbox, message_id): return None
     def delete_message(self, mailbox, message_id): return True
     def clear_messages(self, mailbox): return True
-'''
+"""
 
 MOCK_REGISTRY_JSON = {
     "version": 1,
@@ -74,9 +75,9 @@ class TestPluginAPI(unittest.TestCase):
     """TDD-E: API 接口契约"""
 
     def setUp(self):
-        from tests._import_app import import_web_app_module
         from outlook_web.config import get_database_path
         from outlook_web.services import temp_mail_provider_factory as factory
+        from tests._import_app import import_web_app_module
 
         self._app_mod = import_web_app_module()
         self._app = self._app_mod.app
@@ -88,6 +89,7 @@ class TestPluginAPI(unittest.TestCase):
         self._registry_file.parent.mkdir(parents=True, exist_ok=True)
 
         from outlook_web.services.temp_mail_provider_base import _REGISTRY
+
         self._registry = _REGISTRY
         self._initial_keys = set(_REGISTRY.keys())
         factory._FAILED_PLUGIN_MTIMES.clear()
@@ -107,7 +109,7 @@ class TestPluginAPI(unittest.TestCase):
                 del sys.modules[key]
         factory._FAILED_PLUGIN_MTIMES.clear()
         factory._PLUGIN_LOAD_STATE.clear()
-        for f in self._tmp_dir.glob("mock_*.py"):
+        for f in self._tmp_dir.glob("*.py"):
             f.unlink(missing_ok=True)
         if self._registry_file.exists():
             self._registry_file.unlink()
