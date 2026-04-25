@@ -1232,6 +1232,60 @@
 
 ---
 
+#### 235. 全部本地分支同步 main 最新提交
+
+**时间**：2026-04-23
+
+**操作背景**：
+用户要求将 main 分支最新提交同步到所有其他本地分支。
+
+**涉及分支与结果**：
+
+| 分支 | 位置 | 合并方式 | 冲突 | 推送状态 |
+|---|---|---|---|---|
+| `alias-email-merge` | 主仓库 | Fast-forward | 无 | ✅ 已 push |
+| `pr-48-personal-information` | 主仓库 | Fast-forward | 无 | ✅ 已 push |
+| `Buggithubissue` | worktree | Fast-forward | 无 | ✅ 已 push |
+| `feature` | worktree | Fast-forward | 无 | ✅ 已 push |
+| `dev` | worktree | Merge commit | WORKSPACE.md | ✅ 已 push（保留 main 版本） |
+
+**同步后各分支 HEAD**：
+
+| 分支 | HEAD commit |
+|---|---|
+| `main` | `2855f66` |
+| `alias-email-merge` | `2855f66` |
+| `pr-48-personal-information` | `2855f66` |
+| `Buggithubissue` | `2855f66` |
+| `feature` | `2855f66` |
+| `dev` | `151541c`（merge commit） |
+
+**当前状态**：
+- 全部 6 个分支已与 main 最新代码对齐 ✅
+- 远程所有分支均已更新
+
+---
+
+#### 236. 删除已完成的分支
+
+**时间**：2026-04-23
+
+**操作背景**：
+用户要求删除已完成合并的 `alias-email-merge` 和 `pr-48-personal-information` 分支。
+
+**执行结果**：
+
+| 分支 | 本地删除 | 远程删除 |
+|---|---|---|
+| `alias-email-merge` | ✅ | ✅ |
+| `pr-48-personal-information` | ✅ | ✅ |
+
+**当前剩余分支**：
+- 主仓库：`main`
+- Worktree：`Buggithubissue`、`dev`、`feature`
+
+---
+
 ## 2026-04-22
 
 ### 操作记录
