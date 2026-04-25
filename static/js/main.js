@@ -4477,6 +4477,129 @@ ${details}
             }
         }
 
+        // ── 批量拉取邮件（Issue #55: 标准模式 latest-only）──
+
+        function resolveSelectedAccountsForBatchFetch() {
+            const result = [];
+            const idSet = selectedAccountIds;
+            if (!idSet || idSet.size === 0) return result;
+
+            const seen = new Set();
+            const groupArrays = Object.values(accountsCache);
+            for (const group of groupArrays) {
+                if (!Array.isArray(group)) continue;
+                for (const acc of group) {
+                    if (acc && acc.id && idSet.has(acc.id) && !seen.has(acc.id)) {
+                        seen.add(acc.id);
+                        result.push({
+                            id: acc.id,
+                            email: acc.email,
+                            account_type: acc.account_type,
+                            provider: acc.provider,
+                        });
+                    }
+                }
+            }
+            return result;
+        }
+
+        function showBatchFetchConfirm() {
+            if (selectedAccountIds.size === 0) {
+                showToast(translateAppTextLocal('请选择要批量拉取邮件的账号'), 'error');
+                return;
+            }
+
+            const accounts = resolveSelectedAccountsForBatchFetch();
+            if (accounts.length === 0) {
+                showToast(translateAppTextLocal('请选择要批量拉取邮件的账号'), 'error');
+                return;
+            }
+
+            if (!confirm(`${translateAppTextLocal('批量拉取邮件')}：${translateAppTextLocal('收件箱 + 垃圾箱')} (${accounts.length} ${translateAppTextLocal('个账号')})？`)) {
+                return;
+            }
+
+            batchFetchSelectedEmails(accounts);
+        }
+
+        async function batchFetchSelectedEmails(accounts) {
+            const toastId = 'batch-fetch-toast-' + Date.now();
+            let processedAccounts = 0;
+            let successAccounts = 0;
+            const failedAccounts = [];
+
+            showPersistentToast(toastId, `${translateAppTextLocal('正在批量拉取邮件')} 0 / ${accounts.length}`);
+
+            for (const acc of accounts) {
+                const result = await fetchLatestFoldersForAccount(acc);
+                processedAccounts++;
+
+                if (result.success) {
+                    successAccounts++;
+                } else {
+                    failedAccounts.push(acc.email);
+                }
+
+                updatePersistentToast(toastId, `${translateAppTextLocal('正在批量拉取邮件')} ${processedAccounts} / ${accounts.length}`);
+            }
+
+            dismissPersistentToast(toastId);
+            const failCount = failedAccounts.length;
+            let msg = `${translateAppTextLocal('批量拉取完成')}：${translateAppTextLocal('成功')} ${successAccounts}，${translateAppTextLocal('失败')} ${failCount}`;
+            if (failCount > 0) {
+                msg += `（${failedAccounts.join(', ')}）`;
+            }
+            showToast(msg, failCount > 0 ? 'warning' : 'success');
+        }
+
+        async function fetchLatestFoldersForAccount(acc) {
+            const folders = ['inbox', 'junkemail'];
+            let accountSuccess = false;
+            for (const folder of folders) {
+                try {
+                    const url = `/api/emails/${encodeURIComponent(acc.email)}?folder=${folder}&skip=0&top=10`;
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const data = await response.json();
+                    if (data.success) {
+                        if (data.account_summary && typeof syncAccountSummaryToAccountCache === 'function') {
+                            syncAccountSummaryToAccountCache(acc.email, data.account_summary);
+                        }
+                        cacheBatchFetchedFolder(acc.email, folder, data);
+                        refreshCurrentMailboxIfNeeded(acc.email, folder, data);
+                        accountSuccess = true;
+                    }
+                } catch (_e) {}
+            }
+
+            return { success: accountSuccess };
+        }
+
+        function cacheBatchFetchedFolder(email, folder, data) {
+            const cacheKey = `${email}_${folder}`;
+            emailListCache[cacheKey] = {
+                emails: (typeof sortEmailsByNewestFirst === 'function')
+                    ? sortEmailsByNewestFirst(data.emails || [])
+                    : (data.emails || []),
+                has_more: data.has_more || false,
+                skip: 0,
+                method: data.method || 'Graph API',
+            };
+        }
+
+        function refreshCurrentMailboxIfNeeded(email, folder, data) {
+            if (currentAccount !== email || currentFolder !== folder) return;
+
+            const sortedEmails = (typeof sortEmailsByNewestFirst === 'function')
+                ? sortEmailsByNewestFirst(data.emails || [])
+                : (data.emails || []);
+
+            currentEmails = sortedEmails;
+            const emailCountEl = document.getElementById('emailCount');
+            if (emailCountEl) emailCountEl.textContent = `(${currentEmails.length})`;
+            renderEmailList(currentEmails);
+        }
+
         let batchActionType = ''; // 'add' or 'remove'
         let batchTagContext = { scopedAccountIds: null };
 
