@@ -8,6 +8,61 @@
 
 ### 操作记录
 
+#### 262. Issue #55 当前改动提交并合并 main 后再次全量复跑 — Python 1404 通过，浏览器扩展 12/12 通过
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 先把当前 Issue #55 相关改动正式提交到 `dev`
+- 再将最新 `main` 合并到当前分支
+- 合并后重新执行仓库级测试入口，确认分支同步后仍然保持全绿
+
+**本轮执行过程**：
+
+1. 先检查当前工作区，确认 `dev` 上存在未提交的 Issue #55 实现、测试与文档改动
+2. 清理孤立临时文件：
+   - 删除 `test_batch_logic.html`
+3. 提交当前改动：
+   - 提交：`2c65ad0 feat: 完成 Issue55 批量拉取与验收修复`
+4. 在 `dev` 上合并 `main`：
+   - 合并提交：`058c3a7 Merge branch 'main' into dev`
+   - 本次合并无需人工冲突处理，`WORKSPACE.md` 自动合并成功
+5. 首次直接执行仓库级全量复跑时，会话未能完整收口
+6. 为确认不是代码回归，先单独复跑首个卡住的 Playwright 用例：
+   - `python -m unittest tests.test_account_edit_browser_flow.AccountEditBrowserFlowTests.test_browser_can_edit_outlook_remark_without_reentering_credentials -v`
+   - 结果：`1/1` 通过
+   - 耗时：`7.277s`
+7. 随后改为日志方式完整复跑仓库级测试入口：
+   1. `python -m unittest discover -s tests -v -f`
+   2. `npm run test:browser-extension`
+
+**本轮结果**：
+
+1. Python 全量：
+   - `1404` 通过
+   - `skipped=7`
+   - 日志确认：`Ran 1404 tests in 426.912s`
+2. 浏览器扩展 Jest：
+   - `12/12` 通过
+   - `Test Suites: 3 passed, 3 total`
+   - `Tests: 12 passed, 12 total`
+
+**本轮文档回写**：
+
+1. `session/files/issue55-standard-batch-fetch-plan.md`
+   - 在“仓库级全量测试结果（2026-04-25）”下新增“当前改动落提交并合并 `main` 后再次复跑”
+2. `WORKSPACE.md`
+   - 新增本条 `262` 号记录
+
+**当前状态**：
+
+- `dev` 已吸收最新 `main`
+- Issue #55 当前改动已形成正式提交并保留在分支历史中
+- 合并 `main` 后，仓库级 Python 全量与浏览器扩展 Jest 继续保持全绿
+
+---
+
 #### 261. Issue #55 人工验收后再次全量复跑 — Python 1404 通过，浏览器扩展 12/12 继续通过
 
 **时间**：2026-04-25

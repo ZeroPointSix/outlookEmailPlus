@@ -50,6 +50,17 @@
     - Python：`1404` 通过，`skipped=7`
     - 日志确认：`Ran 1404 tests in 454.408s`
     - 浏览器扩展 Jest：`12/12` 通过
+  - 当前改动落提交并合并 `main` 后再次复跑：
+    - 当前功能提交：`2c65ad0 feat: 完成 Issue55 批量拉取与验收修复`
+    - 分支合并提交：`058c3a7 Merge branch 'main' into dev`
+    - 说明：
+      - 首次直接全量复跑未能在终端会话中完整收口
+      - 单独复跑首个 Playwright 用例：`1/1` 通过，耗时 `7.277s`
+      - 随后改为日志方式完整复跑仓库级测试入口
+    - Python：`1404` 通过，`skipped=7`
+    - 日志确认：`Ran 1404 tests in 426.912s`
+    - 浏览器扩展 Jest：`12/12` 通过
+    - 汇总：`Test Suites: 3 passed, 3 total`
 
 ## 本地人工验收服务（2026-04-25）
 
