@@ -93,6 +93,7 @@
         async function selectGroup(groupId) {
             currentGroupId = groupId;
             currentAccountPage = 1;  // 切换分组时重置到第 1 页
+            currentAccountSearchQuery = '';
 
             // 切换分组时停止所有正在运行的轮询（避免跨分组轮询堆积）
             if (typeof stopAllPolls === 'function') {
@@ -164,14 +165,17 @@
         }
 
         // 加载分组下的账号
-        async function loadAccountsByGroup(groupId, forceRefresh = false) {
+        async function loadAccountsByGroup(groupId, forceRefresh = false, page = currentAccountPage) {
             const container = document.getElementById('accountList');
 
             // 保存当前滚动位置（forceRefresh 时恢复）
             const savedScrollTop = forceRefresh ? container.scrollTop : 0;
+            const queryKey = buildAccountListQueryKey(groupId, page);
+            const cachedMeta = accountListMetaCache[groupId];
 
             // 如果有缓存且不强制刷新，直接使用缓存
-            if (!forceRefresh && accountsCache[groupId]) {
+            if (!forceRefresh && Array.isArray(accountsCache[groupId]) && cachedMeta && cachedMeta.queryKey === queryKey) {
+                currentAccountPage = Number(cachedMeta.page || page || 1);
                 renderAccountList(accountsCache[groupId]);
                 if (typeof renderCompactAccountList === 'function') {
                     renderCompactAccountList(accountsCache[groupId]);
@@ -191,15 +195,14 @@
             }
 
             try {
-                const response = await fetch(`/api/accounts?group_id=${groupId}`);
+                const response = await fetch(`/api/accounts?${queryKey}`);
                 const data = await response.json();
 
                 if (data.success) {
-                    // 缓存数据
-                    accountsCache[groupId] = data.accounts;
-                    renderAccountList(data.accounts);
+                    updateAccountListCache(groupId, data.accounts, data.pagination, queryKey);
+                    renderAccountList(accountsCache[groupId]);
                     if (typeof renderCompactAccountList === 'function') {
-                        renderCompactAccountList(data.accounts);
+                        renderCompactAccountList(accountsCache[groupId]);
                     }
                     // 恢复滚动位置
                     if (forceRefresh) {
@@ -254,14 +257,11 @@
                 return;
             }
 
-            // ===== 分页计算 =====
-            const totalAccounts = accounts.length;
-            const totalPages = Math.ceil(totalAccounts / ACCOUNT_PAGE_SIZE);
-            if (currentAccountPage > totalPages) currentAccountPage = totalPages;
-            if (currentAccountPage < 1) currentAccountPage = 1;
-            const startIdx = (currentAccountPage - 1) * ACCOUNT_PAGE_SIZE;
-            // 只渲染当前页的账号，大幅减少 DOM 节点数
-            const pageAccounts = accounts.slice(startIdx, startIdx + ACCOUNT_PAGE_SIZE);
+            const pagination = getAccountListMeta();
+            const totalAccounts = Number(pagination.total_count || 0);
+            const totalPages = Number(pagination.total_pages || 0);
+            currentAccountPage = Number(pagination.page || 1);
+            const pageAccounts = Array.isArray(accounts) ? accounts : [];
             const avatarGradients = [
                 ['#B85C38', '#E8734A'],  // 砖红→珊瑚
                 ['#3A7D44', '#5BAF6A'],  // 翠绿→嫩绿
@@ -379,15 +379,18 @@
 
         // 跳转到指定账号分页
         function goToAccountPage(page) {
-            if (!accountsCache[currentGroupId]) return;
-            const accounts = applyFiltersAndSort(accountsCache[currentGroupId]);
-            const totalPages = Math.ceil(accounts.length / ACCOUNT_PAGE_SIZE);
+            if (!currentGroupId) return;
+            const totalPages = Number(getAccountListMeta().total_pages || 0);
             if (page < 1 || page > totalPages) return;
             currentAccountPage = page;
-            renderAccountList(accounts);
-            // 滚动到账号列表顶部
-            const container = document.getElementById('accountList');
-            if (container) container.scrollTop = 0;
+            loadAccountsByGroup(currentGroupId, false, page);
+            const containers = [
+                document.getElementById('accountList'),
+                document.getElementById('compactAccountList')
+            ].filter(Boolean);
+            containers.forEach(container => {
+                container.scrollTop = 0;
+            });
         }
 
         // 排序相关变量
@@ -397,6 +400,68 @@
         // 账号列表分页状态
         let currentAccountPage = 1;
         const ACCOUNT_PAGE_SIZE = 50;
+        let currentAccountSearchQuery = '';
+        const accountListMetaCache = {};
+
+        function getSelectedTagFilterIds() {
+            return Array.from(document.querySelectorAll('.tag-filter-checkbox:checked'))
+                .map(cb => parseInt(cb.value, 10))
+                .filter(tagId => Number.isInteger(tagId) && tagId > 0);
+        }
+
+        function buildAccountListQueryKey(groupId, page = currentAccountPage) {
+            const params = new URLSearchParams();
+            if (groupId !== null && groupId !== undefined) {
+                params.set('group_id', String(groupId));
+            }
+            params.set('page', String(page || 1));
+            params.set('page_size', String(ACCOUNT_PAGE_SIZE));
+            params.set('sort_by', currentSortBy);
+            params.set('sort_order', currentSortOrder);
+
+            const normalizedSearch = String(currentAccountSearchQuery || '').trim();
+            if (normalizedSearch) {
+                params.set('search', normalizedSearch);
+            }
+
+            getSelectedTagFilterIds().forEach(tagId => {
+                params.append('tag_id', String(tagId));
+            });
+
+            return params.toString();
+        }
+
+        function getAccountListMeta(groupId = currentGroupId) {
+            const cachedMeta = accountListMetaCache[groupId];
+            if (cachedMeta) {
+                return cachedMeta;
+            }
+            const fallbackAccounts = Array.isArray(accountsCache[groupId]) ? accountsCache[groupId] : [];
+            return {
+                page: currentAccountPage,
+                page_size: ACCOUNT_PAGE_SIZE,
+                total_count: fallbackAccounts.length,
+                total_pages: fallbackAccounts.length > 0 ? 1 : 0,
+                queryKey: ''
+            };
+        }
+
+        function updateAccountListCache(groupId, accounts, pagination, queryKey) {
+            const safeAccounts = Array.isArray(accounts) ? accounts : [];
+            const safePagination = pagination && typeof pagination === 'object'
+                ? pagination
+                : { page: currentAccountPage || 1, page_size: ACCOUNT_PAGE_SIZE, total_count: safeAccounts.length, total_pages: safeAccounts.length > 0 ? 1 : 0 };
+
+            accountsCache[groupId] = safeAccounts;
+            accountListMetaCache[groupId] = {
+                page: Number(safePagination.page || 1),
+                page_size: Number(safePagination.page_size || ACCOUNT_PAGE_SIZE),
+                total_count: Number(safePagination.total_count || 0),
+                total_pages: Number(safePagination.total_pages || 0),
+                queryKey
+            };
+            currentAccountPage = Number(accountListMetaCache[groupId].page || 1);
+        }
 
         // 排序账号列表
         function sortAccounts(sortBy) {
@@ -418,54 +483,22 @@
                 activeBtn.classList.add('active');
             }
 
-            // 重新加载并排序账号列表
-            if (accountsCache[currentGroupId]) {
+            if (currentGroupId) {
                 currentAccountPage = 1;  // 排序时重置到第 1 页
-                const sortedAccounts = applyFiltersAndSort(accountsCache[currentGroupId]);
-                renderAccountList(sortedAccounts);
+                loadAccountsByGroup(currentGroupId, true, 1);
             }
         }
 
         // 应用筛选和排序
         function applyFiltersAndSort(accounts) {
-            let result = [...accounts];
-
-            // 1. Tag 筛选
-            // Get checked tags
-            const checkedBoxes = document.querySelectorAll('.tag-filter-checkbox:checked');
-            const selectedTagIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
-
-            if (selectedTagIds.length > 0) {
-                result = result.filter(acc => {
-                    if (!acc.tags) return false;
-                    // Check if account has ANY of the selected tags (OR logic)
-                    // If you want AND logic, use every() instead of some()
-                    return acc.tags.some(t => selectedTagIds.includes(t.id));
-                });
-            }
-
-            // 2. 排序
-            return result.sort((a, b) => {
-                if (currentSortBy === 'refresh_time') {
-                    const timeA = a.last_refresh_at ? new Date(a.last_refresh_at) : new Date(0);
-                    const timeB = b.last_refresh_at ? new Date(b.last_refresh_at) : new Date(0);
-                    return currentSortOrder === 'asc' ? timeA - timeB : timeB - timeA;
-                } else {
-                    const emailA = a.email.toLowerCase();
-                    const emailB = b.email.toLowerCase();
-                    return currentSortOrder === 'asc'
-                        ? emailA.localeCompare(emailB)
-                        : emailB.localeCompare(emailA);
-                }
-            });
+            return Array.isArray(accounts) ? [...accounts] : [];
         }
 
         // Tag Filter Change Handler
         function handleTagFilterChange() {
-            if (accountsCache[currentGroupId]) {
+            if (currentGroupId) {
                 currentAccountPage = 1;  // 标签过滤时重置到第 1 页
-                const filteredAccounts = applyFiltersAndSort(accountsCache[currentGroupId]);
-                renderAccountList(filteredAccounts);
+                loadAccountsByGroup(currentGroupId, true, 1);
             }
         }
 
@@ -481,27 +514,23 @@
         // 全局搜索函数
         async function searchAccounts(query) {
             const container = document.getElementById('accountList');
-            const titleElement = document.getElementById('currentGroupName');
+            currentAccountSearchQuery = String(query || '').trim();
 
-            if (!query.trim()) {
+            if (!currentGroupId) {
+                return;
+            }
+
+            if (!currentAccountSearchQuery) {
                 currentAccountPage = 1;  // 清空搜索时重置页码
-                loadAccountsByGroup(currentGroupId);
+                loadAccountsByGroup(currentGroupId, true, 1);
                 return;
             }
 
             container.innerHTML = '<div class="loading-overlay"><span class="spinner"></span> 搜索中…</div>';
 
             try {
-                const response = await fetch(`/api/accounts/search?q=${encodeURIComponent(query)}`);
-                const data = await response.json();
-
-                if (data.success) {
-                    currentAccountPage = 1;  // 搜索结果重置到第 1 页
-                    titleElement.textContent = `搜索结果 (${data.accounts.length})`;
-                    renderAccountList(data.accounts);
-                } else {
-                    container.innerHTML = '<div class="empty-state"><p>搜索失败</p></div>';
-                }
+                currentAccountPage = 1;  // 搜索结果重置到第 1 页
+                await loadAccountsByGroup(currentGroupId, true, 1);
             } catch (error) {
                 console.error('搜索失败:', error);
                 container.innerHTML = '<div class="empty-state"><p>搜索失败，请重试</p></div>';
@@ -738,7 +767,7 @@
                 return;
             }
 
-            renderAccountList(applyFiltersAndSort(accountsCache[currentGroupId]));
+            renderAccountList(accountsCache[currentGroupId]);
             if (typeof renderCompactAccountList === 'function') {
                 renderCompactAccountList(accountsCache[currentGroupId]);
             }
@@ -982,7 +1011,7 @@
         // 此处补全标准模式。
         window.addEventListener('ui-language-changed', () => {
             if (accountsCache[currentGroupId]) {
-                renderAccountList(applyFiltersAndSort(accountsCache[currentGroupId]));
+                renderAccountList(accountsCache[currentGroupId]);
             }
         });
 

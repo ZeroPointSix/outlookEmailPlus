@@ -229,6 +229,11 @@
         function renderCompactAccountList(accounts) {
             const container = document.getElementById('compactAccountList');
             if (!container) return;
+            const pagination = typeof getAccountListMeta === 'function' ? getAccountListMeta() : {
+                page: 1,
+                total_pages: 0,
+                total_count: Array.isArray(accounts) ? accounts.length : 0
+            };
 
             if (!accounts || accounts.length === 0) {
                 container.innerHTML = `
@@ -316,6 +321,28 @@
                     </div>
                 `;
             }).join('');
+
+            if (Number(pagination.total_pages || 0) > 1) {
+                container.innerHTML += `
+                    <div class="account-pagination compact-account-pagination">
+                        <button class="page-btn page-btn-prev"
+                                onclick="goToAccountPage(${Number(pagination.page || 1) - 1})"
+                                ${Number(pagination.page || 1) <= 1 ? 'disabled' : ''}>
+                            ◀
+                        </button>
+                        <span class="page-info">
+                            ${Number(pagination.page || 1)} / ${Number(pagination.total_pages || 0)} ${escapeHtml(translateCompactText('页'))}
+                            &nbsp;·&nbsp;
+                            ${escapeHtml(translateCompactText('共'))} ${Number(pagination.total_count || 0)} ${escapeHtml(translateCompactText('个账号'))}
+                        </span>
+                        <button class="page-btn page-btn-next"
+                                onclick="goToAccountPage(${Number(pagination.page || 1) + 1})"
+                                ${Number(pagination.page || 1) >= Number(pagination.total_pages || 0) ? 'disabled' : ''}>
+                            ▶
+                        </button>
+                    </div>
+                `;
+            }
 
             updateSelectAllCheckbox();
             updateBatchActionBar();

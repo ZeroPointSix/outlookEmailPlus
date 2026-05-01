@@ -156,12 +156,15 @@ class TestUIRedesignBugFixes(unittest.TestCase):
         _, html = self._get_text(client, "/")
         self.assertIn('id="dashboardGroupList"', html)
 
-    def test_bug010_load_dashboard_function(self):
-        """BUG-010: loadDashboard 函数存在且调用正确 API"""
+    def test_bug010_dashboard_uses_overview_entrypoint(self):
+        """BUG-010: Dashboard 当前通过 overview.js 入口加载，而非旧 loadDashboard 逻辑"""
         client = self._get_client()
-        _, js = self._get_text(client, "/static/js/main.js")
-        self.assertIn("function loadDashboard", js)
-        self.assertIn("/api/groups", js)
+        _, main_js = self._get_text(client, "/static/js/main.js")
+        _, overview_js = self._get_text(client, "/static/js/features/overview.js")
+        self.assertIn("if (page === 'dashboard' && typeof initOverview === 'function') initOverview();", main_js)
+        self.assertNotIn("function loadDashboard", main_js)
+        self.assertIn("function initOverview()", overview_js)
+        self.assertIn("summary: '/api/overview/summary'", overview_js)
 
     def test_bug010_groups_api_returns_data(self):
         """BUG-010: 分组 API 返回有效数据"""

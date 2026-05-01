@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from outlook_web.db import get_db
 from outlook_web.security.crypto import decrypt_data, encrypt_data
@@ -48,6 +48,63 @@ def _decrypt_account_field(account: Dict[str, Any], field_name: str) -> None:
         )
 
 
+def _load_tags_by_account_ids(db: sqlite3.Connection, account_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+    tags_by_account: Dict[int, List[Dict[str, Any]]] = {}
+    if not account_ids:
+        return tags_by_account
+
+    try:
+        placeholders = ",".join(["?"] * len(account_ids))
+        tag_rows = db.execute(
+            f"""
+            SELECT at.account_id as account_id, t.*
+            FROM account_tags at
+            JOIN tags t ON t.id = at.tag_id
+            WHERE at.account_id IN ({placeholders})
+            ORDER BY at.account_id ASC, t.created_at DESC
+            """,
+            account_ids,
+        ).fetchall()
+
+        for tr in tag_rows:
+            tag_dict = dict(tr)
+            acc_id = tag_dict.pop("account_id", None)
+            if acc_id is None:
+                continue
+            tags_by_account.setdefault(int(acc_id), []).append(tag_dict)
+    except Exception:
+        tags_by_account = {}
+
+    return tags_by_account
+
+
+def _hydrate_accounts(rows: List[sqlite3.Row], db: sqlite3.Connection) -> List[Dict[str, Any]]:
+    try:
+        account_ids = [int(r["id"]) for r in rows]
+    except Exception:
+        account_ids = []
+
+    tags_by_account = _load_tags_by_account_ids(db, account_ids)
+    accounts: List[Dict[str, Any]] = []
+
+    for row in rows:
+        account = dict(row)
+        _decrypt_account_field(account, "password")
+        _decrypt_account_field(account, "refresh_token")
+        _decrypt_account_field(account, "imap_password")
+
+        account_id_value = account.get("id")
+        try:
+            account_id_value = int(account_id_value)
+        except Exception:
+            account_id_value = None
+
+        account["tags"] = tags_by_account.get(account_id_value, []) if account_id_value is not None else []
+        accounts.append(account)
+
+    return accounts
+
+
 def load_accounts(group_id: int = None) -> List[Dict]:
     """从数据库加载邮箱账号（自动解密敏感字段，批量加载 tags 避免 N+1）"""
     db = get_db()
@@ -70,52 +127,129 @@ def load_accounts(group_id: int = None) -> List[Dict]:
             ORDER BY a.created_at DESC
         """)
     rows = cursor.fetchall()
+    return _hydrate_accounts(rows, db)
 
-    tags_by_account: Dict[int, List[Dict[str, Any]]] = {}
-    try:
-        account_ids = [int(r["id"]) for r in rows]
-    except Exception:
-        account_ids = []
 
-    if account_ids:
-        try:
-            placeholders = ",".join(["?"] * len(account_ids))
-            tag_rows = db.execute(
-                f"""
-                SELECT at.account_id as account_id, t.*
-                FROM account_tags at
-                JOIN tags t ON t.id = at.tag_id
-                WHERE at.account_id IN ({placeholders})
-                ORDER BY at.account_id ASC, t.created_at DESC
-                """,
-                account_ids,
-            ).fetchall()
+def _build_account_list_where(
+    *,
+    group_id: Optional[int],
+    search: str,
+    tag_ids: List[int],
+) -> Tuple[str, List[Any]]:
+    where_clauses: List[str] = []
+    params: List[Any] = []
 
-            for tr in tag_rows:
-                tag_dict = dict(tr)
-                acc_id = tag_dict.pop("account_id", None)
-                if acc_id is None:
-                    continue
-                tags_by_account.setdefault(int(acc_id), []).append(tag_dict)
-        except Exception:
-            tags_by_account = {}
+    if group_id is not None:
+        where_clauses.append("a.group_id = ?")
+        params.append(group_id)
 
-    accounts: List[Dict[str, Any]] = []
-    for row in rows:
-        account = dict(row)
-        _decrypt_account_field(account, "password")
-        _decrypt_account_field(account, "refresh_token")
-        _decrypt_account_field(account, "imap_password")
+    normalized_search = str(search or "").strip().lower()
+    if normalized_search:
+        like_value = f"%{normalized_search}%"
+        where_clauses.append(
+            """
+            (
+                LOWER(COALESCE(a.email, '')) LIKE ?
+                OR LOWER(COALESCE(a.remark, '')) LIKE ?
+                OR EXISTS (
+                    SELECT 1
+                    FROM account_tags at_search
+                    JOIN tags t_search ON t_search.id = at_search.tag_id
+                    WHERE at_search.account_id = a.id
+                      AND LOWER(COALESCE(t_search.name, '')) LIKE ?
+                )
+            )
+            """
+        )
+        params.extend([like_value, like_value, like_value])
 
-        account_id_value = account.get("id")
-        try:
-            account_id_value = int(account_id_value)
-        except Exception:
-            account_id_value = None
+    normalized_tag_ids = [int(tag_id) for tag_id in tag_ids if int(tag_id) > 0]
+    if normalized_tag_ids:
+        placeholders = ",".join(["?"] * len(normalized_tag_ids))
+        where_clauses.append(
+            f"""
+            EXISTS (
+                SELECT 1
+                FROM account_tags at_filter
+                WHERE at_filter.account_id = a.id
+                  AND at_filter.tag_id IN ({placeholders})
+            )
+            """
+        )
+        params.extend(normalized_tag_ids)
 
-        account["tags"] = tags_by_account.get(account_id_value, []) if account_id_value is not None else []
-        accounts.append(account)
-    return accounts
+    if not where_clauses:
+        return "", params
+
+    return "WHERE " + " AND ".join(where_clauses), params
+
+
+def _build_account_list_order(sort_by: str, sort_order: str) -> str:
+    normalized_sort_by = str(sort_by or "refresh_time").strip().lower()
+    normalized_sort_order = "DESC" if str(sort_order or "").strip().lower() == "desc" else "ASC"
+
+    if normalized_sort_by == "email":
+        return f"ORDER BY LOWER(COALESCE(a.email, '')) {normalized_sort_order}, a.id DESC"
+
+    return (
+        "ORDER BY CASE WHEN COALESCE(a.last_refresh_at, '') = '' THEN 1 ELSE 0 END ASC, "
+        f"a.last_refresh_at {normalized_sort_order}, a.id DESC"
+    )
+
+
+def load_accounts_page(
+    group_id: Optional[int] = None,
+    *,
+    page: int = 1,
+    page_size: int = 50,
+    search: str = "",
+    tag_ids: Optional[List[int]] = None,
+    sort_by: str = "refresh_time",
+    sort_order: str = "asc",
+) -> Tuple[List[Dict[str, Any]], int, int]:
+    """按条件分页加载账号列表，保留 load_accounts 的全量语义给后台流程使用。"""
+    db = get_db()
+    normalized_page = max(1, int(page or 1))
+    normalized_page_size = max(1, int(page_size or 50))
+    normalized_tag_ids = list(tag_ids or [])
+
+    where_sql, params = _build_account_list_where(
+        group_id=group_id,
+        search=search,
+        tag_ids=normalized_tag_ids,
+    )
+    order_sql = _build_account_list_order(sort_by, sort_order)
+
+    total_row = db.execute(
+        f"""
+        SELECT COUNT(*) AS total_count
+        FROM accounts a
+        {where_sql}
+        """,
+        params,
+    ).fetchone()
+    total_count = int(total_row["total_count"] or 0) if total_row else 0
+
+    if total_count == 0:
+        effective_page = 1
+    else:
+        total_pages = (total_count + normalized_page_size - 1) // normalized_page_size
+        effective_page = min(normalized_page, total_pages)
+
+    offset = (effective_page - 1) * normalized_page_size
+    rows = db.execute(
+        f"""
+        SELECT a.*, g.name as group_name, g.color as group_color
+        FROM accounts a
+        LEFT JOIN groups g ON a.group_id = g.id
+        {where_sql}
+        {order_sql}
+        LIMIT ? OFFSET ?
+        """,
+        [*params, normalized_page_size, offset],
+    ).fetchall()
+
+    return _hydrate_accounts(rows, db), total_count, effective_page
 
 
 def get_account_by_email(email_addr: str) -> Optional[Dict]:

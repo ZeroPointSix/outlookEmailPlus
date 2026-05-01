@@ -265,7 +265,11 @@ class V190FrontendContractTests(unittest.TestCase):
         )
         self.assertIn("acc.notification_enabled !== undefined", groups_js)
         self.assertIn(
-            "const response = await fetch(`/api/accounts/search?q=${encodeURIComponent(query)}`);",
+            "currentAccountSearchQuery = String(query || '').trim();",
+            groups_js,
+        )
+        self.assertIn(
+            "await loadAccountsByGroup(currentGroupId, true, 1);",
             groups_js,
         )
 

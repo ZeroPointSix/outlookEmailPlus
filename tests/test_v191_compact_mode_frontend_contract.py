@@ -125,6 +125,15 @@ class V191CompactModeFrontendContractTests(unittest.TestCase):
         ]:
             self.assertIn(field, compact_js)
 
+    def test_compact_mode_exposes_server_pagination_controls(self):
+        client = self.app.test_client()
+        compact_js = self._get_text(client, "/static/js/features/mailbox_compact.js")
+
+        self.assertIn("const pagination = typeof getAccountListMeta === 'function' ? getAccountListMeta() :", compact_js)
+        self.assertIn('class="account-pagination compact-account-pagination"', compact_js)
+        self.assertIn('onclick="goToAccountPage(${Number(pagination.page || 1) - 1})"', compact_js)
+        self.assertIn('onclick="goToAccountPage(${Number(pagination.page || 1) + 1})"', compact_js)
+
     def test_accounts_import_uses_refresh_mailbox_after_import(self):
         client = self.app.test_client()
         accounts_js = self._get_text(client, "/static/js/features/accounts.js")

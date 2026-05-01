@@ -25,14 +25,17 @@ class FrontendAccountTypeContractTests(unittest.TestCase):
         finally:
             resp.close()
 
-    def test_dashboard_token_stats_skip_non_outlook_accounts(self):
+    def test_dashboard_refresh_health_uses_overview_summary_feed(self):
         client = self.app.test_client()
+        overview_js = self._get_text(client, "/static/js/features/overview.js")
         main_js = self._get_text(client, "/static/js/main.js")
 
-        self.assertIn("function isRefreshableOutlookAccount(accountLike)", main_js)
-        self.assertIn("if (!isRefreshableOutlookAccount(a)) {", main_js)
-        self.assertIn("if (a.last_refresh_status === 'failed') expiredTokens++;", main_js)
-        self.assertIn("else validTokens++;", main_js)
+        self.assertIn("function initOverview()", overview_js)
+        self.assertIn("summary: '/api/overview/summary',", overview_js)
+        self.assertIn("const refresh = data.refresh_health || {};", overview_js)
+        self.assertIn("const accountStatus = data.account_status || {};", overview_js)
+        self.assertIn("最近刷新成功率", overview_js)
+        self.assertNotIn("function loadDashboard()", main_js)
 
     def test_group_cards_split_outlook_and_imap_status_rendering(self):
         client = self.app.test_client()

@@ -123,9 +123,49 @@ def _outlook_basic_auth_import_error() -> str:
 
 @login_required
 def api_get_accounts() -> Any:
-    """获取所有账号"""
+    """获取账号列表（支持分页、分组内搜索、标签筛选与排序）"""
     group_id = request.args.get("group_id", type=int)
-    accounts = accounts_repo.load_accounts(group_id)
+    page = request.args.get("page", default=1, type=int) or 1
+    page_size = request.args.get("page_size", default=50, type=int) or 50
+    search = (request.args.get("search", type=str) or "").strip()
+    sort_by = (request.args.get("sort_by", type=str) or "refresh_time").strip().lower()
+    sort_order = (request.args.get("sort_order", type=str) or "asc").strip().lower()
+
+    if page < 1:
+        page = 1
+    page_size = max(1, min(page_size, 100))
+    if sort_by not in {"refresh_time", "email"}:
+        sort_by = "refresh_time"
+    if sort_order not in {"asc", "desc"}:
+        sort_order = "asc"
+
+    raw_tag_values = request.args.getlist("tag_id")
+    raw_tag_values.extend((request.args.get("tag_ids", type=str) or "").split(","))
+    tag_ids: List[int] = []
+    seen_tag_ids = set()
+    for raw_value in raw_tag_values:
+        raw_text = str(raw_value or "").strip()
+        if not raw_text:
+            continue
+        try:
+            tag_id = int(raw_text)
+        except ValueError:
+            continue
+        if tag_id <= 0 or tag_id in seen_tag_ids:
+            continue
+        seen_tag_ids.add(tag_id)
+        tag_ids.append(tag_id)
+
+    accounts, total_count, effective_page = accounts_repo.load_accounts_page(
+        group_id,
+        page=page,
+        page_size=page_size,
+        search=search,
+        tag_ids=tag_ids,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
 
     # 获取每个账号的最后刷新状态（批量查询，避免 N+1）
     db = get_db()
@@ -199,7 +239,18 @@ def api_get_accounts() -> Any:
                 "latest_verification_received_at": acc.get("latest_verification_received_at", ""),
             }
         )
-    return jsonify({"success": True, "accounts": safe_accounts})
+    return jsonify(
+        {
+            "success": True,
+            "accounts": safe_accounts,
+            "pagination": {
+                "page": effective_page,
+                "page_size": page_size,
+                "total_count": total_count,
+                "total_pages": total_pages,
+            },
+        }
+    )
 
 
 @login_required

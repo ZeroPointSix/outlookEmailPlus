@@ -4,6 +4,499 @@
 
 ---
 
+## 2026-04-30
+
+### 操作记录
+
+#### 247. Issue #56 — 700 条人工导入后的日志核查
+
+**时间**：2026-04-30
+
+**操作背景**：
+用户已使用合并后的 `700` 行导入文件完成一轮人工导入测试，希望继续读取运行日志并核查当前现象是否符合最初对 Issue #56 修复的预期。
+
+**日志核查结果**：
+
+1. 导入请求成功：
+   - `POST /api/accounts HTTP/1.1` 返回 **200**
+2. 导入后账号页面读取链路正常：
+   - `GET /api/accounts?group_id=133&page=1&page_size=50&sort_by=refresh_time&sort_order=asc` 返回 **200**
+   - 可以确认导入后页面访问仍然命中**服务端分页接口**
+3. 日志中未发现：
+   - `500` / `502` / `504`
+   - `Traceback`
+   - `MemoryError`
+   - 账号导入失败类错误
+4. 唯一可见异常：
+   - 一次 `POST /api/groups` 因 `CSRF_TOKEN_INVALID` 返回 **400**
+   - 随后重新获取 `/api/csrf-token` 后重试成功
+   - 该异常属于人工操作前置校验，不是分页修复相关故障
+
+**数据库复核结果**：
+
+1. `accounts_total = 801`
+2. `groups_total = 3`
+3. `recent_accounts_30m = 700`
+
+**当前结论**：
+
+1. 这次 700 条人工导入已真实落库
+2. 导入后账号页面访问仍按分页接口工作
+3. 当前现象与最初修复预期一致：至少在 700 条量级下，未观察到“导入后账号页直接崩溃”或服务端异常放大
+
+---
+
+#### 246. Issue #56 — 准备人工导入测试数据
+
+**时间**：2026-04-30
+
+**操作背景**：
+用户提供了 7 个外部 `order_*.txt` 文件，希望将其中账号数据合并成一份导入文件，用于当前人工验收实例模拟较大批量导入测试。
+
+**数据核实结果**：
+
+1. 共收到 **7** 个源文件
+2. 每个文件均为 **100** 行
+3. 合计数据量为 **700** 行
+
+**输出结果**：
+
+1. 已合并输出为：
+   - `D:\Users\PLA30\Downloads\issue56_manual_import_700.txt`
+2. 输出文件行数复核：
+   - **700** 行
+
+**当前状态**：
+
+1. 人工导入测试数据已准备完成
+2. 可直接在人工验收实例中使用该文件做导入测试
+3. 当前人工验收实例地址仍为：`http://127.0.0.1:5601`
+
+---
+
+#### 245. Issue #56 — 启动人工验收实例
+
+**时间**：2026-04-30
+
+**操作背景**：
+用户要求启动一套可供人工测试的真实运行实例。考虑到本机 `5000` / `5600` 地址此前对 `/healthz` 返回 `502`，本轮避免抢占现有现场，改为单独拉起一个新的独立端口实例。
+
+**启动结果**：
+
+1. 启动命令核心方式：
+   - 设置环境变量 `PORT=5601`
+   - 后台启动：`python start.py`
+2. 实例状态：
+   - **PID**：`36656`
+   - **端口**：`5601`
+   - **健康检查**：`GET http://127.0.0.1:5601/healthz` 返回 **200**
+   - **响应体**：`{\"boot_id\":\"1777626650143-36656\",\"status\":\"ok\",\"version\":\"2.3.0\"}`
+3. 日志文件：
+   - 标准输出：`logs/manual_test_20260501_171049.out.log`
+   - 标准错误：`logs/manual_test_20260501_171049.err.log`
+
+**当前状态**：
+
+1. 已成功启动一套独立人工验收实例
+2. 当前可用于人工测试的地址为：`http://127.0.0.1:5601`
+3. 如需停止该实例，应使用 PID：`36656`
+
+---
+
+#### 244. Issue #56 — 修正旧契约后再次全量回归
+
+**时间**：2026-04-30
+
+**操作背景**：
+在完成本地前端契约失败修正后，用户要求真实再次启动全量测试，确认当前最新剩余失败数，而不是只依赖定向复测。
+
+**执行结果**：
+
+运行测试命令：
+
+`python -m unittest discover -s tests -v`
+
+结果：
+
+1. 共运行 **1397** 条测试
+2. 结果：**4 failures / 7 skipped**
+
+**本轮确认结果**：
+
+1. 之前的本地前端契约失败已从全量结果中消失
+2. 当前全量剩余失败仅有 4 条，全部属于：
+   - `tests.test_pool_cf_real_e2e.RealCFWorkerE2ETests.*`
+3. 共同失败现象保持一致：
+   - `claim-random` 起始即返回 `500`
+   - 返回体包含 `UPSTREAM_BAD_PAYLOAD`
+   - 文案为 `CF Worker 创建邮箱失败 HTTP 400`
+
+**当前结论**：
+
+1. 全量 Python 回归已再次验证
+2. 当前已无本地契约失败残留
+3. 尚未发现直接命中 Issue #56 分页改造面的回归失败
+4. 当前仅剩外部 `CF Worker` 真实 E2E 失败
+
+---
+
+#### 243. Issue #56 — 本地前端契约失败归因并修正
+
+**时间**：2026-04-30
+
+**操作背景**：
+全量 Python 测试中有 1 条本地前端契约失败，需要确认它究竟是本轮代码回归，还是测试仍在断言旧 Dashboard 主链路。
+
+**归因结果**：
+
+1. 失败用例：`tests.test_frontend_account_type_and_refresh_suggestions_contract.FrontendAccountTypeContractTests.test_dashboard_token_stats_skip_non_outlook_accounts`
+2. 旧断言仍要求 `main.js` 中存在旧 Dashboard 本地 token 统计片段：
+   - `if (!isRefreshableOutlookAccount(a)) {`
+   - `if (a.last_refresh_status === 'failed') expiredTokens++;`
+3. 继续核实后确认：
+   - 当前 Dashboard 主链路早已切到 `static/js/features/overview.js`
+   - 数据来源是 `/api/overview/summary`
+   - 概览卡片渲染使用的是后端聚合字段 `refresh_health` / `account_status`
+   - `main.js` 里也已经不存在旧 `loadDashboard()` 逻辑
+4. 结论：这是**过时测试契约**，不是本轮 Issue #56 分页改造引入的真实行为回归
+
+**本轮修正**：
+
+| 文件 | 改动 |
+|---|---|
+| `tests/test_frontend_account_type_and_refresh_suggestions_contract.py` | 将旧 `main.js` 本地 token 统计断言改为当前 `overview.js + /api/overview/summary` 主链路契约 |
+
+**定向复测结果**：
+
+运行测试命令：
+
+`python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v`
+
+结果：
+
+1. 共运行 **9** 条测试
+2. 结果 **全部通过**
+
+**当前状态**：
+
+1. 全量测试中的本地前端契约失败已完成归因并修正
+2. 当前剩余待排查的主要失败面为外部 `CF Worker` 真实 E2E
+3. 暂未发现直接落在 Issue #56 改动面的回归失败
+
+---
+
+#### 242. Issue #56 — 全量 Python 测试回归检查
+
+**时间**：2026-04-30
+
+**操作背景**：
+在两轮定向回归通过后，用户要求继续跑一遍全量 Python 测试，确认本轮 Issue #56 改造是否引入新的回归性问题。
+
+**执行结果**：
+
+运行测试命令：
+
+`python -m unittest discover -s tests -v`
+
+结果：
+
+1. 共运行 **1397** 条测试
+2. 结果：**5 failures / 7 skipped**
+
+**失败分类**：
+
+1. **1 条本地前端契约失败**
+   - 用例：`tests.test_frontend_account_type_and_refresh_suggestions_contract.FrontendAccountTypeContractTests.test_dashboard_token_stats_skip_non_outlook_accounts`
+   - 现象：测试写死断言 `main.js` 中应存在 `if (!isRefreshableOutlookAccount(a)) {`，但实际源码未命中该片段
+   - 当前判断：更像旧契约断言与现有实现不一致，尚未证实与 Issue #56 改动直接相关
+2. **4 条真实 CF Worker E2E 失败**
+   - 用例：`tests.test_pool_cf_real_e2e.RealCFWorkerE2ETests.*`
+   - 共同现象：`claim-random` 阶段即返回 `500`
+   - 返回体关键错误：`UPSTREAM_BAD_PAYLOAD` / `CF Worker 创建邮箱失败 HTTP 400`
+   - 当前判断：属于外部真实依赖 / 上游接口异常，更不像本轮账号分页改造引入
+
+**当前结论**：
+
+1. 已完成全量 Python 套件回归检查
+2. 暂未发现直接落在 Issue #56 改动面的失败项
+3. 后续若继续排查，优先顺序应为：
+   - 先确认本地前端契约失败是测试过时还是实际逻辑回退
+   - 再单独处理 CF Worker 真实 E2E 外部依赖故障
+
+---
+
+#### 241. Issue #56 — 第二轮扩展回归与测试缺口收敛
+
+**时间**：2026-04-30
+
+**操作背景**：
+首轮 59 条回归通过后，继续排查本轮改造是否还有遗漏的边界测试或旧接口副作用，重点补齐分页参数边界、紧凑模式分页契约，并把仍引用 `/api/accounts/search` 的既有测试一起跑掉。
+
+**本轮补测内容**：
+
+| 文件 | 改动 |
+|---|---|
+| `tests/test_issue56_accounts_pagination.py` | 新增：页码越界回退到最后一页、非法排序参数回退到默认刷新时间排序 |
+| `tests/test_v191_compact_mode_frontend_contract.py` | 新增：紧凑模式暴露服务端分页控件契约 |
+
+**执行结果**：
+
+运行测试命令：
+
+`python -m unittest tests.test_issue56_accounts_pagination tests.test_v191_compact_mode_frontend_contract tests.test_error_and_trace tests.test_telegram_push tests.test_v191_compact_mode_behavior_node -v`
+
+结果：
+
+1. 共运行 **104** 条测试
+2. 结果 **全部通过**
+3. 已确认：
+   - 新分页接口的边界参数行为正常
+   - 紧凑模式分页入口契约存在
+   - 旧 `/api/accounts/search` 相关既有测试未被本轮改造破坏
+
+**当前测试缺口收敛结果**：
+
+1. 本轮修复主链路（账号列表服务端分页 / 当前分组搜索 / 标签筛选 / 排序 / 紧凑模式分页）已有直接覆盖
+2. 当前仍未补到的更多偏“增强型”场景主要是：
+   - 多 `tag_id` / `tag_ids` 组合过滤
+   - `page_size` 上下界裁剪
+   - 前端跨页勾选的端到端交互级验证
+3. 就 Issue #56 的主故障面而言，当前测试覆盖已经足够支撑本轮修改
+
+---
+
+#### 240. Issue #56 — 回归测试补齐并通过
+
+**时间**：2026-04-30
+
+**操作背景**：
+用户要求在首轮修复后补充测试并直接运行测试。基于本轮代码变更范围，对受影响的旧契约测试进行修正，同时补充一组新的分页回归测试。
+
+**本轮测试改动**：
+
+| 文件 | 改动 |
+|---|---|
+| `tests/test_issue56_accounts_pagination.py` | 新增：分页元信息、当前分组搜索、标签筛选 + 邮箱排序回归 |
+| `tests/test_ui_redesign_bugs.py` | 更新：Dashboard 入口契约从旧 `loadDashboard` 修正为 `overview.js` 主链路 |
+| `tests/test_v190_frontend_contract.py` | 更新：前端搜索契约从旧 `/api/accounts/search` 修正为新的服务端分页加载路径 |
+
+**执行结果**：
+
+运行测试命令：
+
+`python -m unittest tests.test_issue56_accounts_pagination tests.test_ui_redesign_bugs tests.test_v190_frontend_contract tests.test_v191_compact_mode_api_tdd tests.test_smoke_contract -v`
+
+结果：
+
+1. 共运行 **59** 条测试
+2. 结果 **全部通过**
+3. 本轮新增测试与受影响旧测试均已覆盖通过
+
+**当前状态**：
+
+1. Issue #56 首轮代码改造已完成
+2. 相关测试已补齐并通过
+3. 等待用户进一步反馈
+
+---
+
+#### 239. Issue #56 — 首轮代码改造落地
+
+**时间**：2026-04-30
+
+**操作背景**：
+在完成文档校准、边界确认和 Dashboard 调用链纠偏后，正式进入实现阶段，先落一版“账号管理页服务端分页 + 当前分组搜索/标签筛选/排序 + 紧凑模式分页 + 旧 `loadDashboard()` 清理”的首轮改造。
+
+**本轮代码改动**：
+
+| 文件 | 改动 |
+|---|---|
+| `outlook_web/repositories/accounts.py` | 新增分页查询能力，补齐搜索、标签筛选和排序 SQL；保留 `load_accounts()` 默认全量语义 |
+| `outlook_web/controllers/accounts.py` | `GET /api/accounts` 新增分页/筛选/排序参数解析，并返回 `pagination` 元信息 |
+| `static/js/features/groups.js` | 标准账号视图改为服务端分页；搜索/标签筛选/排序改为驱动接口请求；保留 `accountsCache[groupId]` 数组语义，仅缓存当前页 |
+| `static/js/features/mailbox_compact.js` | 紧凑模式补充分页入口，和标准视图共用分页状态 |
+| `static/js/main.js` | 清理旧 `loadDashboard()` 遗留逻辑 |
+
+**实现要点**：
+
+1. 保持 `accountsCache[groupId]` 仍是数组，避免把紧凑模式、勾选逻辑和摘要回写一起打碎
+2. 新增分页元信息缓存，承载 `page / total_pages / total_count / queryKey`
+3. 保留跨页勾选的 `selectedAccountIds` 集合，不把它与当前页数据绑死
+4. Dashboard 当前主链路保持 `overview.js + /api/overview/*`，本轮仅清理遗留旧逻辑，不改活跃看板接口
+
+**当前状态**：
+
+1. 首轮代码改造已完成
+2. 相关文档和会话计划已同步到实现状态
+3. 等待用户对首轮改造结果给反馈
+
+---
+
+#### 238. Issue #56 — Dashboard 真实调用链纠偏
+
+**时间**：2026-04-30
+
+**操作背景**：
+在前一轮文档中，一度把 `static/js/main.js` 的 `loadDashboard()` 视为当前 Dashboard 活跃链路。继续沿导航入口追踪后，确认这一定性与真实运行路径不一致，需要立即把文档和范围纠偏。
+
+**本轮纠偏结论**：
+
+1. 当前页面切到 `dashboard` 时，实际走的是 `initOverview()`
+2. `initOverview()` 来自 `static/js/features/overview.js`
+3. 当前主看板实际请求的是 `/api/overview/*`
+4. `static/js/main.js` 中的 `loadDashboard()` 仍存在，但没有发现当前导航主链路对它的实际调用
+
+**范围收敛结果**：
+
+1. 本轮主修目标仍然是账号管理页的服务端分页 / 筛选 / 排序
+2. `loadDashboard()` 不再作为当前活跃故障面处理
+3. 但会顺手清理或下线这段旧兼容逻辑，避免后续误判
+
+**本轮文档更新**：
+
+| 文件 | 操作 | 说明 |
+|---|---|---|
+| `docs/BUG/2026-04-30-Issue56-账号管理页面导入1万邮箱崩溃分析.md` | 更新 | 把 Dashboard 描述从“活跃放大路径”纠偏为“旧兼容逻辑” |
+| `C:/Users/PLA30/.copilot/session-state/b2900f7d-072b-4d26-a32b-848a295e1906/plan.md` | 更新 | 回写真实 Dashboard 主链路与本轮收敛范围 |
+| `WORKSPACE.md` | 更新 | 追加本条纠偏记录 |
+
+**当前状态**：
+
+1. 文档已按真实代码现状重新校准
+2. 本轮实现范围已收敛清晰
+3. 下一步进入账号管理页实现
+
+---
+
+#### 237. Issue #56 — 行为边界补记与 Dashboard 放大路径说明
+
+**时间**：2026-04-30
+
+**操作背景**：
+在上一条文档先行校准基础上，用户继续确认了部分实现边界，但对 `dashboard` 的“放大路径”含义提出追问，需要把这部分定义同步回文档和会话计划，避免后续实现范围理解不一致。
+
+**本轮确认结果**：
+
+1. 批量勾选允许**跨页累积**
+2. 搜索先限制在**当前分组内**
+3. 排序字段先只保留**刷新时间 / 邮箱**
+
+**本轮补充说明**：
+
+`dashboard` 的“放大路径”指的是：打开仪表盘时，前端会先获取分组列表，再对每个分组循环调用 `/api/accounts?group_id=...`。如果其中任一分组已经有上万账号，仪表盘也会重复触发大包拉取，从而把同类性能问题再放大一遍。
+
+**本轮文档更新**：
+
+| 文件 | 操作 | 说明 |
+|---|---|---|
+| `docs/BUG/2026-04-30-Issue56-账号管理页面导入1万邮箱崩溃分析.md` | 更新 | 增补已确认行为边界，并新增 `dashboard` 放大路径解释 |
+| `C:/Users/PLA30/.copilot/session-state/b2900f7d-072b-4d26-a32b-848a295e1906/plan.md` | 更新 | 回写行为边界与 `dashboard` 待确认项 |
+| `WORKSPACE.md` | 更新 | 追加本条操作记录 |
+
+**当前状态**：
+
+1. 文档基线已基本稳定
+2. 进入实现前只剩 `dashboard` 是否纳入本轮这一项范围确认
+3. 本轮仍未修改业务代码
+
+---
+
+#### 236. Issue #56 — 文档先行校准（服务端分页 + 筛选/排序）
+
+**时间**：2026-04-30
+
+**操作背景**：
+在上一轮仅完成问题分析后，用户本轮明确要求先不动业务代码，先把 Issue #56 的相关文档、会话计划和 `WORKSPACE.md` 按真实代码现状校准；同时用户已确认后续方向为 **方案 A**，且要把**服务端筛选 / 服务端排序**一并纳入。
+
+**本轮新增核实结果**：
+
+1. 账号管理页崩溃的主根因保持不变：`/api/accounts` 仍是后端全量返回，前端只做数组切页。
+2. 新确认到一个同类放大路径：`static/js/main.js` 的 `loadDashboard()` 会按分组循环请求 `/api/accounts?group_id=...`。
+3. 新确认到一个实现风险点：`static/js/features/groups.js` 与 `static/js/features/mailbox_compact.js` 多处把 `accountsCache[groupId]` 当成纯数组使用，后续分页改造不能直接替换缓存结构而不做兼容层。
+4. 新确认到一个仓储层约束：`load_accounts()` 还被导出、通知分发、外部 API、Token 工具等流程用于全量读取，后续修复不能直接破坏默认全量语义。
+
+**本轮文档更新**：
+
+| 文件 | 操作 | 说明 |
+|---|---|---|
+| `docs/BUG/2026-04-30-Issue56-账号管理页面导入1万邮箱崩溃分析.md` | 更新 | 按真实代码现状补充 `dashboard` 放大路径、`accountsCache` 数组耦合、全量调用保留约束，并把状态改为“方案已确认、实现未开始” |
+| `C:/Users/PLA30/.copilot/session-state/b2900f7d-072b-4d26-a32b-848a295e1906/plan.md` | 新增 | 新建本次会话计划，记录文档先行阶段、已确认方向和待办 |
+| `WORKSPACE.md` | 更新 | 追加本次操作记录 |
+
+**当前状态**：
+
+1. 文档已从“待方案确认”更新为“方案已确认，待决定是否进入实现”
+2. 已把隐藏耦合点和跨页面放大路径补记到文档
+3. 本轮尚未修改任何业务代码、未进入实现阶段
+
+**下一步行动**：
+
+等待用户确认是否从文档阶段切换到实现阶段，并确认实现阶段的行为边界。
+
+---
+
+#### 235. Issue #56 — 账号管理页面导入1万邮箱崩溃分析
+
+**时间**：2026-04-30
+
+**操作背景**：
+用户反馈GitHub Issue #56：当导入1万个邮箱账号后，账号管理页面直接崩溃。用户要求先充分调研问题，编写bug文档，不要急着修改代码。
+
+**调研过程**：
+
+1. **读取Issue详情**：使用 `gh issue view 56` 获取Issue信息
+2. **分析后端代码**：
+   - `outlook_web/controllers/accounts.py` (第125-202行)：`api_get_accounts` 函数一次性返回所有账号
+   - `outlook_web/repositories/accounts.py` (第51-118行)：`load_accounts` 函数查询所有账号，无分页参数
+3. **分析前端代码**：
+   - `static/js/features/groups.js` (第167-218行)：`loadAccountsByGroup` 函数一次性加载所有数据
+   - `static/js/features/groups.js` (第257-264行)：`renderAccountList` 函数虽然实现了分页显示，但只是对已加载数据的分页
+4. **分析数据流**：前端请求 → 后端返回所有数据 → 前端一次性加载到内存 → 内存溢出 → 页面崩溃
+
+**根因分析**：
+
+问题的根本原因是**前端实现了分页显示，但没有实现服务端分页**：
+- 后端API一次性返回所有账号数据，没有分页参数支持
+- 前端一次性加载所有数据到内存，然后在前端进行分页显示（每页50个）
+- 当导入1万个邮箱时，浏览器需要处理大量JSON数据（每个账号有20+字段），导致内存溢出和页面崩溃
+
+**解决方案分析**：
+
+| 方案 | 描述 | 优点 | 缺点 |
+|------|------|------|------|
+| 方案A：服务端分页 | 修改后端API支持分页参数，前端在加载和切换页面时传递分页参数 | 彻底解决问题，支持任意数量邮箱 | 需要修改前后端代码，筛选/排序功能需要重新设计 |
+| 方案B：优化现有实现 | 保持现有架构，但优化数据传输（如只传输必要字段），减少内存占用 | 改动较小 | 无法支持超大数据量，只是延缓问题 |
+| 方案C：混合方案 | 实现服务端分页 + 前端缓存优化 | 支持大数据量，保持良好的用户体验 | 实现复杂度较高 |
+
+**产出文档**：
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| `docs/BUG/2026-04-30-Issue56-账号管理页面导入1万邮箱崩溃分析.md` | 新增 | Issue #56 完整分析报告，包括根因、影响范围、解决方案、测试计划 |
+
+**当前状态**：
+1. 问题分析已完成，根因已定位
+2. 已创建详细的bug分析文档
+3. 已生成详细的提示词供其他AI分析
+4. 等待用户确认实施方案（A/B/C）
+5. 尚未修改任何业务代码
+
+**产出文档**：
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| `docs/BUG/2026-04-30-Issue56-账号管理页面导入1万邮箱崩溃分析.md` | 新增 | Issue #56 完整分析报告，包括根因、影响范围、解决方案、测试计划 |
+| `session/files/issue56-prompt.md` | 新增 | 供其他AI分析解决此问题的详细提示词 |
+
+**下一步行动**：
+1. 等待用户确认实施方案
+2. 根据确认的方案开始实施
+3. 按照实施步骤逐步推进
+4. 完成测试和验证
+5. 更新相关文档
+
+---
+
 ## 2026-04-23
 
 ### 操作记录
