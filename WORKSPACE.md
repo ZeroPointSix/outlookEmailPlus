@@ -497,6 +497,1120 @@
 
 ---
 
+## 2026-04-25
+
+### 操作记录
+
+#### 262. Issue #55 当前改动提交并合并 main 后再次全量复跑 — Python 1404 通过，浏览器扩展 12/12 通过
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 先把当前 Issue #55 相关改动正式提交到 `dev`
+- 再将最新 `main` 合并到当前分支
+- 合并后重新执行仓库级测试入口，确认分支同步后仍然保持全绿
+
+**本轮执行过程**：
+
+1. 先检查当前工作区，确认 `dev` 上存在未提交的 Issue #55 实现、测试与文档改动
+2. 清理孤立临时文件：
+   - 删除 `test_batch_logic.html`
+3. 提交当前改动：
+   - 提交：`2c65ad0 feat: 完成 Issue55 批量拉取与验收修复`
+4. 在 `dev` 上合并 `main`：
+   - 合并提交：`058c3a7 Merge branch 'main' into dev`
+   - 本次合并无需人工冲突处理，`WORKSPACE.md` 自动合并成功
+5. 首次直接执行仓库级全量复跑时，会话未能完整收口
+6. 为确认不是代码回归，先单独复跑首个卡住的 Playwright 用例：
+   - `python -m unittest tests.test_account_edit_browser_flow.AccountEditBrowserFlowTests.test_browser_can_edit_outlook_remark_without_reentering_credentials -v`
+   - 结果：`1/1` 通过
+   - 耗时：`7.277s`
+7. 随后改为日志方式完整复跑仓库级测试入口：
+   1. `python -m unittest discover -s tests -v -f`
+   2. `npm run test:browser-extension`
+
+**本轮结果**：
+
+1. Python 全量：
+   - `1404` 通过
+   - `skipped=7`
+   - 日志确认：`Ran 1404 tests in 426.912s`
+2. 浏览器扩展 Jest：
+   - `12/12` 通过
+   - `Test Suites: 3 passed, 3 total`
+   - `Tests: 12 passed, 12 total`
+
+**本轮文档回写**：
+
+1. `session/files/issue55-standard-batch-fetch-plan.md`
+   - 在“仓库级全量测试结果（2026-04-25）”下新增“当前改动落提交并合并 `main` 后再次复跑”
+2. `WORKSPACE.md`
+   - 新增本条 `262` 号记录
+
+**当前状态**：
+
+- `dev` 已吸收最新 `main`
+- Issue #55 当前改动已形成正式提交并保留在分支历史中
+- 合并 `main` 后，仓库级 Python 全量与浏览器扩展 Jest 继续保持全绿
+
+---
+
+#### 261. Issue #55 人工验收后再次全量复跑 — Python 1404 通过，浏览器扩展 12/12 继续通过
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在人工验收确认“效果不错”之后，再次复跑当前会话涉及的仓库级测试入口，确认最新代码状态下仍然保持全绿
+
+**本轮执行命令**：
+
+1. `python -m unittest discover -s tests -v -f`
+2. `npm run test:browser-extension`
+
+**本轮结果**：
+
+1. Python 全量：
+   - `1404` 通过
+   - `skipped=7`
+   - 日志确认：`Ran 1404 tests in 454.408s`
+2. 浏览器扩展 Jest：
+   - `12/12` 通过
+   - `Test Suites: 3 passed, 3 total`
+
+**本轮文档回写**：
+
+1. 本地方案文件中的“仓库级全量测试结果（2026-04-25）”新增“人工验收后再次复跑”
+
+**当前状态**：
+
+- 在人工验收之后再次复跑，全量结果仍保持绿灯
+
+---
+
+#### 260. Issue #55 人工验收服务启动 — 本地实例监听 5000，healthz 返回 200
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 启动一个可供人工验收的本地服务实例，并确认健康状态可用
+
+**本轮执行过程**：
+
+1. 先尝试以后台方式启动本地实例
+2. 初始预期端口为 `5600`
+3. 实际启动日志显示：
+   - 进程监听在 `0.0.0.0:5000`
+   - 访问地址为 `http://127.0.0.1:5000`
+4. 进一步检查监听端口：
+   - PID：`8640`
+5. 执行健康检查：
+   - `GET http://127.0.0.1:5000/healthz`
+   - 返回 `200`
+   - 响应：`{"boot_id":"1777097456978-8640","status":"ok","version":"2.3.0"}`
+
+**本轮文档回写**：
+
+1. 本地方案文件新增“本地人工验收服务（2026-04-25）”
+
+**当前状态**：
+
+- 当前人工验收应使用：`http://127.0.0.1:5000`
+- 服务健康状态正常，可进入人工验收
+
+---
+
+#### 259. Issue #55 语义收口后再次全量复跑 — Python 1404 通过，浏览器扩展 12/12 继续通过
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在“部分成功按账号成功处理”的语义收口落地后，再次复跑当前会话涉及的仓库级测试入口，确认最新代码状态下仍保持全绿
+
+**本轮执行命令**：
+
+1. `python -m unittest discover -s tests -v -f`
+2. `npm run test:browser-extension`
+
+**本轮结果**：
+
+1. Python 全量：
+   - `1404` 通过
+   - `skipped=7`
+   - 日志确认：`Ran 1404 tests in 385.932s`
+2. 浏览器扩展 Jest：
+   - `12/12` 通过
+   - `Test Suites: 3 passed, 3 total`
+
+**与当前语义调整的关系**：
+
+1. 本轮复跑发生在：
+   - “同账号任一 folder 成功即按账号成功处理” 已落地之后
+2. 复跑结果说明：
+   - 最新语义调整没有打破 Python 全量
+   - 也没有打破浏览器扩展 Jest
+
+**本轮文档回写**：
+
+1. 本地方案文件中的“仓库级全量测试结果（2026-04-25）”新增“最新复跑确认”
+
+**当前状态**：
+
+- Issue #55 最新代码状态下，当前会话涉及的仓库级测试入口再次复跑仍然全绿
+
+---
+
+#### 258. Issue #55 部分成功语义收口 — 任一 folder 成功即按账号成功处理
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 按用户最终选择，落实“部分成功如何对外表达”的口径，并重新跑 Issue #55 定向回归确认该口径成立
+
+**本轮实现调整**：
+
+1. `static/js/main.js`
+   - `fetchLatestFoldersForAccount(acc)` 的账号成功条件已改为：
+     - 只要任一 folder 拉取成功，即返回账号成功
+   - 因此当 `inbox` 成功、`junkemail` 失败时：
+     - 已成功 folder 的缓存继续保留
+     - 最终汇总不再把该账号列入失败列表
+2. `tests/batch-fetch/batch-fetch-main.test.js`
+   - `TC-B05` 已改为验证“单个 folder 失败时按账号部分成功处理”
+   - `TC-B06` 已补充账号级成功/失败汇总断言
+
+**本轮验证结果**：
+
+1. Python：
+   - `python -m unittest tests.test_batch_fetch_frontend_contract tests.test_batch_fetch_email_api_contract -v`
+   - 结果：`13/13` 通过
+2. Jest：
+   - `npx jest --config tests\\batch-fetch\\jest.config.js --runInBand`
+   - 结果：`8/8` 通过
+
+**本轮文档回写**：
+
+1. 本地方案文件中的“最终 diff 审查发现（待决策）”改为“最终 diff 审查收口（已定）”
+2. Issue #55 TODO 当前阶段改为：
+   - `核心实现、全量测试与最终语义收口均已完成`
+3. Issue #55 TODO 中的“最终 diff 审查发现（待决策）”改为“最终 diff 审查收口（已定）”
+
+**当前状态**：
+
+- Issue #55 的“部分成功”语义已完成用户拍板并落地
+- 定向回归重新通过，当前会话文档也已恢复到完成态
+
+---
+
+#### 257. Issue #55 最终 diff 复审 + 全量复跑 — 全量继续绿，但仍有 1 个部分成功语义待决策
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在浏览器扩展 Jest 修复后，再次复跑当前会话涉及的仓库级测试入口，并对当前工作区全部改动做最后一轮高价值 diff 审查
+
+**本轮执行结果**：
+
+1. 全量复跑：
+   - Python：`python -m unittest discover -s tests -v -f`
+   - 结果：`1404` 通过，`skipped=7`
+2. 浏览器扩展 Jest：
+   - `npm run test:browser-extension`
+   - 结果：`12/12` 通过
+3. 当前会话涉及的测试入口继续保持全绿
+
+**最终 diff 审查结论**：
+
+1. 未再发现新的高价值问题
+2. 但保留 1 个待决策点：
+   - `static/js/main.js` 在“部分成功”场景下会保留已成功 folder 的缓存
+   - 同时在最终汇总里把该账号计为失败
+   - 形成“数据部分成功，但汇总按失败表达”的语义不一致
+
+**本轮文档回写**：
+
+1. 本地方案文件新增“最终 diff 审查发现（待决策）”
+2. Issue #55 TODO 当前阶段改为：
+   - `核心实现与全量测试已完成，但最终 diff 审查仍有 1 个部分成功语义问题待决策`
+3. Issue #55 TODO 新增“最终 diff 审查发现（待决策）”章节
+
+**当前状态**：
+
+- 当前会话涉及的测试入口已再次复跑并保持全绿
+- 但合并前仍建议对“部分成功如何对外表达”做一次口径决策
+
+---
+
+#### 256. 浏览器扩展 Jest 失败修复完成 — popup 复制反馈恢复，仓库级测试入口转绿
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 修复仓库级全量测试中唯一剩余的浏览器扩展 Jest 失败，并确认当前会话涉及的仓库级测试入口全部转绿
+
+**本轮实现修复**：
+
+1. `browser-extension/popup.js`
+   - `handleCopyField(input)` 在复制成功后补上 `copied` class
+   - 并在延时后移除，恢复点击复制反馈态
+2. `browser-extension/popup.html`
+   - 为 `.form-input.copy-on-click.copied` 新增视觉样式
+
+**本轮验证结果**：
+
+1. `npm run test:browser-extension`
+   - 结果：`12/12` 通过
+2. 结合上一轮已确认结果：
+   - Python 全量：`1404` 通过，`skipped=7`
+   - Issue #55 定向回归：Python `13/13`、Jest `8/8`
+
+**本轮文档回写**：
+
+1. 本地方案文件中的“仓库级全量测试结果（2026-04-25）”已更新为浏览器扩展 Jest 全绿
+
+**当前状态**：
+
+- 浏览器扩展 Jest 失败已修复
+- 当前会话涉及的仓库级测试入口已全部转绿
+
+---
+
+#### 255. Issue #55 全量测试核对 — Python 全绿，浏览器扩展 Jest 存在 1 个无关失败
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在 Issue #55 定向修复与定向测试通过后，继续执行仓库级全量测试，确认当前整体回归状态
+
+**本轮执行命令**：
+
+1. `python -m unittest discover -s tests -v`
+2. `python -m unittest discover -s tests -v -f`
+3. `npm run test:browser-extension`
+
+**本轮结果**：
+
+1. Python 全量：
+   - `1404` 个用例通过
+   - `skipped=7`
+2. 浏览器扩展 Jest：
+   - `12` 个用例中 `11` 个通过、`1` 个失败
+   - 失败用例：
+     - `tests/browser-extension/popup.integration.test.js`
+     - `profile fields are readonly and copy value on click with feedback`
+   - 失败断言：
+     - `firstNameInput.classList.contains('copied')` 期望 `true`，实际 `false`
+
+**与 Issue #55 的关系判断**：
+
+1. Issue #55 相关定向回归仍保持 GREEN：
+   - Python `13/13`
+   - Jest `8/8`
+2. 当前全量失败位于 `tests/browser-extension/*`
+3. 与本次改动文件 `templates/index.html`、`static/js/main.js`、`static/js/i18n.js` 无直接文件交集
+
+**本轮文档回写**：
+
+1. 本地方案文件新增“仓库级全量测试结果（2026-04-25）”
+
+**当前状态**：
+
+- Issue #55 自身实现与定向回归已完成
+- 仓库级 Python 全量通过
+- 当前仍有 1 个浏览器扩展 Jest 用例失败，仓库级“全绿”尚未达成
+
+---
+
+#### 254. Issue #55 审查问题修复完成 — 统计修正、专用文案与 account_summary 回写已补齐
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 直接修复上一轮代码审查指出的 3 个收尾问题，并用最相关的 Python / Jest 测试完成回归确认
+
+**本轮实现修复**：
+
+1. `static/js/main.js`
+   - 批量拉取进度改为按账号完成数更新
+   - 成功/失败汇总改为账号级统计，不再使用 `successCount / 2`
+2. `static/js/main.js` + `static/js/i18n.js`
+   - 未选中账号时的错误提示改为“请选择要批量拉取邮件的账号”
+3. `static/js/main.js`
+   - 批量拉取成功后，若响应包含 `account_summary`，现已调用 `syncAccountSummaryToAccountCache(...)` 回写账号缓存
+4. `tests/batch-fetch/batch-fetch-main.test.js`
+   - 新增/加强：
+     - 未选中账号专用错误文案断言
+     - 账号级成功/失败统计断言
+     - `account_summary` 回写断言
+     - 账号级进度提示断言
+5. `tests/test_batch_fetch_frontend_contract.py`
+   - 补充：
+     - 新错误文案 i18n 断言
+     - `syncAccountSummaryToAccountCache` 链路存在性断言
+
+**本轮验证结果**：
+
+1. Python：
+   - `python -m unittest tests.test_batch_fetch_frontend_contract tests.test_batch_fetch_email_api_contract -v`
+   - 结果：`13/13` 通过
+2. Jest：
+   - `npx jest --config tests\\batch-fetch\\jest.config.js --runInBand`
+   - 结果：`8/8` 通过
+
+**本轮文档回写**：
+
+1. 本地方案文件中的审查章节改为“已完成”
+2. Issue #55 TODO 当前阶段恢复为完成态
+3. TDD 当前状态更新为：
+   - `GREEN — Python 13/13 通过，Jest 8/8 通过`
+
+**当前状态**：
+
+- 上一轮代码审查指出的 3 个收尾问题已全部修复
+- Issue #55 当前实现、测试与会话文档已重新对齐到完成态
+
+---
+
+#### 253. Issue #55 实现后代码审查 — 发现 3 个值得合并前修正的收尾问题
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在用户要求“顺手审一遍实现代码有没有明显问题”后，对当前 Issue #55 实现做高价值问题审查，并把结论同步回会话文档
+
+**本轮审查结论**：
+
+1. `static/js/main.js`
+   - 批量拉取进度与成功统计按 folder 递增，但提示按账号数展示，统计单位不一致
+   - `successCount / 2` 的实现会在部分 folder 失败时产生不准确的账号级汇总
+2. `static/js/main.js`
+   - 未选中账号时仍复用了“请选择要刷新 Token 的账号”错误提示，文案与当前功能不符
+3. `static/js/main.js`
+   - 批量拉取成功后未处理 `account_summary` 回写
+   - 与 TD 中“若接口返回 `account_summary` 应调用 `syncAccountSummaryToAccountCache(...)`”的约定不一致
+
+**本轮文档回写**：
+
+1. 本地方案文件新增“实现后代码审查发现（待修）”
+2. Issue #55 TODO 当前阶段改为：
+   - `功能已实现且现有测试 GREEN，但代码审查发现 3 个收尾问题待修`
+3. Issue #55 TODO 新增“实现后审查发现（待修）”章节
+
+**当前状态**：
+
+- Issue #55 仍保持“功能已实现 + 测试 GREEN”
+- 但当前还存在 3 个值得在合并前继续修正的实现收尾问题
+
+---
+
+#### 252. Issue #55 TODO 状态收尾 — 对照已落地实现与 GREEN 结果补齐待办状态
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在用户提示“另一个 AI 已完成任务”后，对照当前仓库中的实现代码、会话方案文件、TDD 和 WORKSPACE 记录，补齐 Issue #55 TODO 中尚未同步的状态项
+
+**本轮核对结论**：
+
+1. 本地方案文件已经写明：
+   - Python `13/13` 通过
+   - Jest `7/7` 通过
+2. TDD 已经更新为：
+   - `GREEN — Python 13/13 通过，Jest 7/7 通过`
+3. `WORKSPACE.md` 已有实现完成记录：
+   - `251. Issue #55 标准模式多选邮箱批量拉取 — 前端实现完成，全部测试通过`
+4. 当前真正落后的文档是 TODO：
+   - 页头阶段仍停留在“待进入前端实现”
+   - Task 8 仍未勾完成
+   - 风险说明仍停留在“Jest 环境阻塞”旧口径
+
+**本轮回写内容**：
+
+1. TODO 页头阶段改为：
+   - `核心实现与测试已完成，文档链已对齐到 GREEN 状态`
+2. Task 0 当前结论改为：
+   - RED 缺口已全部消除
+   - Python / Jest 已全部转绿
+3. Task 8 三项全部勾完成
+4. 当前状态表改为全部完成
+5. 风险说明中的 Jest 口径改为“依赖需继续保留，避免回退为环境假红”
+
+**当前状态**：
+
+- Issue #55 的方案文件、TODO、TDD、WORKSPACE 现已统一对齐到“实现完成 + 测试 GREEN”的状态
+
+---
+
+#### 251. Issue #55 标准模式多选邮箱批量拉取 — 前端实现完成，全部测试通过
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 实现 Issue #55：标准模式多选邮箱批量拉取（latest-only）
+- 消除 Python 契约测试 3 个红灯
+- 补齐 Jest 环境并使 7 个行为测试通过
+
+**实现变更**：
+
+1. `templates/index.html`：标准模式 `batchActionBar` 新增"批量拉取邮件"按钮（ghost 样式）
+2. `static/js/i18n.js`：新增批量拉取相关中英文词条（批量拉取邮件 / 正在批量拉取邮件 / 批量拉取完成 / 收件箱 + 垃圾箱）
+3. `static/js/main.js`：新增 6 个函数：
+   - `resolveSelectedAccountsForBatchFetch()` — 跨分组扫描 accountsCache 解析已选账号
+   - `showBatchFetchConfirm()` — 确认弹窗入口
+   - `batchFetchSelectedEmails()` — 串行批量执行 + 持久 Toast 进度
+   - `fetchLatestFoldersForAccount()` — 单账号 inbox + junkemail latest-only 拉取
+   - `cacheBatchFetchedFolder()` — 结果回写 emailListCache
+   - `refreshCurrentMailboxIfNeeded()` — 仅双命中时刷新右侧列表
+4. `tests/batch-fetch/setup.js`：修复 beforeEach 中 fetch mock 被 eval 覆盖的问题
+
+**测试结果**：
+
+- Python 13/13 通过（原 3 红灯已全部转绿）
+- Jest 7/7 通过（jest-environment-jsdom 已安装，行为测试全部进入 GREEN）
+
+**设计边界确认**：
+
+- 只改标准模式 batchActionBar，未改 compactBatchActionBar
+- 未新增后端批量接口，复用 GET /api/emails/<email>
+- 批量完成后 currentAccount 不自动切换
+- 按钮样式为 ghost
+
+---
+
+#### 250. Issue #55 实现提示词文档回退 — 删除仓库文件并改为仅对话输出
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 按用户要求删除刚刚创建的 Issue #55 实现提示词文档，不再把提示词单独保存在仓库中，而是仅通过当前对话直接提供内容
+
+**本轮回退内容**：
+
+1. 删除文档：
+   - `docs/TODO/2026-04-25-Issue55-标准模式多选邮箱批量拉取实现提示词.md`
+2. 清理回链：
+   - 本地方案文件移除 `实现提示词`
+   - Issue #55 TODO 文档移除 `关联实现提示词`
+
+**当前状态**：
+
+- 仓库中已不再保留单独的 Issue #55 实现提示词文档
+- 当前后续若需要把提示词交给其他 AI，应直接使用本次对话输出内容
+
+---
+
+#### 249. Issue #55 实现提示词建立 — 为其他 AI 补齐可直接开工的执行入口
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 基于已经完成的 Issue #55 文档链、TODO 和 RED 测试结果，整理一份可直接交给其他 AI 开工的实现提示词，并同步回链到本地方案与 TODO
+
+**本轮新增文档**：
+
+1. `docs/TODO/2026-04-25-Issue55-标准模式多选邮箱批量拉取实现提示词.md`
+
+**本轮同步调整**：
+
+1. 本地方案文件新增 `实现提示词` 回链
+2. Issue #55 TODO 文档新增 `关联实现提示词`
+
+**实现提示词当前收口内容**：
+
+1. 明确当前任务不是重新分析需求，而是按文档链直接进入实现
+2. 明确必须先阅读：
+   - 本地方案
+   - PRD / FD / TD / TDD / TODO
+   - `index.html` / `main.js` / `i18n.js`
+   - 已创建测试文件
+3. 明确当前真实红灯：
+   - `index.html` 缺按钮
+   - `main.js` 缺入口与执行骨架
+   - `i18n.js` 缺文案
+4. 明确硬约束：
+   - 只做标准模式
+   - 只改 `batchActionBar`
+   - 不新增后端批量接口
+   - latest-only 固定为 `inbox + junkemail`
+   - 当前账号不自动切换
+5. 明确建议实施顺序：
+   - 模板与文案入口
+   - main.js 入口与账号解析
+   - 批量执行与缓存回写
+   - 测试推进
+   - 文档回写
+
+**当前状态**：
+
+- Issue #55 现在已经同时具备：
+  - 方案文档链
+  - TODO 跟踪
+  - 已落盘测试
+  - 可直接交给其他 AI 的实现提示词
+
+---
+
+#### 248. Issue #55 TODO 文档建立 — 补齐任务拆解并回链 PRD/FD/TD/TDD/本地方案
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在已经完成方案文档、测试文档与首次 RED 执行后，为 Issue #55 正式建立仓库内 TODO 文档，并把整个文档链按实际状态补齐
+
+**本轮新增文档**：
+
+1. `docs/TODO/2026-04-25-Issue55-标准模式多选邮箱批量拉取TODO.md`
+
+**本轮同步调整**：
+
+1. 本地方案文件新增 `关联 TODO`
+2. PRD 新增 `关联 TODO`
+3. FD 新增 `关联 TODO`
+4. TD 新增 `关联 TODO`
+5. TDD 新增 `关联 TODO`
+6. TDD 补充“当前实现待办已拆入 TODO 文档”
+
+**TODO 当前拆解结果**：
+
+1. 已确认前置完成项：
+   - 测试基线已建立
+   - Python RED 已命中真实缺口
+   - Jest 当前阻塞点已确认是 `jest-environment-jsdom`
+2. 待执行主线任务：
+   - 标准模式 `batchActionBar` 按钮入口
+   - `main.js` 账号解析与批量拉取主逻辑
+   - 缓存回写与当前视图刷新
+   - `i18n.js` 文案与进度提示
+   - Python 打绿
+   - Jest 环境补齐与行为测试执行
+
+**当前状态**：
+
+- Issue #55 已从“方案/TDD/测试落地”进一步推进到“仓库内 TODO 跟踪就位”
+- 后续实现可直接按 TODO 顺序推进，并继续回写 `WORKSPACE.md`
+
+---
+
+#### 247. Issue #55 首次执行测试 — Python 红灯命中实现缺口，Jest 环境缺 jsdom
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 对刚刚创建的 Issue #55 测试文件进行首次实际执行，确认红灯是否打在预期位置
+
+**本轮执行命令**：
+
+1. `python -m unittest tests.test_batch_fetch_frontend_contract tests.test_batch_fetch_email_api_contract -v`
+2. `npx jest --config tests\batch-fetch\jest.config.js --runInBand`
+
+**本轮执行结果**：
+
+1. Python unittest：
+   - 共 `13` 个用例
+   - `10` 个通过
+   - `3` 个失败
+2. Jest：
+   - 当前环境缺少 `jest-environment-jsdom`
+   - 套件配置阶段即失败，尚未进入具体用例执行
+
+**Python 当前红灯命中点**：
+
+1. `index.html` 尚未出现标准模式“批量拉取邮件”按钮
+2. `main.js` 尚未声明批量拉取入口函数与相关实现骨架
+3. `i18n.js` 尚未加入批量拉取相关文案
+
+**本轮同步文档更新**：
+
+1. 本地方案文件新增“最近测试运行结果”
+2. TDD 状态更新为：
+   - `RED 已运行（Python 3 个红灯，Jest 环境待补）`
+3. TDD 新增“最新运行结果（2026-04-25）”章节
+4. TDD 在 Jest 小节补充环境阻塞说明
+
+**当前状态**：
+
+- Python 红灯已经准确打到实现缺口
+- Jest 行为测试当前还受环境依赖缺失阻塞，尚未进入函数级验证
+
+---
+
+#### 246. Issue #55 测试文件落地 — 按 TDD 创建前端契约、API 契约与 Jest 行为测试
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 根据已经完成的 TDD，直接创建实际测试文件，而不是继续停留在测试设计层
+
+**本轮新增测试文件**：
+
+1. `tests/test_batch_fetch_frontend_contract.py`
+2. `tests/test_batch_fetch_email_api_contract.py`
+3. `tests/batch-fetch/jest.config.js`
+4. `tests/batch-fetch/setup.js`
+5. `tests/batch-fetch/batch-fetch-main.test.js`
+
+**本轮测试覆盖落点**：
+
+1. A / D 层：
+   - 标准模式入口
+   - 紧凑模式不扩展
+   - 现有批量动作回归
+   - 单账号邮件区语义回归
+2. C 层：
+   - `/api/emails/<email_addr>` 成功/失败响应契约
+   - `junkemail` 与 `inbox` 形状一致
+   - `account_summary` 可选性
+3. B 层：
+   - 跨分组解析 `selectedAccountIds`
+   - `inbox + junkemail` latest-only 请求编排
+   - 缓存写回
+   - 当前账号不自动切换
+   - 失败不中断
+   - 持久 Toast 进度驱动
+
+**本轮同步文档更新**：
+
+1. 本地方案文件补充“已创建测试文件”列表
+2. TDD 状态由“草案”更新为“RED 用例已落盘”
+3. TDD 新增“当前已创建测试文件”章节
+
+**当前状态**：
+
+- Issue #55 已从“方案文档链”推进到“测试文件已实际落地”的 RED 阶段
+
+---
+
+#### 245. Issue #55 按钮视觉层级收口 — 批量拉取邮件改为 ghost
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 基于用户确认结果，继续把“批量拉取邮件”按钮的视觉层级在文档中定死，避免后续实现时与现有批量栏的 primary / danger 层级冲突
+
+**用户已确认的取向**：
+
+- 批量拉取邮件按钮改成普通按钮（ghost），更贴近现有标准模式批量栏层级
+
+**本轮修订内容**：
+
+1. 本地方案文件：
+   - 明确按钮视觉层级为普通动作按钮（ghost）
+   - 明确不与现有 `刷新 Token` 争夺主按钮层级
+2. FD：
+   - 明确“批量拉取邮件”采用 ghost 样式，保留“刷新 Token”为唯一 primary 动作
+3. TD：
+   - 将按钮示例代码从 `btn btn-sm btn-primary` 改为 `btn btn-sm btn-ghost`
+   - 增加说明：避免标准批量栏出现两个 primary 按钮
+4. TDD：
+   - 新增契约关注点，要求显式验证标准模式下该按钮使用 ghost 样式
+
+**当前状态**：
+
+- 文档对“批量拉取邮件”按钮的视觉层级已经收口，不再留给实现阶段临时决定
+
+---
+
+#### 244. Issue #55 模板边界收紧 — 明确只改标准模式批量栏
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 继续把 Issue #55 文档从“需求边界”收紧到“真实模板边界”，明确当前仓库中标准模式与紧凑模式拥有不同的批量操作栏，因此本期必须把改动限定在标准模式区域
+
+**本轮修订内容**：
+
+1. 本地方案文件：
+   - 将“只在标准模式显示，不新增紧凑模式入口”进一步写实为“只改标准模式 `batchActionBar`，不改 `compactBatchActionBar`”
+2. FD：
+   - 在入口位置章节明确“只在标准模式 `batchActionBar` 增加入口，不在 `compactBatchActionBar` 增加对应按钮”
+3. TD：
+   - 在涉及文件与前端入口设计中明确模板改动仅限标准模式批量栏
+4. TDD：
+   - 新增契约与回归关注点，要求显式验证**紧凑模式批量栏保持不变**
+
+**当前状态**：
+
+- 文档边界已进一步从“标准模式限定”细化为“只动 `batchActionBar`，不动 `compactBatchActionBar`”
+
+---
+
+#### 243. Issue #55 文档一致性修订 — 按真实代码结构修正文档细节
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在 PRD / FD / TD / TDD / 本地方案文件已经建立后，继续按真实代码与测试组织方式修正文档细节，消除“讨论期遗留表述”和“与现状不完全贴合”的描述
+
+**本轮修订内容**：
+
+1. 本地方案文件：
+   - 将“当前账号不被强制切换（推荐方向，待最终确认）”改为“已确认”
+   - 将“从 `accountsCache` 中按 ID 回查账号信息”修正为“扫描各分组数组后按 ID 回查”
+   - 将“当前待确认点”收敛为仅保留失败重试入口等非阻塞项
+2. FD：
+   - 明确 `accountsCache` 的真实结构是“按分组缓存账号数组”，而不是按账号 ID 直接索引
+3. TD：
+   - 删除“TDD / 测试用例细化（后续单独补）”这类已过期表述
+   - 明确 `resolveSelectedAccountsForBatchFetch()` 应扫描 `Object.values(accountsCache)`
+4. TDD：
+   - 补充与现有仓库测试习惯的对齐说明
+   - 明确 Python 契约测试继续沿用 `unittest + Flask client`
+   - 明确 JS 行为测试建议按 `tests/compact-poll/` 的独立 Jest 套件方式组织
+
+**当前状态**：
+
+- Issue #55 文档链已从“内容齐全”进一步收口到“与真实代码结构和仓库测试习惯一致”
+
+---
+
+#### 242. Issue #55 测试设计起草 — TDD 建立并回链 PRD/FD/TD
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在 PRD / FD / TD 已成链后，继续补齐测试设计文档（TDD），明确：
+  - V1 应测哪些前端行为
+  - 哪些层级需要 Python 合约测试
+  - 哪些层级更适合 Node/Jest 行为测试
+  - 因 V1 不新增后端批量接口，所以 TDD 不应虚构新的接口测试对象
+
+**本轮新增文档**：
+
+1. `docs/TDD/2026-04-25-标准模式多选邮箱批量拉取TDD.md`
+
+**本轮同步调整**：
+
+1. 本地方案文件新增 TDD 回链
+2. PRD 新增 `关联 TDD`
+3. FD 新增 `关联 TDD`
+4. TD 新增 `关联 TDD`
+
+**TDD 当前收口内容**：
+
+1. A 层：Python 前端契约测试
+   - 按钮、文案、函数入口、无新后端接口假设
+2. B 层：Node/Jest 前端行为测试
+   - latest-only 队列执行
+   - 缓存回写
+   - 当前账号不自动切换
+   - 失败不中断
+3. C 层：现有邮件接口复用契约测试
+   - `/api/emails/<email_addr>` 的必要返回字段仍满足批量拉取前端使用
+4. D 层：回归
+   - 现有批量刷新/删除/标签等批量动作不受影响
+
+**当前状态**：
+
+- Issue #55 已形成完整文档链：
+  - 本地方案文件
+  - PRD
+  - FD
+  - TD
+  - TDD
+
+---
+
+#### 241. Issue #55 技术设计起草 — TD 建立并回链 PRD/FD
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在 PRD / FD 已经形成后，继续进入 TD，明确：
+  - 改动文件落点
+  - 前端编排方式
+  - 缓存回写策略
+  - 单 worker 约束下的执行策略
+
+**本轮新增文档**：
+
+1. `docs/TD/2026-04-25-标准模式多选邮箱批量拉取TD.md`
+
+**本轮同步调整**：
+
+1. 本地方案文件新增 TD 回链
+2. PRD 新增 `关联 TD`
+3. FD 新增 `关联 TD`
+
+**TD 当前收口内容**：
+
+1. V1 不新增后端批量接口，批量编排落在 `static/js/main.js`
+2. 按钮入口落在 `templates/index.html` 的标准模式 `batchActionBar`
+3. 默认采用 latest-only 拉取：
+   - `inbox top=10`
+   - `junkemail top=10`
+4. 缓存继续复用：
+   - `emailListCache`
+   - `accountsCache`
+5. 执行上优先走串行（或后续小并发），避免单 worker 下的可用性下降
+6. 后续升级方向优先为 job/probe 化，而不是阻塞式 SSE
+
+**当前状态**：
+
+- Issue #55 已形成完整文档链：
+  - 本地方案文件
+  - PRD
+  - FD
+  - TD
+
+---
+
+#### 240. Issue #55 正式文档起草 — PRD 已建、FD 已起草
+
+**时间**：2026-04-25
+
+**本轮执行目标**：
+
+- 在本地方案文件已经收敛出最终目标形态后，正式落仓库文档体系：
+  1. 先创建 PRD
+  2. 再开始编写 FD
+
+**本轮新增文档**：
+
+1. `docs/PRD/2026-04-25-标准模式多选邮箱批量拉取PRD.md`
+2. `docs/FD/2026-04-25-标准模式多选邮箱批量拉取FD.md`
+
+**PRD 收口内容**：
+
+1. 功能定位：
+   - 标准模式下多选邮箱后的 **latest-only 批量拉取**
+2. 默认范围：
+   - `inbox + junkemail`
+3. 明确不做：
+   - 多账号混合邮件列表
+   - 自动切换当前账号
+   - 隐式批量启动
+4. 当前约束：
+   - 单 worker 架构下优先保证可用性而非整箱同步能力
+
+**FD 收口内容**：
+
+1. 沿用现有前端状态模型：
+   - `selectedAccountIds`
+   - `accountsCache`
+   - `emailListCache`
+   - `currentAccount/currentFolder`
+2. V1 复用现有 `GET /api/emails/<email_addr>`
+3. 每个账号默认拉取：
+   - `inbox top=10`
+   - `junkemail top=10`
+4. V1 不新增后端阻塞式批量接口；后续如升级，优先走 job/probe 化
+
+**当前状态**：
+
+- 本地方案文件、PRD、FD 三份文档已经对齐到同一结论
+- 后续若继续推进，可以在 FD 基础上再进入 TD / TDD
+
+---
+
+#### 239. Issue #55 最终目标形态收敛 — 标准模式多选后的 latest-only 批量拉取
+
+**时间**：2026-04-25
+
+**本轮用户新增确认**：
+
+1. 单次选择规模：
+   - **先不设上限**
+2. 用户进一步追问：
+   - 这个功能最后到底应该实现成什么样子
+
+**本轮收敛出的最终目标形态**：
+
+1. 功能入口：
+   - 位于标准模式 `batchActionBar`
+   - 用户勾选多个邮箱后点击 **“批量拉取邮件”**
+2. 功能行为：
+   - 不做整箱同步
+   - 不做多账号混合列表
+   - 而是对每个已选账号执行 **latest-only 轻量拉取**
+   - 默认范围：`inbox + junkemail`
+3. 功能产出：
+   - 将每个账号的最新拉取结果写入现有缓存
+   - 让用户后续切换这些账号时，右侧邮件区更快拿到最新数据
+   - 同时更贴合“验证码 / 最新邮件”场景
+4. 运行方式：
+   - 当前先不设选择上限
+   - 但仍维持串行或极小并发
+   - 可用性依赖“轻量拉取 + 进度反馈”，而不是高并发硬冲
+
+**当前仍保留的一个交互待确认点**：
+
+- 批量完成后，当前账号是否自动切换到某个被拉取账号
+
+---
+
+#### 238. Issue #55 方案补充约束 — 收件箱+垃圾箱 + 单 worker 可用性优先
+
+**时间**：2026-04-25
+
+**本轮新增用户判断**：
+
+1. 批量拉取默认范围明确为：
+   - **收件箱 + 垃圾箱**
+2. 用户同时指出：
+   - 如果简单照搬阻塞式批量处理，在当前**单 worker / 单进程**架构下会出现“能做但不好用”的问题
+
+**本轮因此修正的方案结论**：
+
+1. 方案 A 不再理解为“完整邮箱列表预热”
+2. 而是收敛为：
+   - **latest-only 轻量批量探测 / 预热**
+   - 优先拉取 `inbox + junkemail`
+   - 目标是更快拿到最新邮件 / 验证码相关状态，而不是同步整箱邮件
+3. 在单 worker 约束下，V1 不应新增：
+   - 后端长时间阻塞式 selected fetch 接口
+   - 大并发批量请求
+4. 若未来需要后端编排，也应优先参考现有 `probe` 模式，走：
+   - 创建任务
+   - 立即返回任务标识
+   - 由调度器轮询/推进
+   - 前端再轮询状态
+   而不是长连接占住 worker
+
+**本轮对本地方案文件的影响**：
+
+1. 默认 folder 已确定为 `inbox + junkemail`
+2. 批量执行策略已补入“latest-only + 小并发 + 单 worker 可用性约束”
+3. 后续如继续细化，重点应转向：
+   - 单次可接受的选择规模
+   - 前端进度反馈
+   - 是否需要 job/probe 化
+
+---
+
+#### 237. Issue #55 方案文档迁回仓库本地 — 改用本地实现蓝图文件
+
+**时间**：2026-04-25
+
+**本轮调整背景**：
+
+- 用户明确要求：Issue #55 的方案正文不要继续放在 `C:\\Users\\...` 的会话路径下，而要写到仓库本地。
+
+**本轮实际调整**：
+
+1. 删除原会话路径方案文件：
+   - `C:\\Users\\PLA30\\.copilot\\session-state\\0e8d7c77-3240-4aa5-ac19-afa17b16e8e1\\plan.md`
+2. 新增仓库本地方案文件：
+   - `session/files/issue55-standard-batch-fetch-plan.md`
+3. 将推荐路线正式固化为：
+   - **方案 A：标准模式批量预拉取 / 预热缓存**
+4. 在本地方案文件中补齐了 4 段实现蓝图：
+   - 前端入口
+   - 账号解析
+   - 批量执行策略
+   - 缓存回写与完成反馈
+
+**当前状态**：
+
+- 方案正文已迁到仓库本地
+- 会话路径下不再保留该方案 markdown 文件
+- 后续继续讨论 Issue #55 时，应以本地文件 `session/files/issue55-standard-batch-fetch-plan.md` 为准
+
+---
+
+#### 236. Issue #55 可实现方案拆解 — 标准模式多选下的批量预拉取优先
+
+**时间**：2026-04-25
+
+**继续分析的目标**：
+
+- 在确认 Issue #55 属于“标准模式多选邮箱”场景后，继续把它收敛成**可实现方案**，而不是停留在抽象讨论。
+
+**本轮补充核对到的关键事实**：
+
+1. 标准模式多选链路已经成熟：
+   - `selectedAccountIds`
+   - `getActiveAccountCheckboxes()`
+   - `updateBatchActionBar()`
+   - 标准模式 `batchActionBar`
+2. 现有邮件读取状态模型仍然是**单账号**：
+   - `currentAccount`
+   - `currentFolder`
+   - `currentEmails`
+   - `emailListCache[${email}_${folder}]`
+3. `syncAccountSummaryToAccountCache(...)` 虽然能更新 `latest_email_* / latest_verification_*`，但标准模式卡片当前并不直接展示这些字段，所以“批量拉取完成后的可见反馈”不能简单照搬紧凑模式。
+
+**本轮收敛后的方案判断**：
+
+1. **推荐方案**：标准模式“批量预拉取 / 预热缓存”
+   - 在批量操作栏新增“批量拉取邮件”
+   - 针对已选账号逐个或小并发拉取
+   - 将结果写入现有 `emailListCache`
+   - 保持右侧仍为单账号邮件面板
+2. **可升级方案**：后端新增 selected fetch SSE
+   - 适合后续需要统一进度、失败聚合、审计时再做
+3. **不建议方案**：多账号混合邮件列表
+   - 这会把当前增强项升级为邮件区状态模型重构
+
+**本轮文档同步**：
+
+1. 会话 `plan.md` 已由“口径纠正”升级为“方案拆解”
+2. 会话 `workspace.yaml` summary 已更新为 `Issue #55 标准模式多选邮箱批量拉取方案拆解`
+3. `WORKSPACE.md` 已补记本轮实现讨论结论
+
+---
+
+#### 235. Issue #55 评估口径更正 — 标准模式多选邮箱批量拉取
+
+**时间**：2026-04-25
+
+**本次背景**：
+
+- 用户要求重新按真实场景理解 GitHub Issue #55。
+- 初轮分析曾偏向“紧凑模式账号摘要刷新”方向，但用户补充后确认：该提议对应的是**标准模式下勾选多个邮箱后的批量拉取邮件场景**。
+
+**本次完成的上下文核对**：
+
+1. GitHub Issue #55 原文非常简短，仅写“支持下选择邮箱，批量拉取邮件功能”，语义本身存在歧义。
+2. 仓库现状已具备**标准模式多选账号**基础设施：
+   - `static/js/features/groups.js` 渲染账号卡片时已输出 `account-select-checkbox`
+   - `static/js/main.js` 已维护 `selectedAccountIds`
+   - `templates/index.html` 已存在标准模式 `batchActionBar`
+3. 现有“拉取邮件”主链路仍是**单账号模型**：
+   - `static/js/features/accounts.js` 以 `currentAccount` 驱动右侧邮件区
+   - `static/js/features/emails.js` 的 `loadEmails(email, forceRefresh)` 按单邮箱拉取
+   - 后端接口为 `/api/emails/<email_addr>`
+
+**更正后的结论**：
+
+1. Issue #55 应被归类为：**标准模式批量动作增强**，而不是紧凑模式能力增强。
+2. 如果后续实现，应优先考虑：
+   - 在标准模式批量操作栏中新增“批量拉取邮件”
+   - 复用 `selectedAccountIds` 与现有批量操作交互模式
+   - 保持右侧邮件面板仍为单账号语义，避免直接演化成“多账号混合邮件列表”
+3. 当前最稳妥的产品理解是：
+   - **批量预拉取 / 预热已选账号邮件缓存**
+   - 或 **批量刷新所选账号的最新邮件状态**
+   - 而不是一次性改造整套多账号邮件浏览模型
+
+**本次文档同步**：
+
+1. 会话 `workspace.yaml` 已更新为 Issue #55 的修正主题
+2. 会话 `plan.md` 已新增，记录当前问题、处理口径与文档落点
+3. `WORKSPACE.md` 已补记本次分析更正与操作轨迹
+
+---
+
 ## 2026-04-23
 
 ### 操作记录
@@ -663,6 +1777,60 @@
 - Docker 镜像 `outlook-email-plus:v2.3.0` 已推送至注册表
 - GitHub Release `v2.3.0` 已稳定创建
 - 无新增失败项
+
+---
+
+#### 235. 全部本地分支同步 main 最新提交
+
+**时间**：2026-04-23
+
+**操作背景**：
+用户要求将 main 分支最新提交同步到所有其他本地分支。
+
+**涉及分支与结果**：
+
+| 分支 | 位置 | 合并方式 | 冲突 | 推送状态 |
+|---|---|---|---|---|
+| `alias-email-merge` | 主仓库 | Fast-forward | 无 | ✅ 已 push |
+| `pr-48-personal-information` | 主仓库 | Fast-forward | 无 | ✅ 已 push |
+| `Buggithubissue` | worktree | Fast-forward | 无 | ✅ 已 push |
+| `feature` | worktree | Fast-forward | 无 | ✅ 已 push |
+| `dev` | worktree | Merge commit | WORKSPACE.md | ✅ 已 push（保留 main 版本） |
+
+**同步后各分支 HEAD**：
+
+| 分支 | HEAD commit |
+|---|---|
+| `main` | `2855f66` |
+| `alias-email-merge` | `2855f66` |
+| `pr-48-personal-information` | `2855f66` |
+| `Buggithubissue` | `2855f66` |
+| `feature` | `2855f66` |
+| `dev` | `151541c`（merge commit） |
+
+**当前状态**：
+- 全部 6 个分支已与 main 最新代码对齐 ✅
+- 远程所有分支均已更新
+
+---
+
+#### 236. 删除已完成的分支
+
+**时间**：2026-04-23
+
+**操作背景**：
+用户要求删除已完成合并的 `alias-email-merge` 和 `pr-48-personal-information` 分支。
+
+**执行结果**：
+
+| 分支 | 本地删除 | 远程删除 |
+|---|---|---|
+| `alias-email-merge` | ✅ | ✅ |
+| `pr-48-personal-information` | ✅ | ✅ |
+
+**当前剩余分支**：
+- 主仓库：`main`
+- Worktree：`Buggithubissue`、`dev`、`feature`
 
 ---
 

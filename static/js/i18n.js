@@ -989,7 +989,14 @@
         'Token 工具': 'Token Tool',
         '兼容账号导入模式不支持 Client Secret，请使用公共客户端并保持 Client Secret 为空': 'Client Secret is not supported. Use a public client and leave Client Secret empty.',
         '兼容账号导入模式仅支持 tenant=consumers，请使用与购买账号一致的个人 Microsoft 账号配置': 'Only tenant=consumers is supported. Use a personal Microsoft account configuration.',
-        'OAuth Token 工具': 'OAuth Token Tool'
+        'OAuth Token 工具': 'OAuth Token Tool',
+
+        // ── 批量拉取邮件（Issue #55）──
+        '批量拉取邮件': 'Batch Fetch Emails',
+        '请选择要批量拉取邮件的账号': 'Please select accounts to batch fetch emails',
+        '正在批量拉取邮件': 'Batch fetching emails',
+        '批量拉取完成': 'Batch fetch completed',
+        '收件箱 + 垃圾箱': 'Inbox + Junk'
     };
 
     // 含内联 HTML（<code>、<strong> 等）的整段翻译块

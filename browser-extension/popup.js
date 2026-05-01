@@ -457,6 +457,10 @@
 
     try {
       await navigator.clipboard.writeText(value);
+      input.classList.add('copied');
+      setTimeout(() => {
+        input.classList.remove('copied');
+      }, 1400);
       showMessage('已复制', 'success');
     } catch {
       showError('复制失败，请手动复制');
