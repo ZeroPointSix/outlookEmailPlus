@@ -146,8 +146,7 @@ def _build_account_list_where(
     normalized_search = str(search or "").strip().lower()
     if normalized_search:
         like_value = f"%{normalized_search}%"
-        where_clauses.append(
-            """
+        where_clauses.append("""
             (
                 LOWER(COALESCE(a.email, '')) LIKE ?
                 OR LOWER(COALESCE(a.remark, '')) LIKE ?
@@ -159,23 +158,20 @@ def _build_account_list_where(
                       AND LOWER(COALESCE(t_search.name, '')) LIKE ?
                 )
             )
-            """
-        )
+            """)
         params.extend([like_value, like_value, like_value])
 
     normalized_tag_ids = [int(tag_id) for tag_id in tag_ids if int(tag_id) > 0]
     if normalized_tag_ids:
         placeholders = ",".join(["?"] * len(normalized_tag_ids))
-        where_clauses.append(
-            f"""
+        where_clauses.append(f"""
             EXISTS (
                 SELECT 1
                 FROM account_tags at_filter
                 WHERE at_filter.account_id = a.id
                   AND at_filter.tag_id IN ({placeholders})
             )
-            """
-        )
+            """)
         params.extend(normalized_tag_ids)
 
     if not where_clauses:

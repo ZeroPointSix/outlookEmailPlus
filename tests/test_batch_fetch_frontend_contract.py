@@ -132,7 +132,10 @@ class BatchFetchFrontendContractTests(unittest.TestCase):
 
         self.assertIn("async function loadEmails(email, forceRefresh = false)", emails_js)
         self.assertIn("const cacheKey = `${email}_${currentFolder}`;", emails_js)
-        self.assertIn("`/api/emails/${encodeURIComponent(email)}?method=${currentMethod}&folder=${currentFolder}&skip=0&top=20`", emails_js)
+        self.assertIn(
+            "`/api/emails/${encodeURIComponent(email)}?method=${currentMethod}&folder=${currentFolder}&skip=0&top=20`",
+            emails_js,
+        )
 
     def test_selected_account_ids_semantics_unchanged(self):
         """TDD D-04：selectedAccountIds 仍是跨分组的批量选择主状态。"""
