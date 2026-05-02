@@ -16,12 +16,17 @@ CF临时邮箱接入邮箱池 — 真实 CF Worker API 端到端测试
 """
 
 import json
+import os
 import time
 import unittest
 
 from tests._import_app import clear_login_attempts, import_web_app_module
 
 
+@unittest.skipIf(
+    os.environ.get("CI") == "true",
+    "Skipping real CF Worker E2E tests in CI environment (upstream service instability)",
+)
 class RealCFWorkerE2ETests(unittest.TestCase):
     """真实 CF Worker API 端到端测试"""
 
