@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<coverage generated="1776818746573" clover="3.2.0">
-  <project timestamp="1776818746574" name="All files">
+<coverage generated="1777698811503" clover="3.2.0">
+  <project timestamp="1777698811503" name="All files">
     <metrics statements="644" coveredstatements="620" conditionals="539" coveredconditionals="446" methods="88" coveredmethods="88" elements="1271" coveredelements="1154" complexity="0" loc="644" ncloc="644" packages="1" files="2" classes="2"/>
-    <file name="layout-manager.js" path="E:\hushaokang\Data-code\outlookEmail\static\js\layout-manager.js">
+    <file name="layout-manager.js" path="E:\hushaokang\Data-code\EnsoAi\outlookEmail\Buggithubissue\static\js\layout-manager.js">
       <metrics statements="527" coveredstatements="509" conditionals="449" coveredconditionals="369" methods="75" coveredmethods="75"/>
       <line num="17" count="12" type="stmt"/>
       <line num="21" count="12" type="stmt"/>
@@ -532,7 +532,7 @@
       <line num="1404" count="12" type="cond" truecount="3" falsecount="1"/>
       <line num="1405" count="12" type="stmt"/>
     </file>
-    <file name="state-manager.js" path="E:\hushaokang\Data-code\outlookEmail\static\js\state-manager.js">
+    <file name="state-manager.js" path="E:\hushaokang\Data-code\EnsoAi\outlookEmail\Buggithubissue\static\js\state-manager.js">
       <metrics statements="117" coveredstatements="111" conditionals="90" coveredconditionals="77" methods="13" coveredmethods="13"/>
       <line num="14" count="13" type="stmt"/>
       <line num="17" count="13" type="stmt"/>

@@ -8,6 +8,52 @@
 
 ### 操作记录
 
+#### 248. Issue #56 — 本地临时提交后合并 main 并复测
+
+**时间**：2026-04-30
+
+**操作背景**：
+用户要求不要推送远程，而是在当前 `Buggithubissue` 工作区内，先把本地 `main` 合并进来，解决可能的冲突，再重新运行测试，看整套本地流程最终是否跑通。
+
+**本轮执行过程**：
+
+1. 当前工作区原本有大量未提交 Issue #56 改动，无法安全直接 merge
+2. 先创建本地临时提交：
+   - `3de287d`
+   - `wip(issue56): local temp checkpoint before merge`
+3. 执行本地合并：
+   - 将本地 `main` 合并到当前 `Buggithubissue`
+4. 本次合并仅出现 1 个人工冲突：
+   - `WORKSPACE.md`
+5. 冲突解决策略：
+   - 保留本轮 `2026-04-30` 的 Issue #56 记录
+   - 同时吸收 `main` 侧已有 `WORKSPACE` 历史
+6. 完成 merge commit：
+   - `70bbf6a`
+   - `merge: local main into Buggithubissue for verification`
+
+**合并后测试结果**：
+
+1. Python 全量：
+   - 命令：`python -m unittest discover -s tests -v`
+   - 结果：`Ran 1410 tests in 236.132s`
+   - 结论：**failures=4 / skipped=7**
+   - 剩余失败仍全部为：`tests.test_pool_cf_real_e2e.RealCFWorkerE2ETests.*`
+2. 浏览器扩展：
+   - 初次执行 `npm run test:browser-extension` 时，环境缺少 `jest`
+   - 补执行：`npm ci`
+   - 再执行：`npm run test:browser-extension`
+   - 结果：**Test Suites 3/3 passed，Tests 12/12 passed**
+
+**当前结论**：
+
+1. 本地 `main -> Buggithubissue` 合并流程已经真实走通
+2. 合并后没有出现新的本地回归失败面
+3. Python 全量剩余失败仍仅是外部 `CF Worker` 真实 E2E
+4. 浏览器扩展测试在补齐本地依赖后可正常通过
+
+---
+
 #### 247. Issue #56 — 700 条人工导入后的日志核查
 
 **时间**：2026-04-30
