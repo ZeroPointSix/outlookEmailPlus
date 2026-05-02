@@ -4,6 +4,75 @@
 
 ---
 
+## 2026-05-02
+
+### 操作记录
+
+#### 249. v2.4.0 发布助手执行记录
+
+**时间**：2026-05-02
+
+**发布背景**：
+用户确认将当前 main 分支内容发布为 `v2.4.0`，包含 Issue #55 批量拉取与 Issue #56 账号分页两大功能。
+
+**执行步骤**：
+
+1. **版本号更新**：
+   - `outlook_web/__init__.py`：`2.3.0` → `2.4.0`
+   - 本地 main 提交：`f9d811a chore(release): prepare v2.4.0`
+
+2. **日志同步**：
+   - `docs/DEVLOG.md`：新增 v2.4.0 发布记录
+   - `CHANGELOG.md`：新增 v2.4.0 发布记录
+   - 本地 main 提交：`8a24b06 docs(release): sync DEVLOG and CHANGELOG for v2.4.0`
+
+3. **产物构建**：
+   - 源码 zip：`dist/outlookEmailPlus-v2.4.0-src.zip`（4,683,056 bytes）
+   - 扩展 zip：`dist/browser-extension-v0.3.0.zip`（44,821 bytes）
+   - Docker 镜像：构建失败（Docker Desktop Linux Engine 未运行，本地环境限制）
+
+4. **GitHub Release 发布**：
+   - Tag：`v2.4.0`（已推送至远程）
+   - Release 地址：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v2.4.0`
+   - 已上传产物：源码 zip + 扩展 zip
+   - 发布说明已同步到 Release 页面
+
+5. **CI/CD 检查结果**：
+   - `Create GitHub Release`（push v2.4.0）：✅ success
+   - `Build and Push Docker Image`（push v2.4.0）：❌ failure
+     - 失败阶段：`quality-gate` → `Run formatter checks`
+     - 根因：`black --check` 发现 2 个文件需格式化：
+       - `outlook_web/repositories/accounts.py`
+       - `tests/test_batch_fetch_frontend_contract.py`
+     - `build-and-push` job 被跳过，Docker 镜像未推送
+
+6. **格式化修复**：
+   - 本地执行 `black` + `isort` 修复上述 2 个文件
+   - 本地 main 提交：`016391a style: fix black/isort formatting for v2.4.0 release`
+
+**当前状态**：
+- GitHub Release `v2.4.0` 已成功创建并附带源码 zip + 扩展 zip
+- Docker 镜像未构建/推送（本地引擎不可用 + CI 格式化门禁失败）
+- 格式化问题已在本地 main 修复，并推送至远程 main（`016391a`，`707c17e..016391a`）
+- 推送后 CI 已重新触发，待观察 `Build and Push Docker Image` 与 `Python Tests` 结果
+
+**推送后 CI 结果（2026-05-02 09:38:48Z 触发）**：
+
+| 工作流 | 状态 | 说明 |
+|--------|------|------|
+| Code Quality | ✅ success | `black --check` / `isort` / `flake8` / `bandit` 全通过 |
+| Python Tests | ❌ failure | `failures=4, skipped=9`，失败均为 `test_pool_cf_real_e2e.py`（CF Worker 上游 400） |
+| Build and Push Docker Image | ❌ failure | `quality-gate` → `Run publish gate tests` 失败；`build-and-push` job 被跳过 |
+| SonarCloud Scan | ❌ failure | 依赖 Python Tests 结果 |
+
+**Docker 镜像仍未推送的根因**：
+- 格式化问题已修复 ✅
+- 但 `publish gate tests`（即 Python 测试门禁）因 CF Worker E2E 测试失败而阻断
+- 这与本地测试失败面完全一致（`test_pool_cf_real_e2e.py` 4 个失败）
+- 根因：CF Worker 上游 `POST /admin/new_address` 返回 400，属于外部服务异常，非代码回归
+
+---
+
 ## 2026-04-30
 
 ### 操作记录
