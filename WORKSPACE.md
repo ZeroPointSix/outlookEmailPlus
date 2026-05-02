@@ -71,6 +71,14 @@
 - 这与本地测试失败面完全一致（`test_pool_cf_real_e2e.py` 4 个失败）
 - 根因：CF Worker 上游 `POST /admin/new_address` 返回 400，属于外部服务异常，非代码回归
 
+**7. CF Worker E2E 测试 CI 跳过修复**：
+- 用户指示："先放过" CF Worker E2E 测试，优先解决 Docker 镜像构建
+- 修改：`tests/test_pool_cf_real_e2e.py`
+  - 类 `RealCFWorkerE2ETests` 添加 `@unittest.skipIf(os.environ.get("CI") == "true", ...)`
+  - 在 GitHub Actions（`CI=true`）环境中自动跳过，本地仍执行
+- 本地 main 提交：`d08356d ci: skip CF Worker real E2E tests in CI environment`
+- 推送至远程 main，触发新一轮 CI（等待结果中）
+
 ---
 
 ## 2026-04-30
