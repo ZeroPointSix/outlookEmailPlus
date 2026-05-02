@@ -1,5 +1,43 @@
 # DEVLOG
 
+## v2.4.0 - Issue55 批量拉取 + Issue56 账号分页 + 扩展体验修复
+
+发布日期：2026-05-02
+
+### 新增功能
+
+- **Issue #55 批量拉取与验收修复**：
+  - 后端：`outlook_web/controllers/accounts.py` 与 `repositories/accounts.py` 扩展批量拉取能力，支持分组内批量操作。
+  - 前端：`static/js/features/groups.js` / `static/js/main.js` 新增批量操作 UI 与交互，支持一键批量拉取、状态展示与错误反馈。
+  - 测试：新增 `tests/test_batch_fetch_email_api_contract.py`（222 个用例）、`tests/test_batch_fetch_frontend_contract.py`（148 个用例）及 Jest 前端测试 `tests/batch-fetch/`，覆盖 API 契约与前端交互。
+
+- **Issue #56 账号列表分页**：
+  - 后端：`GET /api/accounts` 从全量返回升级为服务端分页，支持 `page`、`page_size`、`search`、`tag_ids`、`sort_by`、`sort_order` 参数。
+  - `outlook_web/repositories/accounts.py` 新增 `get_accounts_page()` 分页查询，避免万级账号下全量加载导致页面崩溃。
+  - 测试：新增 `tests/test_issue56_accounts_pagination.py`（214 个用例），覆盖分页边界、搜索过滤、标签筛选与排序稳定性。
+
+### 修复
+
+- **浏览器扩展体验修复**：`browser-extension/popup.html` 与 `popup.js` 微调，优化弹窗加载体验。
+- **UI 细节修复**：`static/js/features/mailbox_compact.js` 紧凑模式体验优化；`static/js/i18n.js` 补充缺失词条。
+
+### 重要变更
+
+- `Buggithubissue` 分支已合并到本地 `main`，并推送至远程 `origin/Buggithubissue`。
+- 版本号从 `2.3.0` 升级至 `2.4.0`。
+- 发布链路继续沿用 Python + Docker（Docker tar + 源码 zip），不引入 Tauri/MSI/NSIS。
+
+### 测试/验证
+
+- 全量 unittest 回归（本地 main）：
+  - `python -m unittest discover -s tests -v`
+  - 结果：`Ran 1410 tests in 476.370s`
+  - 状态：`FAILED (failures=4, skipped=7)`
+  - 唯一失败集中在 `tests/test_pool_cf_real_e2e.py`（4 个 CF Worker 真实端到端测试），根因为上游 CF Worker 接口异常（`POST /admin/new_address` 返回 400），与本次代码变更无关。
+- 布局系统 Jest 测试：15 suites / 138 tests 全通过。
+
+---
+
 ## v2.3.0 - 失效账号治理 + 前端排序修复 + 扩展体验增强
 
 发布日期：2026-04-23

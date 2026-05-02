@@ -4,6 +4,28 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.4.0] - 2026-05-02
+
+### 新增功能 / New Features
+
+- **Issue #55 批量拉取与验收修复**：后端 Controller/Repository 扩展批量拉取能力；前端 groups.js / main.js 新增批量操作 UI 与交互。新增 `test_batch_fetch_email_api_contract.py`、`test_batch_fetch_frontend_contract.py` 及 Jest 前端测试。
+- **Issue #56 账号列表分页**：`GET /api/accounts` 升级为服务端分页（`page` / `page_size` / `search` / `tag_ids` / `sort_by` / `sort_order`），Repository 层新增 `get_accounts_page()`，避免万级账号全量加载崩溃。新增 `test_issue56_accounts_pagination.py` 专项测试。
+
+### 修复 / Bug Fixes
+
+- 浏览器扩展 `popup.html` / `popup.js` 体验微调。
+- `mailbox_compact.js` 紧凑模式体验优化；`i18n.js` 补充缺失词条。
+
+### 重要变更 / Important Changes
+
+- 版本号从 `2.3.0` 升级至 `2.4.0`。
+- 发布链路继续沿用 Python + Docker（Docker tar + 源码 zip）。
+
+### 测试/验证 / Testing & Verification
+
+- 全量回归：`Ran 1410 tests in 476.370s`，`FAILED (failures=4, skipped=7)`。唯一失败为 `test_pool_cf_real_e2e.py`（CF Worker 上游异常），与本次变更无关。
+- 布局系统 Jest 测试：15 suites / 138 tests 全通过。
+
 ## [v2.3.0] - 2026-04-23
 
 ### 新增功能 / New Features
