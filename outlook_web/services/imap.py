@@ -13,13 +13,21 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from outlook_web.errors import build_error_payload
-from outlook_web.services.graph import get_access_token_graph
+from outlook_web.services.graph import (
+    IMAP_ACCESS_SCOPE,
+    IMAP_ACCESS_TOKEN_COMPATIBILITY_MODES,
+    build_token_url,
+    dedupe_token_modes,
+    get_access_token_graph,
+    get_token_mode_label,
+    parse_token_response_payload,
+)
 from outlook_web.services.http import get_response_details
 
 _LOGGER = logging.getLogger(__name__)
 
-# Token 端点
-TOKEN_URL_IMAP = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
+# 兼容旧引用：默认仍指向 consumers
+TOKEN_URL_IMAP = build_token_url("consumers")
 
 # IMAP 服务器配置
 IMAP_SERVER_NEW = "outlook.live.com"
@@ -235,7 +243,11 @@ def clear_imap_token_cache(client_id: str = None) -> None:
 
 
 def get_access_token_imap_result(client_id: str, refresh_token: str) -> Dict[str, Any]:
-    """获取 IMAP access_token（包含错误详情）"""
+    """获取 IMAP access_token（包含错误详情）。
+
+    按 consumers → common → organizations 兜底换 token，避免 AADSTS7000012
+    （grant was obtained for a different tenant）导致 Graph 失败后 IMAP 也必挂。
+    """
     cache_key = _make_cache_key(client_id, refresh_token)
     with _token_cache_lock:
         cached = _token_cache.get(cache_key)
@@ -244,62 +256,92 @@ def get_access_token_imap_result(client_id: str, refresh_token: str) -> Dict[str
             if time.monotonic() < expires_at:
                 return {"success": True, "access_token": access_token}
 
-    try:
-        res = requests.post(
-            TOKEN_URL_IMAP,
-            data={
-                "client_id": client_id,
-                "grant_type": "refresh_token",
-                "refresh_token": refresh_token,
-                "scope": "https://outlook.office.com/IMAP.AccessAsUser.All offline_access",
-            },
-            timeout=30,
-        )
+    attempts: List[Dict[str, Any]] = []
+    last_status = 400
+    for mode in dedupe_token_modes(list(IMAP_ACCESS_TOKEN_COMPATIBILITY_MODES)):
+        scope = mode.get("scope") or IMAP_ACCESS_SCOPE
+        try:
+            res = requests.post(
+                build_token_url(mode["tenant"]),
+                data={
+                    "client_id": client_id,
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "scope": scope,
+                },
+                timeout=30,
+            )
+        except Exception as exc:
+            last_status = 503
+            attempts.append(
+                {
+                    "mode": mode["mode"],
+                    "mode_label": get_token_mode_label(mode),
+                    "tenant": mode["tenant"],
+                    "scope": scope,
+                    "status": last_status,
+                    "details": {"exception": type(exc).__name__, "message": str(exc)},
+                }
+            )
+            continue
 
+        last_status = res.status_code
         if res.status_code != 200:
-            details = get_response_details(res)
-            return {
-                "success": False,
-                "error": build_error_payload(
-                    "IMAP_TOKEN_FAILED",
-                    "获取访问令牌失败",
-                    "IMAPError",
-                    res.status_code,
-                    details,
-                ),
-            }
+            attempts.append(
+                {
+                    "mode": mode["mode"],
+                    "mode_label": get_token_mode_label(mode),
+                    "tenant": mode["tenant"],
+                    "scope": scope,
+                    "status": res.status_code,
+                    "details": get_response_details(res),
+                }
+            )
+            continue
 
-        payload = res.json()
+        payload = parse_token_response_payload(res)
         access_token = payload.get("access_token")
         if not access_token:
-            return {
-                "success": False,
-                "error": build_error_payload(
-                    "IMAP_TOKEN_MISSING",
-                    "获取访问令牌失败",
-                    "IMAPError",
-                    res.status_code,
-                    payload,
-                ),
-            }
+            attempts.append(
+                {
+                    "mode": mode["mode"],
+                    "mode_label": get_token_mode_label(mode),
+                    "tenant": mode["tenant"],
+                    "scope": scope,
+                    "status": res.status_code,
+                    "details": payload,
+                }
+            )
+            continue
 
-        expires_in = int(payload.get("expires_in", 3599))
+        try:
+            expires_in = int(payload.get("expires_in", 3599))
+        except (TypeError, ValueError):
+            expires_in = 3599
         ttl = max(0, expires_in - 60)
         with _token_cache_lock:
             _token_cache[cache_key] = (access_token, time.monotonic() + ttl)
 
-        return {"success": True, "access_token": access_token}
-    except Exception as exc:
         return {
-            "success": False,
-            "error": build_error_payload(
-                "IMAP_TOKEN_EXCEPTION",
-                "获取访问令牌失败",
-                type(exc).__name__,
-                500,
-                str(exc),
-            ),
+            "success": True,
+            "access_token": access_token,
+            "refresh_token": payload.get("refresh_token"),
+            "new_refresh_token": payload.get("refresh_token"),
+            "scope": payload.get("scope", ""),
+            "token_mode": mode["mode"],
+            "token_mode_label": get_token_mode_label(mode),
         }
+
+    return {
+        "success": False,
+        "error": build_error_payload(
+            "IMAP_TOKEN_FAILED",
+            "获取访问令牌失败",
+            "IMAPError",
+            last_status,
+            {"attempts": attempts} if attempts else None,
+        ),
+    }
 
 
 def get_access_token_imap(client_id: str, refresh_token: str) -> Optional[str]:

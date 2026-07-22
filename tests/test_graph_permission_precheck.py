@@ -28,11 +28,14 @@ def _make_graph_token_response(access_token: str, scope: str = "", refresh_token
     return resp
 
 
-def _make_error_response(status: int = 400):
+def _make_error_response(status: int = 400, error: str = "invalid_grant", description: str = ""):
     resp = MagicMock()
     resp.status_code = status
-    resp.json.return_value = {"error": "invalid_grant"}
-    resp.text = '{"error":"invalid_grant"}'
+    body = {"error": error}
+    if description:
+        body["error_description"] = description
+    resp.json.return_value = body
+    resp.text = str(body)
     resp.headers = {}
     return resp
 
@@ -101,6 +104,125 @@ class TestGraphPermissionPrecheck(unittest.TestCase):
         result = get_access_token_graph_result("cid", "rt", proxy_url=None)
         self.assertFalse(result.get("success"))
         self.assertIsNone(result.get("scope"))
+
+    @patch("outlook_web.services.graph.requests.post")
+    def test_token_result_falls_back_to_named_graph_scope(self, mock_post):
+        """`.default` 无权限时，应补试新 GR 命名 scope。"""
+        from outlook_web.services.graph import (
+            DEFAULT_GRAPH_SCOPE,
+            GRAPH_NAMED_MAIL_READ_SCOPE,
+            TOKEN_MODE_GRAPH_NAMED_CONSUMERS,
+            get_access_token_graph_result,
+        )
+
+        mock_post.side_effect = [
+            _make_error_response(
+                400,
+                "invalid_request",
+                "AADSTS90023: No applicable permissions were found for this user.",
+            ),
+            _make_graph_token_response("at-new", scope="User.Read Mail.Read", refresh_token="rt-new"),
+        ]
+
+        result = get_access_token_graph_result("cid", "rt", proxy_url=None)
+
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result.get("token_mode"), TOKEN_MODE_GRAPH_NAMED_CONSUMERS)
+        self.assertEqual(result.get("new_refresh_token"), "rt-new")
+        self.assertEqual(mock_post.call_args_list[0].args[0], "https://login.microsoftonline.com/common/oauth2/v2.0/token")
+        self.assertEqual(mock_post.call_args_list[0].kwargs["data"]["scope"], DEFAULT_GRAPH_SCOPE)
+        self.assertEqual(
+            mock_post.call_args_list[1].args[0],
+            "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+        )
+        self.assertEqual(mock_post.call_args_list[1].kwargs["data"]["scope"], GRAPH_NAMED_MAIL_READ_SCOPE)
+
+    @patch("outlook_web.services.graph.requests.post")
+    def test_refresh_token_validation_prefers_new_gr_scope(self, mock_post):
+        """刷新验证默认先走供应商给的新 GR scope。"""
+        from outlook_web.services.graph import GRAPH_NAMED_MAIL_READ_SCOPE, test_refresh_token_with_rotation
+
+        mock_post.return_value = _make_graph_token_response("at-new", scope="User.Read Mail.Read", refresh_token="rt-new")
+
+        ok, error_msg, new_rt = test_refresh_token_with_rotation("cid", "rt", max_retries=0)
+
+        self.assertTrue(ok)
+        self.assertIsNone(error_msg)
+        self.assertEqual(new_rt, "rt-new")
+        self.assertEqual(
+            mock_post.call_args.args[0],
+            "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+        )
+        self.assertEqual(mock_post.call_args.kwargs["data"]["scope"], GRAPH_NAMED_MAIL_READ_SCOPE)
+
+    @patch("outlook_web.services.graph.requests.post")
+    def test_refresh_token_validation_falls_back_to_imap_scope(self, mock_post):
+        """新 GR / 老 GR 都失败时，应继续尝试 IMAP 取件 scope。"""
+        from outlook_web.services.graph import (
+            DEFAULT_GRAPH_SCOPE,
+            GRAPH_NAMED_MAIL_READ_SCOPE,
+            IMAP_ACCESS_SCOPE,
+            test_refresh_token_with_rotation,
+        )
+
+        mock_post.side_effect = [
+            _make_error_response(400, "invalid_request", "new gr failed"),
+            _make_error_response(400, "invalid_request", "old gr failed"),
+            _make_graph_token_response("imap-at", scope="IMAP.AccessAsUser.All", refresh_token="imap-rt"),
+        ]
+
+        ok, error_msg, new_rt = test_refresh_token_with_rotation("cid", "rt", max_retries=0)
+
+        self.assertTrue(ok)
+        self.assertIsNone(error_msg)
+        self.assertEqual(new_rt, "imap-rt")
+        scopes = [call.kwargs["data"]["scope"] for call in mock_post.call_args_list]
+        self.assertEqual(scopes, [GRAPH_NAMED_MAIL_READ_SCOPE, DEFAULT_GRAPH_SCOPE, IMAP_ACCESS_SCOPE])
+
+    @patch("outlook_web.services.graph.requests.post")
+    def test_token_result_falls_back_to_common_named_scope(self, mock_post):
+        """consumers 报 AADSTS7000012 时，应继续试 common 命名 scope。"""
+        from outlook_web.services.graph import (
+            GRAPH_NAMED_MAIL_READ_SCOPE,
+            TOKEN_MODE_GRAPH_NAMED_COMMON,
+            get_access_token_graph_result,
+        )
+
+        mock_post.side_effect = [
+            _make_error_response(400, "invalid_grant", "AADSTS9002313: Invalid request."),
+            _make_error_response(400, "invalid_grant", "AADSTS7000012: The grant was obtained for a different tenant."),
+            _make_error_response(400, "invalid_grant", "AADSTS7000012: The grant was obtained for a different tenant."),
+            _make_graph_token_response("at-common", scope="User.Read Mail.Read", refresh_token="rt-common"),
+        ]
+
+        result = get_access_token_graph_result("cid", "rt", proxy_url=None)
+
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result.get("token_mode"), TOKEN_MODE_GRAPH_NAMED_COMMON)
+        self.assertEqual(result.get("access_token"), "at-common")
+        self.assertEqual(
+            mock_post.call_args_list[3].args[0],
+            "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        )
+        self.assertEqual(mock_post.call_args_list[3].kwargs["data"]["scope"], GRAPH_NAMED_MAIL_READ_SCOPE)
+
+    @patch("outlook_web.services.graph.requests.post")
+    def test_token_result_continues_after_network_error(self, mock_post):
+        """首个 endpoint 网络异常时，应继续尝试后续兼容模式。"""
+        import requests
+
+        from outlook_web.services.graph import TOKEN_MODE_GRAPH_NAMED_CONSUMERS, get_access_token_graph_result
+
+        mock_post.side_effect = [
+            requests.ConnectionError("temporary network error"),
+            _make_graph_token_response("at-new", scope="User.Read Mail.Read"),
+        ]
+
+        result = get_access_token_graph_result("cid", "rt", proxy_url=None)
+
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result.get("token_mode"), TOKEN_MODE_GRAPH_NAMED_CONSUMERS)
+        self.assertEqual(mock_post.call_count, 2)
 
     # ------------------------------------------------------------------
     # get_emails_graph 跳过无权限调用

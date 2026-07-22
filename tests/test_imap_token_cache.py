@@ -183,6 +183,45 @@ class TestImapTokenCache(unittest.TestCase):
         self.assertEqual(r.get("access_token"), _ACCESS_TOKEN_2)
         self.assertEqual(mock_post.call_count, 2)
 
+    # T-08b: consumers 失败时回退到 common tenant
+    @patch("outlook_web.services.imap.requests.post")
+    def test_imap_token_falls_back_to_common_tenant(self, mock_post):
+        from outlook_web.services.graph import TOKEN_MODE_IMAP_COMMON
+        from outlook_web.services.imap import get_access_token_imap_result
+
+        mock_post.side_effect = [
+            _make_error_response(400),
+            _make_token_response(_ACCESS_TOKEN_2),
+        ]
+
+        result = get_access_token_imap_result(_CLIENT_ID_A, _REFRESH_TOKEN_A)
+
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result.get("access_token"), _ACCESS_TOKEN_2)
+        self.assertEqual(result.get("token_mode"), TOKEN_MODE_IMAP_COMMON)
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertIn("/consumers/", mock_post.call_args_list[0].args[0])
+        self.assertIn("/common/", mock_post.call_args_list[1].args[0])
+
+    @patch("outlook_web.services.imap.requests.post")
+    def test_imap_token_continues_after_network_error(self, mock_post):
+        """首个 endpoint 网络异常时，应继续尝试后续 tenant。"""
+        import requests
+
+        from outlook_web.services.graph import TOKEN_MODE_IMAP_COMMON
+        from outlook_web.services.imap import get_access_token_imap_result
+
+        mock_post.side_effect = [
+            requests.ConnectionError("temporary network error"),
+            _make_token_response(_ACCESS_TOKEN_2),
+        ]
+
+        result = get_access_token_imap_result(_CLIENT_ID_A, _REFRESH_TOKEN_A)
+
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result.get("token_mode"), TOKEN_MODE_IMAP_COMMON)
+        self.assertEqual(mock_post.call_count, 2)
+
     # T-08: endpoint 返回失败 → 不写入缓存
     @patch("outlook_web.services.imap.requests.post")
     def test_endpoint_failure_not_cached(self, mock_post):
@@ -192,12 +231,15 @@ class TestImapTokenCache(unittest.TestCase):
 
         r1 = get_access_token_imap_result(_CLIENT_ID_A, _REFRESH_TOKEN_A)
         self.assertFalse(r1.get("success"))
+        # multi-tenant 兜底：consumers/common/organizations 各试一次
+        failed_calls = mock_post.call_count
+        self.assertGreaterEqual(failed_calls, 1)
 
         # 修正后再调用应该重新请求（而不是返回缓存的失败）
         mock_post.return_value = _make_token_response(_ACCESS_TOKEN_1)
         r2 = get_access_token_imap_result(_CLIENT_ID_A, _REFRESH_TOKEN_A)
         self.assertTrue(r2.get("success"))
-        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(mock_post.call_count, failed_calls + 1)
 
 
 if __name__ == "__main__":
