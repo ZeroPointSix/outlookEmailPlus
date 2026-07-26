@@ -4,10 +4,39 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.8.0] - 2026-07-26
+
+旧前端紧急版本（Issue #115）。在 SPA 新前端迁移（#109）之前，先发布一个范围受控、可回滚的稳定旧前端版本，合入近期关键缺陷修复与验证码能力增强。
+
+### 新增功能 / New Features
+
+- **ZER-90 统一验证码提取模块（#119）**：将规则提取、选项化提取、置信度门控与对外 API 契约收口到统一模块；前端 `extract-verification` 与观测链路共用同一套提取路径，减少“页面可用但 API 行为不一致”的漂移。
+- **临时邮箱接入邮箱池（#85）**：Cloudflare 等临时邮箱可被 `claim-random` 领取并纳入邮箱池调度，扩展自动化注册场景的邮箱来源。
+- **Gunicorn 并发启动配置（#84）**：修正多 worker/线程场景下的启动与调度行为，降低高并发下整站被同步长任务拖死的概率。
+
 ### 修复 / Bug Fixes
 
-- **验证码提取大小写被篡改**：验证码提取收口处（规则分支 `_smart_extract_code_by_keywords` / `_fallback_extract_code` 及历史函数 `smart_extract_verification_code` / `fallback_extract_verification_code`，以及 AI 回退 `enhance_verification_with_ai_fallback`）不再强制 `.upper()`，`verification_code` 与 `formatted` 保持邮件原文大小写（如 `ab12cd` 不再返回 `AB12CD`）。补充回归测试。
-- **Issue #65 Watchtower 容器镜像过时**：`docker-compose.yml` 中固定 Watchtower 版本为 `containrrr/watchtower:1.7.1`，避免本地缓存的旧版镜像（内嵌 Docker 客户端 API 1.25）连接新版本 Docker Engine（要求 API 1.44+）时失败。README 新增故障排查指引。
+- **IMAP 验证码详情错配（#67）**：修复提取结果与邮件详情展示不一致的问题，避免用户看到 A 邮件内容却拿到 B 邮件验证码。
+- **验证码大小写被篡改（#103）**：规则分支与 AI 回退路径不再强制 `.upper()`，`verification_code` / `formatted` 保持邮件原文大小写（如 `ab12cd` 不再变成 `AB12CD`）。
+- **OAuth Token scope 校验（#108 / #107）**：修复 Token 工具写入账号时使用默认 scope 校验导致 `AADSTS70000` 的问题；授权与验证阶段 scope 保持一致。
+- **x.ai 连字符验证码识别（#114 / ZER-57）**：支持 `84A-KMN`、`NJF-KUU` 等带连字符验证码；修复 HTML 粘连（如 `84A-KMNIf`）与 CSS 色值 `#333333` 误识别为验证码的问题。
+- **跨文件夹选取最新验证邮件**：在多个文件夹存在验证邮件时，优先选择时间上最新的一封，降低“拿到旧验证码”的概率。
+- **验证码回退链路收敛**：减少不必要的 fallback 调用，并修复 stale-code fallback 可能返回过期验证码的问题。
+- **Watchtower 镜像版本固定（#65）**：`docker-compose.yml` 固定 `containrrr/watchtower:1.7.1`，避免旧版内嵌 Docker API 1.25 连接新版 Engine（要求 API 1.44+）失败；README 补充故障排查说明。
+
+### 重要变更 / Important Changes
+
+- **发版边界**：本版本为旧前端紧急线（#115），**不包含** SPA 新前端迁移（#109/#110/#111/#112）；性能大改（#36）与 domain claim（#105）继续延期。
+- **版本号**：`outlook_web.__version__`、健康检查 `/healthz`、系统设置与对外 API 返回的 `version` 字段统一升级为 `2.8.0`。
+- **发布门禁**：打 `v2.8.0` tag 时 CI 强制校验 `__version__` 与 `CHANGELOG.md` 段落一致（`scripts/check_release_version.py`）。
+
+### 测试/验证 / Testing & Verification
+
+- 全量回归：`python -m unittest discover -s tests -v` → **1592 passed**，skipped 9（约 146s）。
+- 发版聚焦套件：验证码提取 / OAuth / 冒烟契约等 **173 passed**。
+- 代码质量：`black --check`、`isort --check-only`、`flake8 --select=E9,F63,F7,F82`、`compileall` 全部通过。
+- 本地服务冒烟：`/healthz`、`/login`、登录后首页与静态资源、`/api/bootstrap`、`/api/settings`、`/api/accounts`、`/api/overview/summary` 均 200；x.ai 连字符样本（`84A-KMN`、粘连 `84A-KMNIf`）提取通过。
+- 合并后 CI：`Code Quality`、`Python Tests`、`Build and Push Docker Image` 在 `main@ee8d769` 均已通过。
 
 ## [v2.7.0] - 2026-05-29
 

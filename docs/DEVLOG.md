@@ -1,5 +1,38 @@
 # DEVLOG
 
+## v2.8.0 - 旧前端紧急版本（Issue #115）
+
+发布日期：2026-07-26
+
+### 新增功能
+
+- **ZER-90 统一验证码提取模块（#119）**：规则提取、选项化提取、置信度门控与对外 API 共用同一提取路径；减少页面与 API 行为漂移。
+- **临时邮箱接入邮箱池（#85）**：临时邮箱可被 `claim-random` 领取，扩展自动化注册邮箱来源。
+- **Gunicorn 并发启动配置（#84）**：修正 worker/线程场景启动行为。
+
+### 修复
+
+- **#67** IMAP 验证码详情错配。
+- **#103** 验证码保留原文大小写，不再强制 upper。
+- **#108 / #107** OAuth Token scope 校验，修复 `AADSTS70000`。
+- **#114 / ZER-57** x.ai 连字符验证码（`84A-KMN`、`NJF-KUU`、HTML 粘连、CSS `#333333` 误识别）。
+- 跨文件夹选取最新验证邮件；减少 fallback 调用；修复 stale-code fallback。
+- **#65** Watchtower 固定 `1.7.1`，避免 Docker API 版本不兼容。
+
+### 重要变更
+
+- 旧前端紧急发版线（#115），不含 SPA 新前端（#109 系列）。
+- `outlook_web.__version__` 升级为 `2.8.0`；健康检查与 API `version` 字段同步。
+- tag 构建门禁：`scripts/check_release_version.py` 校验版本与 CHANGELOG 一致。
+
+### 测试/验证
+
+- 全量回归 1592 passed（skipped 9）。
+- 发版聚焦套件 173 passed；black/isort/flake8/compileall 通过。
+- 本地 HTTP 冒烟与 x.ai 连字符样本提取通过。
+
+---
+
 ## v2.6.0 - Issue60 号池管理 MVP + i18n 完善
 
 发布日期：2026-05-19
