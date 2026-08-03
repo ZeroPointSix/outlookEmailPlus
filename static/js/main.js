@@ -3133,6 +3133,9 @@ ${details}
                     return;
                 }
 
+                // 手动入口只会调用本加载函数，因此有候选时必须同步显示治理操作区。
+                showInvalidTokenDetectionSummary(count, invalidTokenGovernanceCandidates);
+
                 // 渲染候选列表
                 const listEl = document.getElementById('invalidTokenCandidateList');
                 const listWrap = document.getElementById('invalidTokenCandidateListWrap');
