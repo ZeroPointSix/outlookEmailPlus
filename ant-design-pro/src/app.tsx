@@ -18,9 +18,9 @@ import {
   OfflineBanner,
 } from '@/components';
 import {
-  currentUser as queryCurrentUser,
   ensureCsrfToken,
   type OutlookCurrentUser,
+  currentUser as queryCurrentUser,
 } from '@/services/outlook/auth';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
@@ -141,11 +141,11 @@ export const layout: RunTimeLayoutConfig = ({
           <SettingDrawer
             disableUrlParams
             enableDarkTheme
-            collapse={!initialState?.settingDrawerOpen}
-            onCollapseChange={(collapsed) => {
+            collapse={initialState?.settingDrawerOpen}
+            onCollapseChange={(open) => {
               setInitialState((s) => ({
                 ...s,
-                settingDrawerOpen: !collapsed,
+                settingDrawerOpen: open,
               }));
             }}
             settings={initialState?.settings}
