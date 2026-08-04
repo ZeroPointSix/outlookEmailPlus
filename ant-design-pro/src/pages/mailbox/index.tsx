@@ -173,7 +173,6 @@ const MailboxPage: React.FC = () => {
     maxCount: pollMaxCount,
     acceptSettings: acceptPollSettings,
   } = usePollingSettingsDraft(getPollSettings(), loadPollSettingsFromServer);
-  const [pollSaving, setPollSaving] = useState(false);
   const [compactSearch, setCompactSearch] = useState('');
   const [compactSelected, setCompactSelected] = useState<number[]>([]);
   const [pullingEmails, setPullingEmails] = useState<Record<string, boolean>>(
@@ -487,7 +486,6 @@ const MailboxPage: React.FC = () => {
       return true;
     }
 
-    setPollSaving(true);
     try {
       const res = await updatePollingSettings(interval, maxCount);
       if (res?.success === false) {
@@ -510,8 +508,6 @@ const MailboxPage: React.FC = () => {
         ),
       );
       return false;
-    } finally {
-      setPollSaving(false);
     }
   };
 
