@@ -4,6 +4,13 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.9.5] - 2026-08-05
+
+### 修复 / Bug Fixes
+
+- **ZER-381 无代理场景错误误分类**：仅在分组明确配置 `proxy_url` 时，才将 Graph 的 `ProxyError`/`ConnectionError` 判定为 `EMAIL_PROXY_CONNECTION_FAILED` / `PROXY_ERROR` 并跳过 IMAP 回退；无代理时继续 Graph → IMAP 回退，避免把直连上游失败误报为“请检查分组代理设置”。覆盖 `/api/emails`、external messages 与删除邮件回退路径。
+- **主题抽屉开关语义**：修正 Ant Design Pro `SettingDrawer` 的 `collapse` 开合状态接线，避免抽屉默认展开或点“主题设置”反而关闭。
+
 ## [v2.8.0] - 2026-07-26
 
 旧前端紧急版本（Issue #115）。在 SPA 新前端迁移（#109）之前，先发布一个范围受控、可回滚的稳定旧前端版本，合入近期关键缺陷修复与验证码能力增强。

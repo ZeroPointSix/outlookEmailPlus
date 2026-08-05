@@ -184,6 +184,7 @@ class ErrorAndTraceTests(unittest.TestCase):
 
         # 控制器现在使用 repositories 和 services，需要 mock 这些模块
         from outlook_web.repositories import accounts as accounts_repo
+        from outlook_web.repositories import groups as groups_repo
         from outlook_web.services import graph as graph_service
         from outlook_web.services import imap as imap_service
 
@@ -195,8 +196,13 @@ class ErrorAndTraceTests(unittest.TestCase):
                     "email": email_addr,
                     "client_id": "cid",
                     "refresh_token": "rt",
-                    "group_id": None,
+                    "group_id": 1,
                 },
+            ),
+            patch.object(
+                groups_repo,
+                "get_group_by_id",
+                return_value={"proxy_url": "http://proxy.test:8080"},
             ),
             patch.object(
                 graph_service,

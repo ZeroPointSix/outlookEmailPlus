@@ -1322,6 +1322,16 @@ class ExternalApiMessageErrorTests(ExternalApiBaseTest):
             "error": {"type": "ProxyError", "message": "Proxy connection failed"},
         }
 
+        with self.app.app_context():
+            from outlook_web.db import get_db
+
+            db = get_db()
+            db.execute(
+                "UPDATE groups SET proxy_url = ? WHERE id = 1",
+                ("http://proxy.test:8080",),
+            )
+            db.commit()
+
         client = self.app.test_client()
         resp = client.get(
             f"/api/external/messages?email={email_addr}",
@@ -1350,6 +1360,16 @@ class ExternalApiMessageErrorTests(ExternalApiBaseTest):
             ),
         }
 
+        with self.app.app_context():
+            from outlook_web.db import get_db
+
+            db = get_db()
+            db.execute(
+                "UPDATE groups SET proxy_url = ? WHERE id = 1",
+                ("http://proxy.test:8080",),
+            )
+            db.commit()
+
         client = self.app.test_client()
         resp = client.get(
             f"/api/external/messages?email={email_addr}",
@@ -1364,6 +1384,32 @@ class ExternalApiMessageErrorTests(ExternalApiBaseTest):
             json.loads(audit_logs[-1]["details"]) if isinstance(audit_logs[-1]["details"], str) else audit_logs[-1]["details"]
         )
         self.assertEqual(details.get("code"), "PROXY_ERROR")
+
+    @patch("outlook_web.services.imap.get_emails_imap_with_server")
+    @patch("outlook_web.services.graph.get_emails_graph")
+    def test_direct_connection_error_without_proxy_falls_back_to_imap(self, mock_graph, mock_imap):
+        """无分组代理时，Graph ConnectionError 应继续 IMAP 回退，而不是 PROXY_ERROR。"""
+        email_addr = self._insert_outlook_account()
+        self._set_external_api_key("abc123")
+        mock_graph.return_value = {
+            "success": False,
+            "error": {
+                "type": "ConnectionError",
+                "message": "direct connection failed",
+                "code": "GRAPH_TOKEN_EXCEPTION",
+            },
+        }
+        mock_imap.return_value = {"success": False, "error": {"message": "imap failed"}}
+
+        client = self.app.test_client()
+        resp = client.get(
+            f"/api/external/messages?email={email_addr}",
+            headers=self._auth_headers(),
+        )
+
+        self.assertEqual(mock_imap.call_count, 2)
+        self.assertEqual(resp.status_code, 502)
+        self.assertEqual(resp.get_json().get("code"), "UPSTREAM_READ_FAILED")
 
     @patch("outlook_web.services.external_api.get_email_detail_imap_generic_result")
     def test_imap_detail_nested_error_uses_final_public_code_in_response_and_audit(self, mock_detail_result):

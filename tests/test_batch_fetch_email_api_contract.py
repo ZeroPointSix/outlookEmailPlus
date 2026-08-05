@@ -113,16 +113,23 @@ class BatchFetchEmailApiContractTests(unittest.TestCase):
             },
         },
     )
+    @patch(
+        "outlook_web.controllers.emails.groups_repo.get_group_by_id",
+        return_value={"proxy_url": "http://proxy.test:8080"},
+    )
     @patch("outlook_web.controllers.emails.accounts_repo.get_account_by_email")
     def test_email_api_failure_payload_remains_compatible_with_batch_failure_aggregation(
         self,
         mock_get_account_by_email,
+        _mock_get_group_by_id,
         _mock_graph_get_emails,
         mock_imap_get_emails,
     ):
         """TDD C-03：失败响应应继续遵循统一错误结构。"""
         email_addr = "batch-failure@example.com"
-        mock_get_account_by_email.return_value = self._build_outlook_account(email_addr)
+        account = self._build_outlook_account(email_addr)
+        account["group_id"] = 1
+        mock_get_account_by_email.return_value = account
 
         client = self.app.test_client()
         self._login(client)
@@ -136,6 +143,48 @@ class BatchFetchEmailApiContractTests(unittest.TestCase):
         self.assertEqual(data.get("error", {}).get("code"), "EMAIL_PROXY_CONNECTION_FAILED")
         self.assertEqual(data.get("status"), 502)
         self.assertTrue(data.get("trace_id"))
+
+    @patch(
+        "outlook_web.controllers.emails.imap_service.get_emails_imap_with_server",
+        return_value={
+            "success": False,
+            "error": {"message": "imap connection failed"},
+        },
+    )
+    @patch(
+        "outlook_web.controllers.emails.graph_service.get_emails_graph",
+        return_value={
+            "success": False,
+            "error": {
+                "code": "GRAPH_TOKEN_EXCEPTION",
+                "message": "direct connection failed",
+                "type": "ConnectionError",
+                "status": 500,
+            },
+        },
+    )
+    @patch("outlook_web.controllers.emails.accounts_repo.get_account_by_email")
+    def test_direct_connection_error_without_group_proxy_falls_back_to_imap(
+        self,
+        mock_get_account_by_email,
+        _mock_graph_get_emails,
+        mock_imap_get_emails,
+    ):
+        """无分组代理时，Graph ConnectionError 应回退 IMAP，而不是误报代理失败。"""
+        email_addr = "direct-failure@example.com"
+        mock_get_account_by_email.return_value = self._build_outlook_account(email_addr)
+
+        client = self.app.test_client()
+        self._login(client)
+        resp = client.get(f"/api/emails/{email_addr}?folder=inbox&skip=0&top=10")
+
+        self.assertEqual(mock_imap_get_emails.call_count, 2)
+        self.assertEqual(resp.status_code, 502)
+        data = resp.get_json()
+        self.assertEqual(
+            data.get("error", {}).get("code"),
+            "EMAIL_FETCH_ALL_METHODS_FAILED",
+        )
 
     @patch("outlook_web.controllers.emails.accounts_repo.touch_last_refresh_at", return_value=True)
     @patch(

@@ -68,7 +68,8 @@ def delete_emails_with_fallback(
 
     graph_error = graph_res.get("error")
     graph_errors_list = graph_res.get("errors") or []
-    is_proxy_error = (
+    # 无代理配置时，ConnectionError/ProxyError 不应阻断 IMAP 回退。
+    is_proxy_error = bool(proxy_url) and (
         (isinstance(graph_error, dict) and graph_error.get("type") in ("ProxyError", "ConnectionError"))
         or (isinstance(graph_error, str) and "ProxyError" in graph_error)
         or any("ProxyError" in str(x) for x in graph_errors_list[:5])
