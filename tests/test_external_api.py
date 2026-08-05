@@ -1401,6 +1401,14 @@ class ExternalApiMessageErrorTests(ExternalApiBaseTest):
         }
         mock_imap.return_value = {"success": False, "error": {"message": "imap failed"}}
 
+        # 清理同文件前序用例可能写到默认分组上的 proxy_url。
+        with self.app.app_context():
+            from outlook_web.db import get_db
+
+            db = get_db()
+            db.execute("UPDATE groups SET proxy_url = NULL WHERE id = 1")
+            db.commit()
+
         client = self.app.test_client()
         resp = client.get(
             f"/api/external/messages?email={email_addr}",
