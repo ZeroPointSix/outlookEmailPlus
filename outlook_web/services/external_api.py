@@ -541,11 +541,7 @@ def list_messages_for_external(
 
     graph_error = graph_result.get("error")
     # 仅分组配置了代理时，才将代理/连接异常升级为 PROXY_ERROR 并中断 IMAP 回退。
-    if (
-        proxy_url
-        and isinstance(graph_error, dict)
-        and graph_error.get("type") in ("ProxyError", "ConnectionError")
-    ):
+    if proxy_url and isinstance(graph_error, dict) and graph_error.get("type") in ("ProxyError", "ConnectionError"):
         raise ProxyError("代理连接失败", data=graph_error)
 
     # Graph 失败 → IMAP(New) → IMAP(Old) 回退
