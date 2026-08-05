@@ -11,6 +11,7 @@ from outlook_web.services.http import get_response_details
 TOKEN_URL_TEMPLATE = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
 TOKEN_URL_GRAPH = TOKEN_URL_TEMPLATE.format(tenant="common")
 DEFAULT_GRAPH_SCOPE = "https://graph.microsoft.com/.default"
+DEFAULT_REFRESH_SCOPE = f"{DEFAULT_GRAPH_SCOPE} offline_access"
 GRAPH_MAIL_READ_SCOPES = ("Mail.Read", "Mail.ReadWrite")
 
 # Graph API 返回 401 时表示账号授权失效（与 token endpoint 失败不同）
@@ -266,7 +267,7 @@ def test_refresh_token_with_rotation(
     proxy_url: str = None,
     *,
     tenant: str = "common",
-    scope: str = DEFAULT_GRAPH_SCOPE,
+    scope: str = DEFAULT_REFRESH_SCOPE,
     max_retries: int = 3,
 ) -> tuple[bool, str | None, str | None]:
     """测试 refresh token 是否有效；如服务端返回新的 refresh_token，则一并返回（用于滚动更新）。
@@ -274,7 +275,7 @@ def test_refresh_token_with_rotation(
     import time
 
     proxies = build_proxies(proxy_url)
-    resolved_scope = (scope or DEFAULT_GRAPH_SCOPE).strip() or DEFAULT_GRAPH_SCOPE
+    resolved_scope = (scope or DEFAULT_REFRESH_SCOPE).strip() or DEFAULT_REFRESH_SCOPE
     url = build_token_url(tenant)
     data = {
         "client_id": client_id,
