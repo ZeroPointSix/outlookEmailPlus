@@ -20,6 +20,7 @@ data/
 
 # 环境变量
 .env
+daytona/.env.local
 
 # IDE 配置
 .vscode/
@@ -55,8 +56,14 @@ TODO.md
 
 # Node.js
 node_modules/
-package.json
-package-lock.json
+# 根目录 Jest 本地工具链（不入库）；ant-design-pro 前端工程单独跟踪
+/package.json
+/package-lock.json
+ant-design-pro/node_modules/
+ant-design-pro/dist/
+ant-design-pro/src/.umi/
+ant-design-pro/src/.umi-production/
+ant-design-pro/.swc/
 
 # 临时文件
 *.log

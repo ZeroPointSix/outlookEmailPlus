@@ -1,0 +1,49 @@
+name: Refresh Daytona Snapshot
+
+on:
+  push:
+    branches: [main, master, dev]
+    paths:
+      - '**.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - 'templates/**'
+      - 'static/**'
+      - 'daytona/**'
+      - '.github/workflows/daytona-snapshot.yml'
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Daytona CLI
+        run: |
+          curl -fL https://github.com/daytona/clients/releases/latest/download/daytona-linux-amd64 -o /tmp/daytona
+          chmod +x /tmp/daytona
+          sudo mv /tmp/daytona /usr/local/bin/daytona
+
+      - name: Login to Daytona
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        run: |
+          if [ -z "$DAYTONA_API_KEY" ]; then
+            echo "缺少 GitHub Secret: DAYTONA_API_KEY（在仓库 Settings -> Secrets 中配置）"
+            exit 1
+          fi
+          daytona login --api-key "$DAYTONA_API_KEY"
+
+      - name: Refresh snapshot
+        run: bash daytona/snapshot.sh
+
+      - name: Refresh sandbox and start app
+        env:
+          OEMP_SECRET_KEY: ${{ secrets.OEMP_SECRET_KEY }}
+          OEMP_LOGIN_PASSWORD: ${{ secrets.OEMP_LOGIN_PASSWORD }}
+        run: |
+          bash daytona/sandbox.sh
+          bash daytona/app.sh start
