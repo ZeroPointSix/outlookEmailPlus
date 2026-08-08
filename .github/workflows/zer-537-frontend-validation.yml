@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - codex/zer-537-frontend-ci
+  pull_request:
+    branches:
+      - codex/zer-537-api-key-flow
 
 permissions:
   contents: read
