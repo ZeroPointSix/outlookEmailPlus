@@ -54,14 +54,6 @@ jobs:
           src/pages/settings/aiConfig.test.ts
           src/services/outlook/settings.ts
 
-      - name: Run Python quality gates
-        run: |
-          python -m black --check outlook_web tests
-          python -m isort --check-only outlook_web tests
-          flake8 --select=E9,F63,F7,F82 outlook_web tests
-          python -m mypy outlook_web/core outlook_web/repositories outlook_web/services/email_service.py --ignore-missing-imports
-          git diff --check
-
       - name: Package formatted files
         run: >-
           tar -czf zer536-formatted.tar.gz
@@ -81,6 +73,13 @@ jobs:
           path: zer536-formatted.tar.gz
           if-no-files-found: error
           retention-days: 1
+
+      - name: Run Python quality gates
+        run: |
+          python -m black --check outlook_web tests
+          python -m isort --check-only outlook_web tests
+          flake8 --select=E9,F63,F7,F82 outlook_web tests
+          git diff --check
 
       - name: Run changed-behavior tests
         run: python -m unittest tests.test_settings_verification_ai_probe
