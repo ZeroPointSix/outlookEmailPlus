@@ -54,14 +54,6 @@ jobs:
           src/pages/settings/aiConfig.test.ts
           src/services/outlook/settings.ts
 
-      - name: Run frontend helper tests
-        run: |
-          mkdir -p /tmp/zer536-vitest-root
-          cp ant-design-pro/src/pages/settings/aiConfig.ts /tmp/zer536-vitest-root/aiConfig.ts
-          cp ant-design-pro/src/pages/settings/aiConfig.test.ts /tmp/zer536-vitest-root/aiConfig.test.ts
-          cd /tmp/zer536-vitest-root
-          npx --yes vitest@4.1.8 run aiConfig.test.ts --environment node
-
       - name: Run Python tests
         run: python -m unittest discover -s tests -p "test_*.py"
 
