@@ -1287,9 +1287,7 @@ def api_test_verification_ai() -> Any:
 
     saved_api_key = settings_repo.get_verification_ai_api_key()
     submitted_api_key = str(data.get("verification_ai_api_key") or "").strip()
-    if not submitted_api_key or (
-        saved_api_key and submitted_api_key == _mask_secret_value(saved_api_key)
-    ):
+    if not submitted_api_key or (saved_api_key and submitted_api_key == _mask_secret_value(saved_api_key)):
         submitted_api_key = saved_api_key
 
     ai_config = {

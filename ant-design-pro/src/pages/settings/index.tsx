@@ -34,7 +34,6 @@ import {
 } from '@/hooks/useUnsavedChangesGuard';
 import {
   type ExternalApiKeyItem,
-  type VerificationAiTestResponse,
   fetchDeploymentInfo,
   fetchSettings,
   normalizePollingSettings,
@@ -50,14 +49,15 @@ import {
   testWebhook,
   triggerSystemUpdate,
   updateSettings,
+  type VerificationAiTestResponse,
   validateCron,
 } from '@/services/outlook/settings';
 import {
   inferVerificationAiProvider,
   normalizeVerificationAiEndpoint,
   OPENAI_VERIFICATION_AI_BASE_URL,
-  type VerificationAiProvider,
   VERIFICATION_AI_MODEL_OPTIONS,
+  type VerificationAiProvider,
 } from './aiConfig';
 
 type KeyRow = ExternalApiKeyItem & { _localId: string };
@@ -820,10 +820,7 @@ const SettingsPage: React.FC = () => {
                   >
                     <Switch />
                   </Form.Item>
-                  <Form.Item
-                    name="verification_ai_provider"
-                    label="Provider"
-                  >
+                  <Form.Item name="verification_ai_provider" label="Provider">
                     <Select
                       onChange={onAiProviderChange}
                       options={[
