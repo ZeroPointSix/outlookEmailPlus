@@ -24,9 +24,7 @@ class SettingsVerificationAiProbeTests(unittest.TestCase):
             clear_login_attempts()
             from outlook_web.repositories import settings as settings_repo
 
-            self.previous_ai_settings = {
-                key: settings_repo.get_setting(key) for key in self.AI_SETTING_KEYS
-            }
+            self.previous_ai_settings = {key: settings_repo.get_setting(key) for key in self.AI_SETTING_KEYS}
             self.addCleanup(self._restore_ai_settings)
             settings_repo.set_setting("verification_ai_enabled", "true")
             settings_repo.set_setting("verification_ai_base_url", "")
