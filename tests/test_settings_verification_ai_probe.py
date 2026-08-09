@@ -7,6 +7,13 @@ from tests._import_app import clear_login_attempts, import_web_app_module
 
 
 class SettingsVerificationAiProbeTests(unittest.TestCase):
+    AI_SETTING_KEYS = (
+        "verification_ai_enabled",
+        "verification_ai_base_url",
+        "verification_ai_api_key",
+        "verification_ai_model",
+    )
+
     @classmethod
     def setUpClass(cls):
         cls.module = import_web_app_module()
@@ -17,10 +24,21 @@ class SettingsVerificationAiProbeTests(unittest.TestCase):
             clear_login_attempts()
             from outlook_web.repositories import settings as settings_repo
 
+            self.previous_ai_settings = {
+                key: settings_repo.get_setting(key) for key in self.AI_SETTING_KEYS
+            }
+            self.addCleanup(self._restore_ai_settings)
             settings_repo.set_setting("verification_ai_enabled", "true")
             settings_repo.set_setting("verification_ai_base_url", "")
             settings_repo.set_setting("verification_ai_api_key", "")
             settings_repo.set_setting("verification_ai_model", "")
+
+    def _restore_ai_settings(self):
+        with self.app.app_context():
+            from outlook_web.repositories import settings as settings_repo
+
+            for key, value in self.previous_ai_settings.items():
+                settings_repo.set_setting(key, value)
 
     def _login(self, client):
         resp = client.post("/login", json={"password": "testpass123"})
