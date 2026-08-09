@@ -1,7 +1,5 @@
 import {
   AppstoreOutlined,
-  CheckCircleOutlined,
-  ExclamationCircleOutlined,
   MailOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -15,7 +13,6 @@ import {
   Button,
   Empty,
   Form,
-  Grid,
   Input,
   List,
   Select,
@@ -40,19 +37,13 @@ import {
   type TempEmailMessage,
 } from '@/services/outlook/tempEmails';
 import { MailboxActions } from './MailboxActions';
+import { TempMailStatus } from './TempMailStatus';
 import {
   getMailboxProviderPresentation,
   providerKindLabel,
   resolveTempMailAvailability,
 } from './utils';
 import { history, useIntl } from '@umijs/max';
-
-const CAPABILITY_LABELS = [
-  ['create_mailbox', '生成邮箱'],
-  ['list_messages', '读取邮件'],
-  ['delete_mailbox', '远端删除'],
-  ['clear_messages', '清空邮件'],
-] as const;
 
 function formatDate(value?: string | number) {
   if (value === undefined || value === null || value === '') return '--';
@@ -74,8 +65,6 @@ const TempEmailsPage: React.FC = () => {
   const intl = useIntl();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
-  const screens = Grid.useBreakpoint();
-  const isCompactLayout = screens.sm === false;
 
   const [providerName, setProviderName] = useState<string | undefined>();
   const [selectedEmail, setSelectedEmail] = useState<string | undefined>();
@@ -319,7 +308,7 @@ const TempEmailsPage: React.FC = () => {
   }, [detail]);
 
   const tempMailActionButtons = (
-    <Space wrap style={isCompactLayout ? { width: '100%' } : undefined}>
+    <Space wrap>
       <Button
         size="small"
         icon={<SettingOutlined />}
@@ -357,64 +346,10 @@ const TempEmailsPage: React.FC = () => {
         </Button>
       }
     >
-      <Alert
-        type={
-          availability.state === 'ready'
-            ? 'success'
-            : availability.state === 'loading'
-              ? 'info'
-              : 'warning'
-        }
-        showIcon
-        style={{ marginBottom: 16 }}
-        message={
-          <Space
-            direction={isCompactLayout ? 'vertical' : 'horizontal'}
-            wrap
-            size={isCompactLayout ? 4 : undefined}
-          >
-            <Typography.Text strong>临时邮箱服务</Typography.Text>
-            <Tag color={availability.state === 'ready' ? 'success' : 'warning'}>
-              {availability.state === 'ready'
-                ? '已启用'
-                : availability.state === 'loading'
-                  ? '检查中'
-                  : '需配置'}
-            </Tag>
-            {tempOptions?.provider_label || tempOptions?.provider_name ? (
-              <Tag>{tempOptions.provider_label || tempOptions.provider_name}</Tag>
-            ) : null}
-            {tempOptions?.provider_kind ? (
-              <Tag>{providerKindLabel(tempOptions.provider_kind)}</Tag>
-            ) : null}
-          </Space>
-        }
-        description={
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
-            <Typography.Text type="secondary">{availability.message}</Typography.Text>
-            {tempOptions?.capabilities ? (
-              <Space wrap size={[4, 4]}>
-                {CAPABILITY_LABELS.map(([key, label]) => {
-                  const supported = tempOptions.capabilities?.[key];
-                  if (supported === undefined) return null;
-                  return (
-                    <Tag
-                      key={key}
-                      color={supported ? 'success' : 'default'}
-                      icon={
-                        supported ? <CheckCircleOutlined /> : <ExclamationCircleOutlined />
-                      }
-                    >
-                      {supported ? label : `不支持${label}`}
-                    </Tag>
-                  );
-                })}
-              </Space>
-            ) : null}
-            {isCompactLayout ? tempMailActionButtons : null}
-          </Space>
-        }
-        action={isCompactLayout ? undefined : tempMailActionButtons}
+      <TempMailStatus
+        availability={availability}
+        options={tempOptions}
+        actions={tempMailActionButtons}
       />
 
       <ProCard
