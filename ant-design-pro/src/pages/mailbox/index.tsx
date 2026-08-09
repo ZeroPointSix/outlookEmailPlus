@@ -35,7 +35,6 @@ import {
   Typography,
   theme,
 } from 'antd';
-import type { MenuProps } from 'antd';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ResizableWorkbench from '@/components/MailboxLayout/ResizableWorkbench';
 import MailboxFolderSwitch, {
