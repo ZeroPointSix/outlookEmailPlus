@@ -1,4 +1,5 @@
 import {
+  ApiOutlined,
   DeleteOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -12,6 +13,7 @@ import { useIntl } from '@umijs/max';
 import {
   Alert,
   App,
+  AutoComplete,
   Button,
   Form,
   Input,
@@ -47,10 +49,29 @@ import {
   testWebhook,
   triggerSystemUpdate,
   updateSettings,
+  type VerificationAiTestResponse,
   validateCron,
 } from '@/services/outlook/settings';
+import {
+  inferVerificationAiProvider,
+  normalizeVerificationAiEndpoint,
+  OPENAI_VERIFICATION_AI_BASE_URL,
+  VERIFICATION_AI_MODEL_OPTIONS,
+  type VerificationAiProvider,
+} from './aiConfig';
 
 type KeyRow = ExternalApiKeyItem & { _localId: string };
+
+const AI_ERROR_CATEGORY_LABELS: Record<string, string> = {
+  authentication: 'API Key / 权限',
+  configuration: '配置',
+  contract: '返回契约',
+  endpoint: 'URL / 路径',
+  network: '网络',
+  protocol: 'API 类型',
+  rate_limit: '限流 / 额度',
+  server: '服务端',
+};
 
 const newLocalId = () =>
   `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -71,6 +92,17 @@ const SettingsPage: React.FC = () => {
   const [deploymentLoading, setDeploymentLoading] = useState(false);
   const [updateLoading, setUpdateLoading] = useState(false);
   const [cfSyncLoading, setCfSyncLoading] = useState(false);
+  const [aiTestLoading, setAiTestLoading] = useState(false);
+  const [aiTestResult, setAiTestResult] =
+    useState<VerificationAiTestResponse | null>(null);
+  const aiProvider =
+    (Form.useWatch('verification_ai_provider', form) as
+      | VerificationAiProvider
+      | undefined) || 'openai_compatible';
+  const aiBaseUrl = String(
+    Form.useWatch('verification_ai_base_url', form) || '',
+  );
+  const aiEnabled = !!Form.useWatch('verification_ai_enabled', form);
 
   const settingsQuery = useQuery({
     queryKey: ['settings'],
@@ -173,6 +205,9 @@ const SettingsPage: React.FC = () => {
       telegram_poll_interval: Number(s.telegram_poll_interval || 600),
       telegram_proxy_url: s.telegram_proxy_url || '',
       verification_ai_enabled: !!s.verification_ai_enabled,
+      verification_ai_provider: inferVerificationAiProvider(
+        s.verification_ai_base_url || '',
+      ),
       verification_ai_base_url: s.verification_ai_base_url || '',
       verification_ai_model: s.verification_ai_model || '',
       verification_ai_api_key: masks.verification_ai_api_key,
@@ -246,6 +281,7 @@ const SettingsPage: React.FC = () => {
           : 'false',
         use_cron_schedule: values.use_cron_schedule ? 'true' : 'false',
       };
+      delete payload.verification_ai_provider;
 
       // 敏感字段：空串 / 仍等于脱敏占位 → 不提交，避免误清空
       const secretKeys = [
@@ -384,6 +420,72 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const onAiProviderChange = (provider: VerificationAiProvider) => {
+    const currentModel = String(
+      form.getFieldValue('verification_ai_model') || '',
+    ).trim();
+    if (provider === 'openai') {
+      form.setFieldsValue({
+        verification_ai_base_url: OPENAI_VERIFICATION_AI_BASE_URL,
+        verification_ai_model: currentModel || 'gpt-4.1-mini',
+      });
+    } else if (
+      inferVerificationAiProvider(
+        String(form.getFieldValue('verification_ai_base_url') || ''),
+      ) === 'openai'
+    ) {
+      form.setFieldValue('verification_ai_base_url', '');
+    }
+    setAiTestResult(null);
+    setDirty(true);
+  };
+
+  const runVerificationAiTest = async () => {
+    const values = await form
+      .validateFields([
+        'verification_ai_base_url',
+        'verification_ai_model',
+        'verification_ai_api_key',
+      ])
+      .catch(() => null);
+    if (!values) return;
+
+    setAiTestLoading(true);
+    setAiTestResult(null);
+    try {
+      const result = await testVerificationAi({
+        verification_ai_enabled: aiEnabled,
+        verification_ai_base_url: values.verification_ai_base_url,
+        verification_ai_model: values.verification_ai_model,
+        verification_ai_api_key: values.verification_ai_api_key,
+      });
+      setAiTestResult(result);
+      if (result.ok && result.contract_ok) {
+        message.success('AI 连接与验证码提取契约均正常');
+      } else if (result.connectivity_ok) {
+        message.warning('AI 服务可连接，但返回契约需要检查');
+      } else {
+        message.error(result.probe?.message || 'AI 连接测试失败');
+      }
+    } catch (error: any) {
+      const payload = error?.data || error?.info || error?.response?.data;
+      setAiTestResult({
+        success: false,
+        ok: false,
+        message: pickSettingsError(
+          payload,
+          error?.message || 'AI 连接测试失败',
+        ),
+        probe: payload?.probe,
+      });
+      message.error(
+        pickSettingsError(payload, error?.message || 'AI 连接测试失败'),
+      );
+    } finally {
+      setAiTestLoading(false);
+    }
+  };
+
   const updateKeyRow = (localId: string, patch: Partial<KeyRow>) => {
     setKeyRows((rows) =>
       rows.map((r) => (r._localId === localId ? { ...r, ...patch } : r)),
@@ -418,6 +520,20 @@ const SettingsPage: React.FC = () => {
   };
 
   const sMeta = settingsQuery.data?.settings || {};
+  const aiProbe = aiTestResult?.probe || {};
+  const aiTestAlertType: 'success' | 'warning' | 'error' =
+    aiTestResult?.ok && aiTestResult?.contract_ok
+      ? 'success'
+      : aiTestResult?.connectivity_ok
+        ? 'warning'
+        : 'error';
+  const aiTestAlertMessage =
+    aiTestAlertType === 'success'
+      ? '连接与返回契约均正常'
+      : aiTestAlertType === 'warning'
+        ? '服务可连接，但返回契约需要检查'
+        : aiProbe.message || aiTestResult?.message || '连接测试失败';
+  const resolvedAiEndpoint = normalizeVerificationAiEndpoint(aiBaseUrl);
 
   return (
     <PageContainer
@@ -704,15 +820,76 @@ const SettingsPage: React.FC = () => {
                   >
                     <Switch />
                   </Form.Item>
-                  <Form.Item name="verification_ai_base_url" label="Base URL">
-                    <Input />
+                  <Form.Item name="verification_ai_provider" label="Provider">
+                    <Select
+                      onChange={onAiProviderChange}
+                      options={[
+                        { value: 'openai', label: 'OpenAI' },
+                        {
+                          value: 'openai_compatible',
+                          label: 'OpenAI Compatible',
+                        },
+                      ]}
+                    />
                   </Form.Item>
-                  <Form.Item name="verification_ai_model" label="模型">
-                    <Input />
+                  <Form.Item
+                    name="verification_ai_base_url"
+                    label="Base URL"
+                    rules={[
+                      { required: aiEnabled, message: '请填写 Base URL' },
+                      {
+                        type: 'url',
+                        message: '请输入完整的 http:// 或 https:// 地址',
+                      },
+                    ]}
+                    extra={
+                      aiProvider === 'openai' ? (
+                        'OpenAI 固定使用 https://api.openai.com/v1；系统调用 /chat/completions。'
+                      ) : (
+                        <Space direction="vertical" size={0}>
+                          <Typography.Text type="secondary">
+                            填写 API 根路径（建议包含 /v1）或完整
+                            /chat/completions；系统只在末尾缺失时补充
+                            /chat/completions。
+                          </Typography.Text>
+                          {resolvedAiEndpoint ? (
+                            <Typography.Text type="secondary">
+                              实际请求地址：
+                              <Typography.Text code>
+                                {resolvedAiEndpoint}
+                              </Typography.Text>
+                            </Typography.Text>
+                          ) : null}
+                        </Space>
+                      )
+                    }
+                  >
+                    <Input
+                      disabled={aiProvider === 'openai'}
+                      placeholder="https://api.example.com/v1"
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="verification_ai_model"
+                    label="模型"
+                    rules={[
+                      { required: aiEnabled, message: '请选择或填写模型 ID' },
+                    ]}
+                  >
+                    <AutoComplete
+                      options={VERIFICATION_AI_MODEL_OPTIONS}
+                      placeholder="选择常用模型或输入兼容服务的模型 ID"
+                      filterOption={(input, option) =>
+                        String(option?.value || '')
+                          .toLowerCase()
+                          .includes(input.toLowerCase())
+                      }
+                    />
                   </Form.Item>
                   <Form.Item
                     name="verification_ai_api_key"
                     label="API Key"
+                    rules={[{ required: aiEnabled, message: '请填写 API Key' }]}
                     extra={
                       sMeta.verification_ai_api_key_set
                         ? `已设置：${sMeta.verification_ai_api_key_masked || ''}`
@@ -724,16 +901,59 @@ const SettingsPage: React.FC = () => {
                       placeholder="输入新 Key 以更新"
                     />
                   </Form.Item>
-                  <Button
-                    onClick={() =>
-                      void runTest(
-                        () => testVerificationAi({}),
-                        'AI 连通性正常',
-                      )
-                    }
+                  <Space
+                    direction="vertical"
+                    size="middle"
+                    style={{ width: '100%' }}
                   >
-                    测试 AI
-                  </Button>
+                    <Button
+                      icon={<ApiOutlined />}
+                      loading={aiTestLoading}
+                      onClick={() => void runVerificationAiTest()}
+                    >
+                      测试当前配置
+                    </Button>
+                    {aiTestResult ? (
+                      <Alert
+                        showIcon
+                        type={aiTestAlertType}
+                        message={aiTestAlertMessage}
+                        description={
+                          <Space direction="vertical" size={4}>
+                            <Space wrap size={[8, 4]}>
+                              {aiProbe.error_category ? (
+                                <Tag color="red">
+                                  {AI_ERROR_CATEGORY_LABELS[
+                                    aiProbe.error_category
+                                  ] || aiProbe.error_category}
+                                </Tag>
+                              ) : null}
+                              {aiProbe.model ? (
+                                <Tag>模型 {aiProbe.model}</Tag>
+                              ) : null}
+                              {typeof aiProbe.latency_ms === 'number' ? (
+                                <Tag>延迟 {aiProbe.latency_ms} ms</Tag>
+                              ) : null}
+                              {typeof aiProbe.http_status === 'number' ? (
+                                <Tag>HTTP {aiProbe.http_status}</Tag>
+                              ) : null}
+                            </Space>
+                            {aiProbe.endpoint ? (
+                              <Typography.Text type="secondary">
+                                请求地址：
+                                <Typography.Text code>
+                                  {aiProbe.endpoint}
+                                </Typography.Text>
+                              </Typography.Text>
+                            ) : null}
+                            {aiProbe.hint ? (
+                              <Typography.Text>{aiProbe.hint}</Typography.Text>
+                            ) : null}
+                          </Space>
+                        }
+                      />
+                    ) : null}
+                  </Space>
                 </ProCard>
               ),
             },
