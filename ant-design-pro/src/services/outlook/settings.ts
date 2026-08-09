@@ -70,8 +70,33 @@ export async function testWebhook(body: Record<string, any> = {}) {
   );
 }
 
+export type VerificationAiProbe = {
+  ok?: boolean;
+  error?: string;
+  error_category?: string;
+  message?: string;
+  hint?: string;
+  endpoint?: string;
+  model?: string;
+  requested_model?: string;
+  http_status?: number;
+  latency_ms?: number;
+  missing_fields?: string[];
+  [key: string]: any;
+};
+
+export type VerificationAiTestResponse = {
+  success: boolean;
+  ok?: boolean;
+  connectivity_ok?: boolean;
+  contract_ok?: boolean;
+  message?: string;
+  probe?: VerificationAiProbe;
+  error?: any;
+};
+
 export async function testVerificationAi(body: Record<string, any> = {}) {
-  return outlookRequest<{ success: boolean; message?: string; error?: any }>(
+  return outlookRequest<VerificationAiTestResponse>(
     '/api/settings/verification-ai-test',
     { method: 'POST', data: body, skipErrorHandler: true },
   );

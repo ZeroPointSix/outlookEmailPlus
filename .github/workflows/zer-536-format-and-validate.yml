@@ -1,0 +1,94 @@
+name: ZER-536 format and validate
+
+on:
+  push:
+    branches:
+      - codexweb/zer-536-ai-config-connectivity
+
+permissions:
+  contents: read
+
+jobs:
+  format-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt black isort flake8 mypy
+
+      - name: Format changed Python files
+        run: >-
+          python -m black
+          outlook_web/__init__.py
+          outlook_web/controllers/settings.py
+          outlook_web/services/verification_extractor.py
+          tests/test_settings_verification_ai_probe.py
+
+      - name: Sort changed Python imports
+        run: >-
+          python -m isort
+          outlook_web/__init__.py
+          outlook_web/controllers/settings.py
+          outlook_web/services/verification_extractor.py
+          tests/test_settings_verification_ai_probe.py
+
+      - name: Format and lint changed frontend files
+        working-directory: ant-design-pro
+        run: >-
+          npx --yes @biomejs/biome@2.5.0 check --write
+          src/pages/settings/index.tsx
+          src/pages/settings/aiConfig.ts
+          src/pages/settings/aiConfig.test.ts
+          src/services/outlook/settings.ts
+
+      - name: Run frontend helper tests
+        run: |
+          mkdir -p /tmp/zer536-vitest-root
+          cp ant-design-pro/src/pages/settings/aiConfig.ts /tmp/zer536-vitest-root/aiConfig.ts
+          cp ant-design-pro/src/pages/settings/aiConfig.test.ts /tmp/zer536-vitest-root/aiConfig.test.ts
+          cd /tmp/zer536-vitest-root
+          npx --yes vitest@4.1.8 run aiConfig.test.ts --environment node
+
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Run Python quality gates
+        run: |
+          python -m black --check outlook_web tests
+          python -m isort --check-only outlook_web tests
+          flake8 --select=E9,F63,F7,F82 outlook_web tests
+          python -m mypy outlook_web/core outlook_web/repositories outlook_web/services/email_service.py --ignore-missing-imports
+          git diff --check
+
+      - name: Package formatted files
+        run: >-
+          tar -czf zer536-formatted.tar.gz
+          ant-design-pro/src/pages/settings/index.tsx
+          ant-design-pro/src/pages/settings/aiConfig.ts
+          ant-design-pro/src/pages/settings/aiConfig.test.ts
+          ant-design-pro/src/services/outlook/settings.ts
+          outlook_web/__init__.py
+          outlook_web/controllers/settings.py
+          outlook_web/services/verification_extractor.py
+          tests/test_settings_verification_ai_probe.py
+
+      - name: Upload formatted files
+        uses: actions/upload-artifact@v4
+        with:
+          name: zer536-formatted
+          path: zer536-formatted.tar.gz
+          if-no-files-found: error
+          retention-days: 1

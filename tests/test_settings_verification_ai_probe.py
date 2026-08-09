@@ -47,6 +47,23 @@ class SettingsVerificationAiProbeTests(unittest.TestCase):
         self.assertIn("verification_ai_base_url", probe.get("missing_fields") or [])
         self.assertIn("verification_ai_api_key", probe.get("missing_fields") or [])
         self.assertIn("verification_ai_model", probe.get("missing_fields") or [])
+        self.assertEqual(probe.get("error_category"), "configuration")
+
+    def test_verification_ai_test_rejects_invalid_base_url(self):
+        client = self.app.test_client()
+        self._login(client)
+
+        resp = client.post(
+            "/api/settings/verification-ai-test",
+            json={
+                "verification_ai_base_url": "api.example.com/v1",
+                "verification_ai_api_key": "sk-temporary",
+                "verification_ai_model": "gpt-test",
+            },
+        )
+        probe = (resp.get_json() or {}).get("probe") or {}
+        self.assertEqual(probe.get("error"), "invalid_base_url")
+        self.assertEqual(probe.get("error_category"), "configuration")
 
     @patch("outlook_web.services.verification_extractor.requests.post")
     def test_verification_ai_test_success_when_runtime_reachable(self, mock_post):
@@ -135,6 +152,71 @@ class SettingsVerificationAiProbeTests(unittest.TestCase):
         probe = body.get("probe") or {}
         self.assertTrue(probe.get("ok"))
         self.assertEqual((probe.get("parsed_output") or {}).get("verification_code"), "123456")
+
+    @patch("outlook_web.services.verification_extractor.requests.post")
+    def test_verification_ai_test_uses_unsaved_form_values(self, mock_post):
+        class _Resp:
+            status_code = 200
+
+            def json(self):
+                return {
+                    "model": "resolved-test-model",
+                    "choices": [
+                        {
+                            "message": {
+                                "content": '{"schema_version":"verification_ai_v1","verification_code":"123456","verification_link":"","confidence":"high","reason":"ok"}'
+                            }
+                        }
+                    ],
+                }
+
+        mock_post.return_value = _Resp()
+        client = self.app.test_client()
+        self._login(client)
+
+        resp = client.post(
+            "/api/settings/verification-ai-test",
+            json={
+                "verification_ai_base_url": "https://api.temporary.example/v1",
+                "verification_ai_api_key": "sk-temporary",
+                "verification_ai_model": "requested-test-model",
+            },
+        )
+        probe = (resp.get_json() or {}).get("probe") or {}
+        self.assertTrue(probe.get("ok"))
+        self.assertEqual(probe.get("model"), "resolved-test-model")
+        self.assertEqual(probe.get("requested_model"), "requested-test-model")
+        self.assertEqual(
+            mock_post.call_args.args[0],
+            "https://api.temporary.example/v1/chat/completions",
+        )
+        self.assertEqual(
+            mock_post.call_args.kwargs["json"]["model"],
+            "requested-test-model",
+        )
+
+    @patch("outlook_web.services.verification_extractor.requests.post")
+    def test_verification_ai_test_classifies_authentication_failure(self, mock_post):
+        class _Resp:
+            status_code = 401
+            text = "Unauthorized"
+
+        mock_post.return_value = _Resp()
+        client = self.app.test_client()
+        self._login(client)
+
+        resp = client.post(
+            "/api/settings/verification-ai-test",
+            json={
+                "verification_ai_base_url": "https://api.example.com/v1",
+                "verification_ai_api_key": "sk-invalid",
+                "verification_ai_model": "gpt-test",
+            },
+        )
+        probe = (resp.get_json() or {}).get("probe") or {}
+        self.assertEqual(probe.get("http_status"), 401)
+        self.assertEqual(probe.get("error_category"), "authentication")
+        self.assertIn("API Key", probe.get("hint") or "")
 
 
 if __name__ == "__main__":

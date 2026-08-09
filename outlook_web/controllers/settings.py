@@ -1282,14 +1282,32 @@ def api_test_webhook() -> Any:
 
 @login_required
 def api_test_verification_ai() -> Any:
-    """测试已保存的系统级验证码 AI 配置可用性（连通性优先）。"""
+    """测试验证码 AI 配置；允许使用表单中的未保存值且不会持久化。"""
     data = request.get_json(silent=True) or {}
 
+    saved_api_key = settings_repo.get_verification_ai_api_key()
+    submitted_api_key = str(data.get("verification_ai_api_key") or "").strip()
+    if not submitted_api_key or (
+        saved_api_key and submitted_api_key == _mask_secret_value(saved_api_key)
+    ):
+        submitted_api_key = saved_api_key
+
     ai_config = {
-        "enabled": settings_repo.get_verification_ai_enabled(),
-        "base_url": settings_repo.get_verification_ai_base_url(),
-        "api_key": settings_repo.get_verification_ai_api_key(),
-        "model": settings_repo.get_verification_ai_model(),
+        "enabled": _parse_bool_input(
+            data.get("verification_ai_enabled"),
+            default=settings_repo.get_verification_ai_enabled(),
+        ),
+        "base_url": (
+            str(data.get("verification_ai_base_url") or "").strip()
+            if "verification_ai_base_url" in data
+            else settings_repo.get_verification_ai_base_url()
+        ),
+        "api_key": submitted_api_key,
+        "model": (
+            str(data.get("verification_ai_model") or "").strip()
+            if "verification_ai_model" in data
+            else settings_repo.get_verification_ai_model()
+        ),
     }
 
     sample_email = {
@@ -1334,6 +1352,7 @@ def api_test_verification_ai() -> Any:
             "connectivity_ok": connectivity_ok,
             "contract_ok": contract_ok,
             "enabled": ai_config.get("enabled", False),
+            "message": probe.get("message") or "AI 配置测试完成",
             "probe": probe,
         }
     )

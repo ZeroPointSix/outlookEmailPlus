@@ -13,6 +13,7 @@ import logging
 import re
 import time
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -198,6 +199,37 @@ def _normalize_verification_ai_endpoint(base_url: str) -> str:
     return value.rstrip("/") + "/chat/completions"
 
 
+def _is_valid_verification_ai_endpoint(endpoint: str) -> bool:
+    parsed = urlparse(str(endpoint or "").strip())
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _diagnose_verification_ai_http_status(status_code: int) -> tuple[str, str]:
+    if status_code in {401, 403}:
+        return "authentication", "请检查 API Key 是否有效，以及该 Key 是否有权访问所选模型。"
+    if status_code == 404:
+        return "endpoint", "请检查 Base URL。系统只会在末尾补充 /chat/completions。"
+    if status_code in {408, 504}:
+        return "network", "上游请求超时，请检查网络、代理或服务可用性。"
+    if status_code == 429:
+        return "rate_limit", "上游触发限流或额度不足，请稍后重试并检查账户额度。"
+    if status_code >= 500:
+        return "server", "上游服务返回错误，请稍后重试或查看服务端日志。"
+    if status_code in {400, 409, 422}:
+        return "configuration", "请求已到达服务，请检查模型 ID 和兼容接口参数。"
+    return "server", "上游返回了未预期的 HTTP 状态，请检查服务端日志。"
+
+
+def _diagnose_verification_ai_exception(exc: Exception) -> tuple[str, str, str]:
+    if isinstance(exc, requests.Timeout):
+        return "timeout", "network", "请求超时，请检查网络、代理或服务响应时间。"
+    if isinstance(exc, (requests.exceptions.InvalidURL, requests.exceptions.MissingSchema)):
+        return "invalid_base_url", "configuration", "Base URL 必须是完整的 http:// 或 https:// 地址。"
+    if isinstance(exc, requests.ConnectionError):
+        return "network_error", "network", "无法连接上游服务，请检查域名解析、网络和代理配置。"
+    return "request_failed", "server", "请求未完成，请检查上游服务日志后重试。"
+
+
 def _parse_verification_ai_content(raw_content: str) -> Optional[Dict[str, Any]]:
     text = str(raw_content or "").strip()
     if not text:
@@ -332,8 +364,20 @@ def probe_verification_ai_runtime(
         return {
             "ok": False,
             "error": "config_incomplete",
+            "error_category": "configuration",
             "message": "验证码 AI 配置不完整",
+            "hint": "请完整填写 Base URL、API Key 和模型 ID。",
             "missing_fields": missing_fields,
+            "endpoint": endpoint,
+            "model": model,
+        }
+    if not _is_valid_verification_ai_endpoint(endpoint):
+        return {
+            "ok": False,
+            "error": "invalid_base_url",
+            "error_category": "configuration",
+            "message": "Base URL 格式无效",
+            "hint": "请输入完整的 http:// 或 https:// 地址。",
             "endpoint": endpoint,
             "model": model,
         }
@@ -386,10 +430,13 @@ def probe_verification_ai_runtime(
 
         if response.status_code >= 400:
             response_preview = (response.text or "").strip()[:500]
+            error_category, hint = _diagnose_verification_ai_http_status(response.status_code)
             return {
                 "ok": False,
                 "error": "http_error",
+                "error_category": error_category,
                 "message": f"AI 接口返回 HTTP {response.status_code}",
+                "hint": hint,
                 "endpoint": endpoint,
                 "model": model,
                 "http_status": response.status_code,
@@ -404,7 +451,9 @@ def probe_verification_ai_runtime(
             return {
                 "ok": False,
                 "error": "invalid_response_format",
+                "error_category": "protocol",
                 "message": "AI 接口返回非 JSON 响应",
+                "hint": "服务已连接，但响应不是 OpenAI Compatible JSON。请检查 API 类型或代理配置。",
                 "endpoint": endpoint,
                 "model": model,
                 "http_status": response.status_code,
@@ -417,7 +466,9 @@ def probe_verification_ai_runtime(
             return {
                 "ok": False,
                 "error": "invalid_response_format",
+                "error_category": "protocol",
                 "message": "AI 响应缺少 choices 字段",
+                "hint": "服务已连接，但响应不符合 OpenAI chat/completions 契约。",
                 "endpoint": endpoint,
                 "model": model,
                 "http_status": response.status_code,
@@ -430,7 +481,9 @@ def probe_verification_ai_runtime(
             return {
                 "ok": False,
                 "error": "invalid_response_format",
+                "error_category": "protocol",
                 "message": "AI 响应缺少 message.content",
+                "hint": "服务已连接，但响应不符合 OpenAI chat/completions 契约。",
                 "endpoint": endpoint,
                 "model": model,
                 "http_status": response.status_code,
@@ -442,7 +495,9 @@ def probe_verification_ai_runtime(
             return {
                 "ok": False,
                 "error": "invalid_ai_output",
+                "error_category": "contract",
                 "message": "AI 输出不符合固定 JSON 契约",
+                "hint": "连通性正常，但模型未按验证码提取 JSON 契约返回。请更换模型或兼容服务。",
                 "endpoint": endpoint,
                 "model": model,
                 "http_status": response.status_code,
@@ -450,21 +505,26 @@ def probe_verification_ai_runtime(
                 "response_preview": content.strip()[:500],
             }
 
+        actual_model = str(payload.get("model") or model).strip() if isinstance(payload, dict) else model
         return {
             "ok": True,
             "message": "AI 配置测试成功",
             "endpoint": endpoint,
-            "model": model,
+            "model": actual_model,
+            "requested_model": model,
             "http_status": response.status_code,
             "latency_ms": latency_ms,
             "parsed_output": parsed,
         }
     except Exception as exc:
         latency_ms = int((time.monotonic() - started) * 1000)
+        error, error_category, hint = _diagnose_verification_ai_exception(exc)
         return {
             "ok": False,
-            "error": "request_failed",
+            "error": error,
+            "error_category": error_category,
             "message": f"AI 请求失败：{exc}",
+            "hint": hint,
             "endpoint": endpoint,
             "model": model,
             "latency_ms": latency_ms,
