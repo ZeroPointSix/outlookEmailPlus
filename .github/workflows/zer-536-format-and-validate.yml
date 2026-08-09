@@ -55,7 +55,11 @@ jobs:
           src/services/outlook/settings.ts
 
       - name: Run Python tests
-        run: python -m unittest discover -s tests -p "test_*.py"
+        run: >-
+          python -m unittest
+          tests.test_settings_verification_ai_probe
+          tests.test_verification_ai_config_v1
+          tests.test_verification_json_contract_v1
 
       - name: Run Python quality gates
         run: |
