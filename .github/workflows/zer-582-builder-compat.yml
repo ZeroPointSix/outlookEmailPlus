@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - delivery/zer-582-utoopack-compat-20260810
+  pull_request:
+    branches:
+      - feat/ant-design-pro-frontend-migration
   workflow_dispatch:
 
 permissions:
