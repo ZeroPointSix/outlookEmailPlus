@@ -1,0 +1,60 @@
+name: ZER-582 builder compatibility probe
+
+on:
+  push:
+    branches:
+      - delivery/zer-582-utoopack-compat-20260810
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ant-design-pro
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Environment
+        run: |
+          set -euxo pipefail
+          uname -a
+          node --version
+          npm --version
+          wc -c package-lock.json
+          node -p "require('./package.json').devDependencies['@umijs/max']"
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts=false --no-audit --no-fund
+
+      - name: Resolve builder versions
+        run: |
+          set -euxo pipefail
+          node -p "'UMI=' + require('@umijs/max/package.json').version"
+          node -p "'UTOO=' + require('@utoo/pack/package.json').version"
+          node -e "require('@utoo/pack'); console.log('UTOO_REQUIRE_OK')"
+
+      - name: Type check
+        run: npm run tsc
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Verify artifact
+        run: |
+          set -euxo pipefail
+          test -f dist/index.html
+          du -sh dist
