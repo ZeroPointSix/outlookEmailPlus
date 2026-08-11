@@ -4,6 +4,22 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ## [Unreleased]
 
+## [v2.8.1] - 2026-08-11
+
+### 修复 / Bug Fixes
+
+- **飞书/Lark Webhook v2 兼容**：自动识别官方 `/open-apis/bot/v2/hook/` 地址，改用 `application/json; charset=utf-8` 与 `{"msg_type":"text","content":{"text":"..."}}` 发送；其他通用 Webhook 继续使用 `text/plain`。
+- **Webhook 日志脱敏**：日志和测试接口不再暴露 URL 凭证、路径、查询参数或片段；请求异常与非 2xx 响应仅保留错误类型、HTTP 状态及飞书错误码。
+
+### 重要变更 / Important Changes
+
+- **版本升级**：`outlook_web.__version__` 从 `2.8.0` 升级为 `2.8.1`。
+- **配置兼容**：现有 Webhook URL 与可选 `X-Webhook-Token` 设置保持不变，无数据库迁移。
+
+### 测试/验证 / Testing & Verification
+
+- 扩展 `tests/test_webhook_push.py`，覆盖飞书/Lark v2 JSON payload、通用纯文本兼容、相似域名防误判、URL/响应/异常脱敏和重试行为。
+
 ## [v2.8.0] - 2026-07-26
 
 旧前端紧急版本（Issue #115）。在 SPA 新前端迁移（#109）之前，先发布一个范围受控、可回滚的稳定旧前端版本，合入近期关键缺陷修复与验证码能力增强。
