@@ -12,6 +12,8 @@ from outlook_web.repositories import settings as settings_repo
 logger = logging.getLogger(__name__)
 
 MAX_WEBHOOK_BODY_LENGTH = 4000
+FEISHU_V2_WEBHOOK_HOSTS = frozenset({"open.feishu.cn", "open.larksuite.com"})
+FEISHU_V2_WEBHOOK_PATH_PREFIX = "/open-apis/bot/v2/hook/"
 
 
 class WebhookPushError(Exception):
@@ -49,7 +51,7 @@ def validate_webhook_url(url: str) -> str:
             "Webhook URL 必须以 http:// 或 https:// 开头",
             message_en="Webhook URL must start with http:// or https://",
             status=400,
-            details=normalized,
+            details="<redacted>",
         )
     return normalized
 
@@ -90,9 +92,57 @@ def build_business_webhook_text(source: dict[str, Any], message: dict[str, Any])
     )
 
 
+def _is_feishu_v2_webhook(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+    except ValueError:
+        return False
+
+    if hostname not in FEISHU_V2_WEBHOOK_HOSTS:
+        return False
+    path = parsed.path or ""
+    if not path.startswith(FEISHU_V2_WEBHOOK_PATH_PREFIX):
+        return False
+    hook_id = path[len(FEISHU_V2_WEBHOOK_PATH_PREFIX) :].strip("/")
+    return bool(hook_id) and "/" not in hook_id
+
+
 def _safe_url_for_log(url: str) -> str:
-    parsed = urlparse(url)
-    return f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
+    try:
+        parsed = urlparse(str(url or ""))
+        hostname = parsed.hostname
+        if not parsed.scheme or not hostname:
+            return "<redacted>"
+        if ":" in hostname and not hostname.startswith("["):
+            hostname = f"[{hostname}]"
+        port = f":{parsed.port}" if parsed.port is not None else ""
+    except ValueError:
+        return "<redacted>"
+    return f"{parsed.scheme.lower()}://{hostname}{port}/<redacted>"
+
+
+def _response_error_details(response: requests.Response, *, is_feishu_v2: bool) -> str:
+    details = f"status={response.status_code}"
+    if not is_feishu_v2:
+        return details
+
+    try:
+        payload = response.json()
+    except (TypeError, ValueError):
+        return details
+    if not isinstance(payload, dict) or payload.get("code") is None:
+        return details
+    code = str(payload["code"]).strip().replace("\n", " ")[:32]
+    return f"{details} code={code}" if code else details
+
+
+def _request_error_details(exc: requests.RequestException) -> str:
+    if isinstance(exc, requests.Timeout):
+        return "request_timeout"
+    if isinstance(exc, requests.ConnectionError):
+        return "connection_error"
+    return type(exc).__name__
 
 
 def send_webhook_message(
@@ -104,22 +154,30 @@ def send_webhook_message(
     retry: int = 1,
 ) -> None:
     target_url = validate_webhook_url(url)
+    is_feishu_v2 = _is_feishu_v2_webhook(target_url)
     headers = {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": "application/json; charset=utf-8" if is_feishu_v2 else "text/plain; charset=utf-8",
     }
     if str(token or "").strip():
         headers["X-Webhook-Token"] = str(token).strip()
+
+    request_kwargs: dict[str, Any] = {
+        "headers": headers,
+        "timeout": timeout_sec,
+    }
+    if is_feishu_v2:
+        request_kwargs["json"] = {
+            "msg_type": "text",
+            "content": {"text": text_body},
+        }
+    else:
+        request_kwargs["data"] = text_body.encode("utf-8")
 
     attempts = max(0, int(retry)) + 1
     last_error: Exception | None = None
     for _ in range(attempts):
         try:
-            response = requests.post(
-                target_url,
-                data=text_body.encode("utf-8"),
-                headers=headers,
-                timeout=timeout_sec,
-            )
+            response = requests.post(target_url, **request_kwargs)
             if 200 <= response.status_code < 300:
                 return
             last_error = WebhookPushError(
@@ -127,7 +185,7 @@ def send_webhook_message(
                 "Webhook 发送失败",
                 message_en="Failed to send webhook message",
                 status=502,
-                details=f"status={response.status_code} body={(response.text or '')[:200]}",
+                details=_response_error_details(response, is_feishu_v2=is_feishu_v2),
             )
         except requests.RequestException as exc:
             last_error = WebhookPushError(
@@ -135,7 +193,7 @@ def send_webhook_message(
                 "Webhook 发送失败",
                 message_en="Failed to send webhook message",
                 status=502,
-                details=str(exc),
+                details=_request_error_details(exc),
             )
 
     logger.warning(
