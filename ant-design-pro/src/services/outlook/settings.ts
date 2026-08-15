@@ -56,6 +56,24 @@ export async function testTelegram() {
   );
 }
 
+export type TelegramProxyTestResponse = {
+  success: boolean;
+  ok?: boolean;
+  message?: string;
+  message_en?: string;
+  latency_ms?: number;
+  proxy_url?: string;
+  error?: any;
+};
+
+/** 测试 Telegram 代理连通性：后端会用表单里的代理地址实际请求 api.telegram.org/getMe。 */
+export async function testTelegramProxy(proxyUrl: string) {
+  return outlookRequest<TelegramProxyTestResponse>(
+    '/api/settings/test-telegram-proxy',
+    { method: 'POST', data: { proxy_url: proxyUrl }, skipErrorHandler: true },
+  );
+}
+
 export async function testEmailNotification() {
   return outlookRequest<{ success: boolean; message?: string; error?: any }>(
     '/api/settings/email-test',
