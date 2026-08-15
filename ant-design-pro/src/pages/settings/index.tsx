@@ -55,6 +55,8 @@ import {
   syncCfWorkerDomains,
   testEmailNotification,
   testTelegram,
+  testTelegramProxy,
+  type TelegramProxyTestResponse,
   testVerificationAi,
   testWebhook,
   triggerSystemUpdate,
@@ -147,6 +149,10 @@ const SettingsPage: React.FC = () => {
   const [webhookTestLoading, setWebhookTestLoading] = useState(false);
   const [webhookTestResult, setWebhookTestResult] =
     useState<WebhookTestResponse | null>(null);
+  const [telegramProxyTestLoading, setTelegramProxyTestLoading] =
+    useState(false);
+  const [telegramProxyTestResult, setTelegramProxyTestResult] =
+    useState<TelegramProxyTestResponse | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ['settings'],
@@ -517,6 +523,42 @@ const SettingsPage: React.FC = () => {
       message.error(pickSettingsError(normalized, 'Webhook 测试失败'));
     } finally {
       setWebhookTestLoading(false);
+    }
+  };
+
+  const testTelegramProxyUrl = async () => {
+    const proxyUrl = String(
+      form.getFieldValue('telegram_proxy_url') || '',
+    ).trim();
+    if (dirty) {
+      message.warning('请先保存当前 Telegram 配置，再测试代理连通性');
+      return;
+    }
+    setTelegramProxyTestLoading(true);
+    setTelegramProxyTestResult(null);
+    try {
+      const result = await testTelegramProxy(proxyUrl);
+      setTelegramProxyTestResult(result);
+      if (result?.success === false) {
+        message.error(pickSettingsError(result, '代理连通性测试失败'));
+      } else if (result?.ok === false) {
+        message.warning(result?.message || '代理可达但 Telegram 连接异常');
+      } else {
+        message.success(result?.message || '代理连通性测试成功');
+      }
+    } catch (error: any) {
+      const payload =
+        error?.data ||
+        error?.info ||
+        error?.response?.data || {
+          success: false,
+          message: error?.message || '代理连通性测试失败',
+          error,
+        };
+      setTelegramProxyTestResult(payload);
+      message.error(pickSettingsError(payload, '代理连通性测试失败'));
+    } finally {
+      setTelegramProxyTestLoading(false);
     }
   };
 
@@ -1040,16 +1082,80 @@ const SettingsPage: React.FC = () => {
                       style={{ width: '100%' }}
                     />
                   </Form.Item>
-                  <Form.Item name="telegram_proxy_url" label="代理 URL">
-                    <Input />
-                  </Form.Item>
-                  <Button
-                    onClick={() =>
-                      void runTest(testTelegram, 'Telegram 测试成功')
-                    }
+                  <Form.Item
+                    name="telegram_proxy_url"
+                    label="代理 URL"
+                    extra="留空则直连（用已保存配置）。格式：socks5://host:port 或 http://host:port"
                   >
-                    测试 Telegram
-                  </Button>
+                    <Input placeholder="socks5://user:pass@host:port 或 http://host:port" />
+                  </Form.Item>
+                  <Space wrap style={{ marginBottom: telegramProxyTestResult ? 16 : 0 }}>
+                    <Button
+                      onClick={() =>
+                        void runTest(testTelegram, 'Telegram 测试成功')
+                      }
+                    >
+                      测试 Telegram
+                    </Button>
+                    <Button
+                      loading={telegramProxyTestLoading}
+                      onClick={() => void testTelegramProxyUrl()}
+                    >
+                      测试代理连通性
+                    </Button>
+                  </Space>
+                  {telegramProxyTestResult && (
+                    <Alert
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      type={
+                        telegramProxyTestResult.success &&
+                        telegramProxyTestResult.ok !== false
+                          ? 'success'
+                          : 'error'
+                      }
+                      message={
+                        telegramProxyTestResult.success &&
+                        telegramProxyTestResult.ok !== false
+                          ? '代理连通性测试完成'
+                          : pickSettingsError(
+                              { error: telegramProxyTestResult.error },
+                              telegramProxyTestResult.message ||
+                                '代理连通性测试失败',
+                            )
+                      }
+                      description={
+                        <Space direction="vertical" size={2}>
+                          <Typography.Text>
+                            状态：
+                            {telegramProxyTestResult.ok === false
+                              ? `代理可达但 Telegram 返回异常（网络不可用/被拦截）`
+                              : telegramProxyTestResult.success
+                                ? '代理连通成功'
+                                : '代理连接失败'}
+                          </Typography.Text>
+                          {telegramProxyTestResult.message && (
+                            <Typography.Text>
+                              服务端返回：
+                              {telegramProxyTestResult.message}
+                            </Typography.Text>
+                          )}
+                          {telegramProxyTestResult.latency_ms != null && (
+                            <Typography.Text>
+                              耗时：
+                              {telegramProxyTestResult.latency_ms} ms
+                            </Typography.Text>
+                          )}
+                          {telegramProxyTestResult.error?.code && (
+                            <Typography.Text>
+                              错误码：
+                              {String(telegramProxyTestResult.error.code)}
+                            </Typography.Text>
+                          )}
+                        </Space>
+                      }
+                    />
+                  )}
                 </ProCard>
               ),
             },
