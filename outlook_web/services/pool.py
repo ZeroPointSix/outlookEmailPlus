@@ -32,7 +32,14 @@ VALID_RESULTS = set(pool_repo.RESULT_TO_POOL_STATUS.keys())
 CF_DELETE_ON_RESULTS = {"success", "credential_invalid"}
 
 # 支持的 provider 白名单（空字符串视为 None，不做校验）
-VALID_PROVIDERS = {"outlook", "imap", "custom", "gptmail", "cloudflare_temp_mail"}
+VALID_PROVIDERS = {
+    "cloudflare_temp_mail",
+    "custom",
+    "gptmail",
+    "icloud_hme",
+    "imap",
+    "outlook",
+}
 
 # 这些 provider（含未指定）在 accounts 池无命中时，回退到 temp_emails 临时邮箱池领取。
 # custom/gptmail 对应「通用 API (GPTMail)」临时邮箱；None 表示不限 provider。
