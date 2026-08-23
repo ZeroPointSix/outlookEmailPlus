@@ -1132,5 +1132,17 @@ class PoolApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
 
 
+class PoolProviderValidationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import_web_app_module()
+        from outlook_web.services import pool as pool_service
+
+        cls.pool_service = pool_service
+
+    def test_icloud_hme_is_an_allowed_pool_provider(self):
+        self.assertEqual(self.pool_service._validate_provider("icloud_hme"), "icloud_hme")
+
+
 if __name__ == "__main__":
     unittest.main()
