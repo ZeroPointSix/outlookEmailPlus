@@ -153,6 +153,29 @@ class TempMailboxPoolTests(unittest.TestCase):
         self.assertEqual(result["provider"], "plugin_provider")
         self.assertEqual(result["account_type"], "temp_mail")
 
+    def test_claim_registered_plugin_uses_bounded_sql_query(self):
+        temp_id, email, _ = self._make_plugin_email()
+        conn = self.create_conn()
+        statements: list[str] = []
+        try:
+            conn.set_trace_callback(statements.append)
+            claimed = self.pool_repo.claim_temp_mailbox_atomic(
+                conn,
+                caller_id="reg_bot",
+                task_id="t_bounded_query",
+                lease_seconds=600,
+                provider="plugin_provider",
+            )
+        finally:
+            conn.set_trace_callback(None)
+            conn.close()
+
+        self.assertEqual(claimed["id"], temp_id + self.pool_repo.TEMP_POOL_ID_OFFSET)
+        self.assertEqual(claimed["email"], email)
+        claim_sql = next(statement for statement in statements if "SELECT * FROM temp_emails" in statement)
+        self.assertIn("json_valid", claim_sql)
+        self.assertIn("LIMIT 1", claim_sql)
+
     def test_claim_random_registered_plugin_selects_existing_mailbox(self):
         temp_id, email, _ = self._make_plugin_email()
         with patch(
