@@ -664,6 +664,9 @@ class TempMailService:
     def delete_message(self, email_or_mailbox: str | dict[str, Any], message_id: str) -> bool:
         mailbox = self._get_mailbox_descriptor(email_or_mailbox)
         email_addr = str(mailbox.get("email") or "")
+        capabilities = (mailbox.get("meta") or {}).get("provider_capabilities")
+        if isinstance(capabilities, dict) and capabilities.get("delete_message") is False:
+            raise TempMailError("TEMP_EMAIL_MESSAGE_DELETE_UNSUPPORTED", "当前邮箱 Provider 不支持删除邮件", status=400)
         provider = self._get_provider(mailbox=mailbox)
         if not provider.delete_message(mailbox, message_id):
             raise TempMailError("TEMP_EMAIL_MESSAGE_DELETE_FAILED", "删除失败", status=502)
@@ -672,6 +675,9 @@ class TempMailService:
     def clear_messages(self, email_or_mailbox: str | dict[str, Any]) -> bool:
         mailbox = self._get_mailbox_descriptor(email_or_mailbox)
         email_addr = str(mailbox.get("email") or "")
+        capabilities = (mailbox.get("meta") or {}).get("provider_capabilities")
+        if isinstance(capabilities, dict) and capabilities.get("clear_messages") is False:
+            raise TempMailError("TEMP_EMAIL_MESSAGES_CLEAR_UNSUPPORTED", "当前邮箱 Provider 不支持清空邮件", status=400)
         provider = self._get_provider(mailbox=mailbox)
         if not provider.clear_messages(mailbox):
             raise TempMailError("TEMP_EMAIL_MESSAGES_CLEAR_FAILED", "清空失败", status=502)
