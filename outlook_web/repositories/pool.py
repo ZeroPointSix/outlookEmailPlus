@@ -707,18 +707,25 @@ def claim_temp_mailbox_atomic(
         # 兼容 domain 为空的历史行：回退用 email 的 @ 后缀派生域名匹配
         sql += " AND lower(COALESCE(NULLIF(domain, '')," " substr(email, instr(email, '@') + 1))) = ?"
         params.append(email_domain.strip().lower())
-    sql += " ORDER BY RANDOM()"
+    if normalized_provider:
+        accepted_names = sorted(_TEMP_PROVIDER_ALIASES.get(normalized_provider, {normalized_provider}))
+        provider_name_sql = """
+            CASE
+                WHEN json_valid(COALESCE(meta_json, ''))
+                     AND NULLIF(TRIM(COALESCE(json_extract(meta_json, '$.provider_name'), '')), '') IS NOT NULL
+                    THEN lower(TRIM(json_extract(meta_json, '$.provider_name')))
+                WHEN lower(TRIM(COALESCE(source, ''))) = 'legacy_gptmail'
+                    THEN 'legacy_bridge'
+                ELSE lower(TRIM(COALESCE(source, '')))
+            END
+        """
+        placeholders = ", ".join("?" for _ in accepted_names)
+        sql += f" AND ({provider_name_sql}) IN ({placeholders})"
+        params.extend(accepted_names)
+    sql += " ORDER BY RANDOM() LIMIT 1"
 
     conn.execute("BEGIN IMMEDIATE")
-    mailboxes = conn.execute(sql, params).fetchall()
-    if normalized_provider is None:
-        mailbox = mailboxes[0] if mailboxes else None
-    else:
-        accepted_names = _TEMP_PROVIDER_ALIASES.get(normalized_provider, {normalized_provider})
-        mailbox = next(
-            (item for item in mailboxes if _temp_mailbox_provider_name(item) in accepted_names),
-            None,
-        )
+    mailbox = conn.execute(sql, params).fetchone()
     if mailbox is None:
         conn.execute("ROLLBACK")
         return None
