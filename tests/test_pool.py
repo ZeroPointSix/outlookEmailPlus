@@ -1,5 +1,6 @@
 import json
 import unittest
+from unittest.mock import patch
 
 from tests._import_app import import_web_app_module
 
@@ -1140,8 +1141,21 @@ class PoolProviderValidationTests(unittest.TestCase):
 
         cls.pool_service = pool_service
 
-    def test_icloud_hme_is_an_allowed_pool_provider(self):
-        self.assertEqual(self.pool_service._validate_provider("icloud_hme"), "icloud_hme")
+    def test_registered_plugin_is_an_allowed_pool_provider(self):
+        with patch(
+            "outlook_web.services.temp_mail_provider_factory.get_available_providers",
+            return_value=[{"name": "plugin_provider"}],
+        ):
+            self.assertEqual(self.pool_service._validate_provider("plugin_provider"), "plugin_provider")
+
+    def test_unregistered_plugin_is_rejected(self):
+        with patch(
+            "outlook_web.services.temp_mail_provider_factory.get_available_providers",
+            return_value=[],
+        ):
+            with self.assertRaises(self.pool_service.PoolServiceError) as ctx:
+                self.pool_service._validate_provider("missing_plugin")
+        self.assertEqual(ctx.exception.error_code, "invalid_provider")
 
 
 if __name__ == "__main__":

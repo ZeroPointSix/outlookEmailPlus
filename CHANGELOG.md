@@ -6,8 +6,8 @@ All notable changes to OutlookMail Plus are documented in this file.
 
 ### 修复 / Bug Fixes
 
-- **ZER-575 iCloud Hide My Email 邮箱池闭环**：补齐 HME Provider 的动态创建、持久化、显式领取与 claim-complete 生命周期；普通未指定 Provider 的领取不会误占 HME 别名。
-- **ZER-575 HME 项目维度复用**：长期别名在指定项目成功后回到可用池，不会被同一调用方和项目重复领取；失败、释放和租约过期仍可重试。
+- **ZER-575 Provider 插件边界收敛**：邮箱池从运行时注册表识别第三方 Provider，并统一支持按 Provider 领取、动态创建、持久化和写库失败回滚。
+- **统一临时邮箱生命周期**：所有 Provider 均使用标准 `temp_mail` 状态机；插件不再引入专用数据库字段、关联表或成功后复用分支。
 
 ## [v2.9.10] - 2026-08-17
 

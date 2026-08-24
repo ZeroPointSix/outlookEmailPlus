@@ -1,3 +1,4 @@
+import json
 import secrets
 import unittest
 from unittest.mock import Mock, patch
@@ -25,7 +26,6 @@ class TempMailboxPoolTests(unittest.TestCase):
         try:
             conn.execute("DELETE FROM account_project_usage")
             conn.execute("DELETE FROM account_claim_logs")
-            conn.execute("DELETE FROM temp_email_project_usage")
             conn.execute("DELETE FROM accounts")
             conn.execute("DELETE FROM temp_emails")
             conn.commit()
@@ -61,18 +61,27 @@ class TempMailboxPoolTests(unittest.TestCase):
         finally:
             conn.close()
 
-    def _make_hme_email(self):
-        return self._make_temp_email(source="icloud_hme", domain="icloud.com")
+    def _make_plugin_email(self, provider_name="plugin_provider", domain="plugin.test"):
+        temp_id, email, _ = self._make_temp_email(domain=domain)
+        conn = self.create_conn()
+        try:
+            conn.execute(
+                "UPDATE temp_emails SET meta_json = ? WHERE id = ?",
+                (json.dumps({"provider_name": provider_name}), temp_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return temp_id, email, domain
 
     @staticmethod
-    def _fake_hme_result(email):
+    def _fake_plugin_result(email, provider_name="plugin_provider"):
         return {
             "success": True,
             "email": email,
             "meta": {
-                "provider_name": "icloud_hme",
-                "provider_mailbox_id": f"alias-{email.split('@', 1)[0]}",
-                "mailbox_semantics": "long_lived_alias",
+                "provider_name": provider_name,
+                "provider_mailbox_id": f"mailbox-{email.split('@', 1)[0]}",
             },
         }
 
@@ -132,174 +141,139 @@ class TempMailboxPoolTests(unittest.TestCase):
             self.pool_service.claim_random(caller_id="reg_bot", task_id="t_outlook", provider="outlook", email_domain=domain)
         self.assertEqual(ctx.exception.error_code, "no_available_account")
 
-    def test_claim_random_unspecified_provider_excludes_hme(self):
-        self._make_hme_email()
-        with self.assertRaises(self.pool_service.PoolServiceError) as ctx:
-            self.pool_service.claim_random(caller_id="reg_bot", task_id="t_no_hme")
-        self.assertEqual(ctx.exception.error_code, "no_available_account")
-
-    def test_claim_random_explicit_hme_selects_existing_alias(self):
-        temp_id, email, _ = self._make_hme_email()
+    def test_claim_random_unspecified_provider_can_claim_plugin_mailbox(self):
+        temp_id, email, domain = self._make_plugin_email()
         result = self.pool_service.claim_random(
             caller_id="reg_bot",
-            task_id="t_existing_hme",
-            provider="icloud_hme",
-            project_key="project-a",
+            task_id="t_unspecified_plugin",
+            email_domain=domain,
         )
         self.assertEqual(result["id"], temp_id + self.pool_repo.TEMP_POOL_ID_OFFSET)
         self.assertEqual(result["email"], email)
-        self.assertEqual(result["provider"], "icloud_hme")
-        self.assertEqual(result["account_type"], "long_lived_alias")
+        self.assertEqual(result["provider"], "plugin_provider")
+        self.assertEqual(result["account_type"], "temp_mail")
 
-    def test_claim_random_hme_persists_provider_and_long_lived_type(self):
-        provider = Mock()
-        provider.create_mailbox.return_value = self._fake_hme_result("new-alias@icloud.com")
+    def test_claim_random_registered_plugin_selects_existing_mailbox(self):
+        temp_id, email, _ = self._make_plugin_email()
         with patch(
-            "outlook_web.services.temp_mail_provider_factory.get_temp_mail_provider",
-            return_value=provider,
+            "outlook_web.services.temp_mail_provider_factory.get_available_providers",
+            return_value=[{"name": "plugin_provider"}],
         ):
             result = self.pool_service.claim_random(
                 caller_id="reg_bot",
-                task_id="t_hme_create",
-                provider="icloud_hme",
+                task_id="t_existing_plugin",
+                provider="plugin_provider",
+            )
+
+        self.assertEqual(result["id"], temp_id + self.pool_repo.TEMP_POOL_ID_OFFSET)
+        self.assertEqual(result["email"], email)
+        self.assertEqual(result["provider"], "plugin_provider")
+        self.assertEqual(result["account_type"], "temp_mail")
+
+    def test_claim_random_registered_plugin_creates_generic_temp_mailbox(self):
+        provider = Mock()
+        provider.provider_capabilities = {"delete_mailbox": True}
+        provider.create_mailbox.return_value = self._fake_plugin_result("new-mailbox@plugin.test")
+        with (
+            patch(
+                "outlook_web.services.temp_mail_provider_factory.get_available_providers",
+                return_value=[{"name": "plugin_provider"}],
+            ),
+            patch(
+                "outlook_web.services.temp_mail_provider_factory.get_temp_mail_provider",
+                return_value=provider,
+            ),
+        ):
+            result = self.pool_service.claim_random(
+                caller_id="reg_bot",
+                task_id="t_plugin_create",
+                provider="plugin_provider",
                 project_key="project-a",
             )
 
-        self.assertEqual(result["provider"], "icloud_hme")
-        self.assertEqual(result["account_type"], "long_lived_alias")
-        self.assertEqual(result["email"], "new-alias@icloud.com")
-        self.assertEqual(provider.create_mailbox.call_args.kwargs["domain"], None)
+        self.assertEqual(result["provider"], "plugin_provider")
+        self.assertEqual(result["account_type"], "temp_mail")
+        self.assertEqual(result["email"], "new-mailbox@plugin.test")
 
         conn = self.create_conn()
         try:
             row = conn.execute(
-                """
-                SELECT provider_name, pool_status, claimed_project_key
-                FROM temp_emails WHERE email = ?
-                """,
-                ("new-alias@icloud.com",),
+                "SELECT source, meta_json, pool_status FROM temp_emails WHERE email = ?",
+                ("new-mailbox@plugin.test",),
             ).fetchone()
         finally:
             conn.close()
-        self.assertEqual(row["provider_name"], "icloud_hme")
+        self.assertEqual(row["source"], "custom_domain_temp_mail")
+        self.assertEqual(json.loads(row["meta_json"])["provider_name"], "plugin_provider")
         self.assertEqual(row["pool_status"], "claimed")
-        self.assertEqual(row["claimed_project_key"], "project-a")
 
-    def test_hme_success_reuses_for_other_project_but_creates_for_same_project(self):
-        provider = Mock()
-        provider.create_mailbox.side_effect = [
-            self._fake_hme_result("first-alias@icloud.com"),
-            self._fake_hme_result("second-alias@icloud.com"),
-        ]
-        with patch(
-            "outlook_web.services.temp_mail_provider_factory.get_temp_mail_provider",
-            return_value=provider,
-        ):
-            first = self.pool_service.claim_random(
+        self.assertEqual(
+            self.pool_service.complete_claim(
+                account_id=result["id"],
+                claim_token=result["claim_token"],
                 caller_id="reg_bot",
-                task_id="t_hme_first",
-                provider="icloud_hme",
-                project_key="project-a",
-            )
-            self.assertEqual(
-                self.pool_service.complete_claim(
-                    account_id=first["id"],
-                    claim_token=first["claim_token"],
+                task_id="t_plugin_create",
+                result="success",
+            ),
+            "used",
+        )
+
+    def test_registered_plugin_insert_failure_rolls_back_remote_mailbox(self):
+        provider = Mock()
+        provider.provider_capabilities = {"delete_mailbox": True}
+        provider.create_mailbox.return_value = self._fake_plugin_result("rollback@plugin.test")
+        with (
+            patch(
+                "outlook_web.services.temp_mail_provider_factory.get_available_providers",
+                return_value=[{"name": "plugin_provider"}],
+            ),
+            patch(
+                "outlook_web.services.temp_mail_provider_factory.get_temp_mail_provider",
+                return_value=provider,
+            ),
+            patch.object(
+                self.pool_repo,
+                "insert_claimed_temp_mailbox",
+                side_effect=self.pool_repo.PoolRepositoryError("write failed", "db_error"),
+            ),
+        ):
+            with self.assertRaises(self.pool_service.PoolServiceError) as ctx:
+                self.pool_service.claim_random(
                     caller_id="reg_bot",
-                    task_id="t_hme_first",
-                    result="success",
-                ),
-                "available",
-            )
+                    task_id="t_plugin_rollback",
+                    provider="plugin_provider",
+                )
 
-            # 同一个 project 的成功别名必须排除，池服务应创建第二个别名。
-            second = self.pool_service.claim_random(
-                caller_id="reg_bot",
-                task_id="t_hme_same_project",
-                provider="icloud_hme",
-                project_key="project-a",
-            )
-            self.assertNotEqual(second["email"], first["email"])
-            self.assertEqual(provider.create_mailbox.call_count, 2)
-            self.pool_service.release_claim(
-                account_id=second["id"],
-                claim_token=second["claim_token"],
-                caller_id="reg_bot",
-                task_id="t_hme_same_project",
-            )
+        self.assertEqual(ctx.exception.error_code, "db_error")
+        provider.delete_mailbox.assert_called_once()
 
-            # 不同 project 可以重新领取已有成功别名，不应再访问上游创建接口。
-            third = self.pool_service.claim_random(
-                caller_id="reg_bot",
-                task_id="t_hme_other_project",
-                provider="icloud_hme",
-                project_key="project-b",
-            )
-
-        self.assertIn(third["email"], {first["email"], second["email"]})
-        self.assertEqual(provider.create_mailbox.call_count, 2)
-
-    def test_hme_failure_can_retry_same_project_without_new_creation(self):
+    def test_registered_plugin_without_delete_capability_skips_rollback(self):
         provider = Mock()
-        provider.create_mailbox.return_value = self._fake_hme_result("retry-alias@icloud.com")
-        with patch(
-            "outlook_web.services.temp_mail_provider_factory.get_temp_mail_provider",
-            return_value=provider,
+        provider.provider_capabilities = {"delete_mailbox": False}
+        provider.create_mailbox.return_value = self._fake_plugin_result("keep@plugin.test")
+        with (
+            patch(
+                "outlook_web.services.temp_mail_provider_factory.get_available_providers",
+                return_value=[{"name": "plugin_provider"}],
+            ),
+            patch(
+                "outlook_web.services.temp_mail_provider_factory.get_temp_mail_provider",
+                return_value=provider,
+            ),
+            patch.object(
+                self.pool_repo,
+                "insert_claimed_temp_mailbox",
+                side_effect=self.pool_repo.PoolRepositoryError("write failed", "db_error"),
+            ),
         ):
-            first = self.pool_service.claim_random(
-                caller_id="reg_bot",
-                task_id="t_hme_failure",
-                provider="icloud_hme",
-                project_key="project-a",
-            )
-            self.assertEqual(
-                self.pool_service.complete_claim(
-                    account_id=first["id"],
-                    claim_token=first["claim_token"],
+            with self.assertRaises(self.pool_service.PoolServiceError):
+                self.pool_service.claim_random(
                     caller_id="reg_bot",
-                    task_id="t_hme_failure",
-                    result="network_error",
-                ),
-                "available",
-            )
-            retry = self.pool_service.claim_random(
-                caller_id="reg_bot",
-                task_id="t_hme_retry",
-                provider="icloud_hme",
-                project_key="project-a",
-            )
+                    task_id="t_plugin_no_delete",
+                    provider="plugin_provider",
+                )
 
-        self.assertEqual(retry["email"], first["email"])
-        self.assertEqual(provider.create_mailbox.call_count, 1)
-
-    def test_hme_release_can_retry_same_project_without_new_creation(self):
-        provider = Mock()
-        provider.create_mailbox.return_value = self._fake_hme_result("release-alias@icloud.com")
-        with patch(
-            "outlook_web.services.temp_mail_provider_factory.get_temp_mail_provider",
-            return_value=provider,
-        ):
-            first = self.pool_service.claim_random(
-                caller_id="reg_bot",
-                task_id="t_hme_release",
-                provider="icloud_hme",
-                project_key="project-a",
-            )
-            self.pool_service.release_claim(
-                account_id=first["id"],
-                claim_token=first["claim_token"],
-                caller_id="reg_bot",
-                task_id="t_hme_release",
-            )
-            retry = self.pool_service.claim_random(
-                caller_id="reg_bot",
-                task_id="t_hme_release_retry",
-                provider="icloud_hme",
-                project_key="project-a",
-            )
-
-        self.assertEqual(retry["email"], first["email"])
-        self.assertEqual(provider.create_mailbox.call_count, 1)
+        provider.delete_mailbox.assert_not_called()
 
     def test_release_temp_mailbox(self):
         _, _, domain = self._make_temp_email()

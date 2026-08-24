@@ -657,11 +657,32 @@ def get_stats(conn: sqlite3.Connection) -> dict:
 #   - 所有 active 的用户临时邮箱自动进池，pool_status 为 NULL 或 'available' 即可领取
 #   - 领取返回的 account_id 通过 TEMP_POOL_ID_OFFSET 偏移，读信链路已由 mailbox_resolver
 #     按邮箱地址统一路由到 TempMailService，故无需改动读信逻辑
-#   - 普通临时邮箱为一次性资源；icloud_hme 是长期别名，显式 project_key 成功后回 available
+#   - 所有临时邮箱统一使用一次性资源状态机；长期资产复用由上层调用方管理
 #   - account_claim_logs.account_id 对 accounts 有外键约束，临时邮箱不写该表以避免约束冲突
 # ============================================================================
 
 _TEMP_POOL_MAILBOX_TYPE = "user"
+
+_TEMP_PROVIDER_ALIASES = {
+    "custom": {"custom", "custom_domain_temp_mail"},
+    "gptmail": {"gptmail", "legacy_bridge", "legacy_gptmail"},
+}
+
+
+def _temp_mailbox_provider_name(mailbox: sqlite3.Row) -> str:
+    """从现有 source/meta_json 字段解析临时邮箱 Provider。"""
+    source = str(mailbox["source"] or "").strip().lower()
+    try:
+        meta = json.loads(mailbox["meta_json"] or "{}")
+    except (TypeError, ValueError):
+        meta = {}
+    if isinstance(meta, dict):
+        provider_name = str(meta.get("provider_name") or "").strip().lower()
+        if provider_name:
+            return provider_name
+    if source == "legacy_gptmail":
+        return "legacy_bridge"
+    return source or "custom_domain_temp_mail"
 
 
 def claim_temp_mailbox_atomic(
@@ -671,7 +692,6 @@ def claim_temp_mailbox_atomic(
     task_id: str,
     lease_seconds: int,
     provider: Optional[str] = None,
-    project_key: Optional[str] = None,
     email_domain: Optional[str] = None,
 ) -> Optional[dict]:
     """从 temp_emails 表原子领取一个可用临时邮箱，返回与 claim_atomic 一致结构的 dict 或 None。"""
@@ -683,38 +703,22 @@ def claim_temp_mailbox_atomic(
     """
     params: list = []
     normalized_provider = str(provider or "").strip().lower() or None
-    provider_aliases = {
-        "custom": {"custom", "custom_domain_temp_mail"},
-        "gptmail": {"gptmail", "legacy_bridge", "legacy_gptmail"},
-        "icloud_hme": {"icloud_hme"},
-    }
-    if normalized_provider is None:
-        # 未指定 provider 时保持临时邮箱的旧语义，不把长期 HME 别名混入随机领取。
-        sql += " AND lower(COALESCE(NULLIF(provider_name, ''), source)) != 'icloud_hme'"
-    else:
-        values = sorted(provider_aliases.get(normalized_provider, {normalized_provider}))
-        placeholders = ", ".join("?" for _ in values)
-        sql += f" AND lower(COALESCE(NULLIF(provider_name, ''), source)) IN ({placeholders})"
-        params.extend(values)
     if email_domain:
         # 兼容 domain 为空的历史行：回退用 email 的 @ 后缀派生域名匹配
         sql += " AND lower(COALESCE(NULLIF(domain, '')," " substr(email, instr(email, '@') + 1))) = ?"
         params.append(email_domain.strip().lower())
-    if normalized_provider == "icloud_hme" and project_key and caller_id:
-        sql += """
-          AND NOT EXISTS (
-              SELECT 1 FROM temp_email_project_usage tepu
-              WHERE tepu.temp_email_id = temp_emails.id
-                AND tepu.consumer_key = ?
-                AND tepu.project_key = ?
-                AND tepu.success_count > 0
-          )
-        """
-        params.extend([caller_id, project_key])
-    sql += " ORDER BY RANDOM() LIMIT 1"
+    sql += " ORDER BY RANDOM()"
 
     conn.execute("BEGIN IMMEDIATE")
-    mailbox = conn.execute(sql, params).fetchone()
+    mailboxes = conn.execute(sql, params).fetchall()
+    if normalized_provider is None:
+        mailbox = mailboxes[0] if mailboxes else None
+    else:
+        accepted_names = _TEMP_PROVIDER_ALIASES.get(normalized_provider, {normalized_provider})
+        mailbox = next(
+            (item for item in mailboxes if _temp_mailbox_provider_name(item) in accepted_names),
+            None,
+        )
     if mailbox is None:
         conn.execute("ROLLBACK")
         return None
@@ -731,7 +735,6 @@ def claim_temp_mailbox_atomic(
             claimed_at = ?,
             lease_expires_at = ?,
             claim_token = ?,
-            claimed_project_key = ?,
             last_claimed_at = ?,
             updated_at = ?
         WHERE id = ?
@@ -741,23 +744,11 @@ def claim_temp_mailbox_atomic(
             now_str,
             lease_expires_at_str,
             token,
-            project_key,
             now_str,
             now_str,
             mailbox["id"],
         ),
     )
-    if normalized_provider == "icloud_hme" and project_key and caller_id:
-        conn.execute(
-            """
-            INSERT INTO temp_email_project_usage
-                (temp_email_id, consumer_key, project_key, first_claimed_at, last_claimed_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(temp_email_id, consumer_key, project_key)
-            DO UPDATE SET last_claimed_at = excluded.last_claimed_at
-            """,
-            (mailbox["id"], caller_id, project_key, now_str, now_str),
-        )
     conn.execute("COMMIT")
 
     email_addr = str(mailbox["email"] or "")
@@ -771,8 +762,7 @@ def claim_temp_mailbox_atomic(
         mailbox["id"],
         account_id_from_temp_id(mailbox["id"]),
     )
-    provider_name = str(mailbox["provider_name"] or mailbox["source"] or "").strip().lower()
-    account_type = "long_lived_alias" if provider_name == "icloud_hme" else "temp_mail"
+    provider_name = _temp_mailbox_provider_name(mailbox)
 
     return {
         "id": account_id_from_temp_id(mailbox["id"]),
@@ -780,7 +770,7 @@ def claim_temp_mailbox_atomic(
         "email_domain": email_domain_val,
         "provider": provider_name or "custom_domain_temp_mail",
         "provider_name": provider_name or "custom_domain_temp_mail",
-        "account_type": account_type,
+        "account_type": "temp_mail",
         "pool_status": "claimed",
         "claim_token": token,
         "claimed_at": now_str,
@@ -797,7 +787,6 @@ def insert_claimed_temp_mailbox(
     task_id: str,
     lease_seconds: int,
     provider: str,
-    project_key: Optional[str] = None,
     temp_mail_meta: Optional[dict] = None,
 ) -> dict:
     """写入由 Provider 动态创建的临时邮箱，并直接标记为 claimed。"""
@@ -812,27 +801,33 @@ def insert_claimed_temp_mailbox(
     now_str = _utcnow().isoformat() + "Z"
     lease_expires_at_str = (_utcnow() + timedelta(seconds=lease_seconds)).isoformat() + "Z"
     token = "clm_" + secrets.token_urlsafe(9)
-    meta_obj = dict(temp_mail_meta or {})
+    if isinstance(temp_mail_meta, dict):
+        meta_obj = dict(temp_mail_meta)
+    elif isinstance(temp_mail_meta, str):
+        try:
+            parsed_meta = json.loads(temp_mail_meta)
+            meta_obj = parsed_meta if isinstance(parsed_meta, dict) else {}
+        except ValueError:
+            meta_obj = {}
+    else:
+        meta_obj = {}
     meta_obj["provider_name"] = normalized_provider
     meta_json = json.dumps(meta_obj, ensure_ascii=False)
-    account_type = "long_lived_alias" if normalized_provider == "icloud_hme" else "temp_mail"
 
     try:
         conn.execute("BEGIN IMMEDIATE")
         cursor = conn.execute(
             """
             INSERT INTO temp_emails (
-                email, status, mailbox_type, visible_in_ui, source, provider_name,
+                email, status, mailbox_type, visible_in_ui, source,
                 prefix, domain, consumer_key, caller_id, task_id, meta_json,
                 pool_status, claimed_by, claimed_at, lease_expires_at, claim_token,
-                claimed_project_key, last_claimed_at, updated_at
+                last_claimed_at, updated_at
             )
-            VALUES (?, 'active', 'user', 0, ?, ?, ?, ?, ?, ?, ?, ?, 'claimed', ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, 'active', 'user', 0, 'custom_domain_temp_mail', ?, ?, ?, ?, ?, ?, 'claimed', ?, ?, ?, ?, ?, ?)
             """,
             (
                 normalized_email,
-                normalized_provider,
-                normalized_provider,
                 normalized_email.split("@", 1)[0] if "@" in normalized_email else normalized_email,
                 email_domain,
                 caller_id,
@@ -843,7 +838,6 @@ def insert_claimed_temp_mailbox(
                 now_str,
                 lease_expires_at_str,
                 token,
-                project_key,
                 now_str,
                 now_str,
             ),
@@ -851,17 +845,6 @@ def insert_claimed_temp_mailbox(
         temp_email_id = cursor.lastrowid
         if temp_email_id is None:
             raise PoolRepositoryError("插入临时邮箱未返回 ID", "db_error")
-        if normalized_provider == "icloud_hme" and project_key:
-            conn.execute(
-                """
-                INSERT INTO temp_email_project_usage
-                    (temp_email_id, consumer_key, project_key, first_claimed_at, last_claimed_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(temp_email_id, consumer_key, project_key)
-                DO UPDATE SET last_claimed_at = excluded.last_claimed_at
-                """,
-                (temp_email_id, caller_id, project_key, now_str, now_str),
-            )
         conn.execute("COMMIT")
     except sqlite3.IntegrityError as exc:
         try:
@@ -882,7 +865,7 @@ def insert_claimed_temp_mailbox(
         "email_domain": email_domain,
         "provider": normalized_provider,
         "provider_name": normalized_provider,
-        "account_type": account_type,
+        "account_type": "temp_mail",
         "pool_status": "claimed",
         "claim_token": token,
         "claimed_at": now_str,
@@ -895,8 +878,7 @@ def get_temp_mailbox_pool_row(conn: sqlite3.Connection, temp_id: int) -> Optiona
     """按 temp_emails.id 读取池相关字段（供 Service 层做 claim_token / caller 校验）。"""
     row = conn.execute(
         """
-        SELECT id, email, provider_name, source, claim_token, claimed_by,
-               claimed_project_key, pool_status
+        SELECT id, email, claim_token, claimed_by, pool_status
         FROM temp_emails
         WHERE id = ?
         """,
@@ -924,7 +906,6 @@ def release_temp_mailbox(
             claimed_at = NULL,
             lease_expires_at = NULL,
             claim_token = NULL,
-            claimed_project_key = NULL,
             updated_at = ?
         WHERE id = ?
         """,
@@ -942,22 +923,8 @@ def complete_temp_mailbox(
     result: str,
     detail: Optional[str],
 ) -> str:
-    """完成临时邮箱领取流程；HME 显式项目成功时回到 available。"""
-    mailbox = conn.execute(
-        """
-        SELECT provider_name, source, claimed_project_key
-        FROM temp_emails
-        WHERE id = ?
-        """,
-        (temp_id,),
-    ).fetchone()
-    if mailbox is None:
-        raise PoolRepositoryError("临时邮箱不存在", "account_not_found")
-
-    provider_name = str(mailbox["provider_name"] or mailbox["source"] or "").strip().lower()
-    claimed_project_key = str(mailbox["claimed_project_key"] or "").strip() or None
-    reuse_success = provider_name == "icloud_hme" and bool(claimed_project_key) and result == "success"
-    new_pool_status = "available" if reuse_success else RESULT_TO_POOL_STATUS[result]
+    """完成临时邮箱领取流程。所有 Provider 统一使用一次性资源状态机。"""
+    new_pool_status = RESULT_TO_POOL_STATUS[result]
     now_str = _utcnow().isoformat() + "Z"
     conn.execute("BEGIN IMMEDIATE")
     conn.execute(
@@ -968,51 +935,12 @@ def complete_temp_mailbox(
             claimed_at = NULL,
             lease_expires_at = NULL,
             claim_token = NULL,
-            claimed_project_key = NULL,
             last_result = ?,
-            success_count = success_count + ?,
-            fail_count = fail_count + ?,
             updated_at = ?
         WHERE id = ?
         """,
-        (
-            new_pool_status,
-            result,
-            1 if result == "success" else 0,
-            0 if result == "success" else 1,
-            now_str,
-            temp_id,
-        ),
+        (new_pool_status, result, now_str, temp_id),
     )
-    if reuse_success:
-        conn.execute(
-            """
-            INSERT INTO temp_email_project_usage (
-                temp_email_id, consumer_key, project_key,
-                first_claimed_at, last_claimed_at,
-                first_success_at, last_success_at, success_count
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-            ON CONFLICT(temp_email_id, consumer_key, project_key)
-            DO UPDATE SET
-                last_claimed_at = excluded.last_claimed_at,
-                last_success_at = excluded.last_success_at,
-                success_count = temp_email_project_usage.success_count + 1,
-                first_success_at = COALESCE(
-                    temp_email_project_usage.first_success_at,
-                    excluded.first_success_at
-                )
-            """,
-            (
-                temp_id,
-                caller_id,
-                claimed_project_key,
-                now_str,
-                now_str,
-                now_str,
-                now_str,
-            ),
-        )
     conn.execute("COMMIT")
     return new_pool_status
 
@@ -1028,9 +956,7 @@ def expire_stale_temp_claims(conn: sqlite3.Connection) -> int:
             claimed_at = NULL,
             lease_expires_at = NULL,
             claim_token = NULL,
-            claimed_project_key = NULL,
             last_result = 'lease_expired',
-            fail_count = fail_count + 1,
             updated_at = ?
         WHERE pool_status = 'claimed' AND lease_expires_at < ?
         """,
