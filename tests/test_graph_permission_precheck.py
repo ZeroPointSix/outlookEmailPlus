@@ -102,6 +102,20 @@ class TestGraphPermissionPrecheck(unittest.TestCase):
         self.assertFalse(result.get("success"))
         self.assertIsNone(result.get("scope"))
 
+    @patch("outlook_web.services.graph.requests.post")
+    def test_refresh_token_request_includes_offline_access(self, mock_post):
+        """刷新请求必须申请可滚动更新的 refresh token。"""
+        from outlook_web.services.graph import test_refresh_token_with_rotation
+
+        mock_post.return_value = _make_graph_token_response("at-123", refresh_token="rt-new")
+
+        success, error_message, new_refresh_token = test_refresh_token_with_rotation("cid", "rt-old")
+
+        self.assertTrue(success)
+        self.assertIsNone(error_message)
+        self.assertEqual(new_refresh_token, "rt-new")
+        self.assertIn("offline_access", mock_post.call_args.kwargs["data"]["scope"].split())
+
     # ------------------------------------------------------------------
     # get_emails_graph 跳过无权限调用
     # ------------------------------------------------------------------
