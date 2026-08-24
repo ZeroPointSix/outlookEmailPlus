@@ -2,6 +2,13 @@
 
 All notable changes to OutlookMail Plus are documented in this file.
 
+## [v2.9.11] - 2026-08-24
+
+### 修复 / Bug Fixes
+
+- **ZER-575 iCloud Hide My Email 邮箱池闭环**：补齐 HME Provider 的动态创建、持久化、显式领取与 claim-complete 生命周期；普通未指定 Provider 的领取不会误占 HME 别名。
+- **ZER-575 HME 项目维度复用**：长期别名在指定项目成功后回到可用池，不会被同一调用方和项目重复领取；失败、释放和租约过期仍可重试。
+
 ## [v2.9.10] - 2026-08-17
 
 ### 优化 / Improvements

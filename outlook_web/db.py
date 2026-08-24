@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import time
@@ -39,7 +40,8 @@ from outlook_web.security.crypto import (
 # v23：2026-04-19 数据概览大盘（verification_extract_logs + overview 兼容字段）
 # v24：2026-07-01 临时邮箱接入邮箱池（temp_emails 新增池生命周期字段：pool_status/claimed_by/...，可被 claim-random 领取）
 # v25：ZER-537 — external_api_keys 新增 expires_at，支持 API Key 生命周期管理
-DB_SCHEMA_VERSION = 25
+# v26：ZER-575 — iCloud HME 临时邮箱池的 Provider 与长期别名复用字段
+DB_SCHEMA_VERSION = 26
 DB_SCHEMA_VERSION_KEY = "db_schema_version"
 DB_SCHEMA_LAST_UPGRADE_TRACE_ID_KEY = "db_schema_last_upgrade_trace_id"
 DB_SCHEMA_LAST_UPGRADE_ERROR_KEY = "db_schema_last_upgrade_error"
@@ -217,6 +219,7 @@ def init_db(database_path: Optional[str] = None):
                 mailbox_type TEXT NOT NULL DEFAULT 'user',
                 visible_in_ui INTEGER NOT NULL DEFAULT 1,
                 source TEXT NOT NULL DEFAULT 'custom_domain_temp_mail',
+                provider_name TEXT,
                 prefix TEXT,
                 domain TEXT,
                 task_token TEXT UNIQUE,
@@ -1299,6 +1302,60 @@ def init_db(database_path: Optional[str] = None):
             UPDATE temp_emails
             SET prefix = substr(email, 1, instr(email, '@') - 1)
             WHERE (prefix IS NULL OR prefix = '') AND instr(email, '@') > 0
+            """)
+
+        # v26: iCloud HME 临时邮箱池 — Provider 隔离与长期别名项目复用
+        cursor.execute("PRAGMA table_info(temp_emails)")
+        temp_email_columns_v26 = [col[1] for col in cursor.fetchall()]
+        for col_def in [
+            ("provider_name", "TEXT DEFAULT NULL"),
+            ("claimed_project_key", "TEXT DEFAULT NULL"),
+            ("success_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("fail_count", "INTEGER NOT NULL DEFAULT 0"),
+        ]:
+            if col_def[0] not in temp_email_columns_v26:
+                cursor.execute(f"ALTER TABLE temp_emails ADD COLUMN {col_def[0]} {col_def[1]}")
+
+        # v26: 回填历史插件邮箱的显式 Provider。旧版本只把 provider_name 写在 meta_json。
+        legacy_provider_rows = cursor.execute("""
+            SELECT id, meta_json
+            FROM temp_emails
+            WHERE provider_name IS NULL OR TRIM(provider_name) = ''
+            """).fetchall()
+        for legacy_row in legacy_provider_rows:
+            try:
+                legacy_meta = json.loads(legacy_row["meta_json"] or "{}")
+            except (TypeError, ValueError):
+                legacy_meta = {}
+            legacy_provider = str(legacy_meta.get("provider_name") or "").strip()
+            if legacy_provider:
+                cursor.execute(
+                    "UPDATE temp_emails SET provider_name = ? WHERE id = ?",
+                    (legacy_provider, legacy_row["id"]),
+                )
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS temp_email_project_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                temp_email_id INTEGER NOT NULL,
+                consumer_key TEXT NOT NULL,
+                project_key TEXT NOT NULL,
+                first_claimed_at TEXT NOT NULL,
+                last_claimed_at TEXT NOT NULL,
+                first_success_at TEXT DEFAULT NULL,
+                last_success_at TEXT DEFAULT NULL,
+                success_count INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(temp_email_id, consumer_key, project_key),
+                FOREIGN KEY (temp_email_id) REFERENCES temp_emails(id) ON DELETE CASCADE
+            )
+            """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_temp_email_project_usage_lookup
+            ON temp_email_project_usage(consumer_key, project_key)
+            """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_temp_email_project_usage_email_id
+            ON temp_email_project_usage(temp_email_id)
             """)
 
         # 迁移现有明文数据为加密数据

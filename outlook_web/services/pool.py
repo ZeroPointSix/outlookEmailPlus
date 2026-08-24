@@ -42,8 +42,9 @@ VALID_PROVIDERS = {
 }
 
 # 这些 provider（含未指定）在 accounts 池无命中时，回退到 temp_emails 临时邮箱池领取。
-# custom/gptmail 对应「通用 API (GPTMail)」临时邮箱；None 表示不限 provider。
-_TEMP_ELIGIBLE_PROVIDERS = {None, "custom", "gptmail"}
+# custom/gptmail 对应「通用 API (GPTMail)」临时邮箱，icloud_hme 对应长期 HME 别名；
+# None 表示未指定 provider，但 repository 会主动排除 HME，避免普通领取误占长期别名。
+_TEMP_ELIGIBLE_PROVIDERS = {None, "custom", "gptmail", "icloud_hme"}
 
 
 def _validate_provider(provider: Optional[str]) -> Optional[str]:
@@ -193,7 +194,7 @@ def claim_random(
         if account is not None:
             return account
 
-        # accounts 池无命中：对临时邮箱类 provider（custom/gptmail/未指定）回退到 temp_emails 池领取
+        # accounts 池无命中：对 temp_emails provider 回退到临时邮箱池领取
         if provider in _TEMP_ELIGIBLE_PROVIDERS:
             try:
                 temp_account = pool_repo.claim_temp_mailbox_atomic(
@@ -201,6 +202,8 @@ def claim_random(
                     caller_id=caller_id,
                     task_id=task_id,
                     lease_seconds=default_lease,
+                    provider=provider,
+                    project_key=project_key,
                     email_domain=email_domain,
                 )
             except pool_repo.PoolRepositoryError as e:
@@ -208,7 +211,7 @@ def claim_random(
             if temp_account is not None:
                 return temp_account
 
-        # 池为空：仅当显式指定 provider=cloudflare_temp_mail 时，动态创建 CF 临时邮箱
+        # 池为空：显式指定 provider 时，调用对应 Provider 动态创建邮箱。
         if provider == "cloudflare_temp_mail":
             created_email, created_meta = _create_cf_mailbox_for_pool(email_domain=email_domain)
 
@@ -233,6 +236,37 @@ def claim_random(
             except Exception as e:
                 _delete_cf_mailbox_nonblocking(email=created_email, meta=created_meta)
                 raise PoolServiceError("动态写入 CF 邮箱失败", "db_error", http_status=500) from e
+
+        if provider == "icloud_hme":
+            created_email, created_meta = _create_provider_mailbox_for_pool(
+                provider_name=provider,
+                email_domain=email_domain,
+            )
+            try:
+                return pool_repo.insert_claimed_temp_mailbox(
+                    conn,
+                    email=created_email,
+                    caller_id=caller_id,
+                    task_id=task_id,
+                    lease_seconds=default_lease,
+                    provider=provider,
+                    project_key=project_key,
+                    temp_mail_meta=created_meta,
+                )
+            except pool_repo.PoolRepositoryError as e:
+                _delete_provider_mailbox_nonblocking(
+                    provider_name=provider,
+                    email=created_email,
+                    meta=created_meta,
+                )
+                raise PoolServiceError(str(e), e.error_code, http_status=500) from e
+            except Exception as e:
+                _delete_provider_mailbox_nonblocking(
+                    provider_name=provider,
+                    email=created_email,
+                    meta=created_meta,
+                )
+                raise PoolServiceError("动态写入 HME 邮箱失败", "db_error", http_status=500) from e
 
         raise PoolServiceError("池中没有符合条件的可用邮箱", "no_available_account", http_status=200)
     finally:
@@ -440,6 +474,68 @@ def _create_cf_mailbox_for_pool(*, email_domain: Optional[str]) -> tuple[str, di
         meta = {}
 
     return email, meta
+
+
+def _create_provider_mailbox_for_pool(
+    *,
+    provider_name: str,
+    email_domain: Optional[str],
+) -> tuple[str, dict]:
+    """通过插件工厂创建邮箱，供支持动态创建的 Provider 接入邮箱池。"""
+    try:
+        from outlook_web.services.temp_mail_provider_factory import (
+            TempMailProviderFactoryError,
+            get_temp_mail_provider,
+        )
+
+        provider = get_temp_mail_provider(provider_name)
+        result = provider.create_mailbox(prefix=None, domain=email_domain)
+    except TempMailProviderFactoryError as exc:
+        logger.warning("[pool] %s Provider 未就绪: code=%s", provider_name, exc.code)
+        raise PoolServiceError(exc.message, exc.code, http_status=exc.status) from exc
+    except Exception as exc:
+        logger.warning("[pool] %s create_mailbox exception: %s", provider_name, exc)
+        raise PoolServiceError(
+            f"{provider_name} 创建邮箱异常",
+            "UPSTREAM_SERVER_ERROR",
+            http_status=500,
+        ) from exc
+
+    if not isinstance(result, dict):
+        raise PoolServiceError(f"{provider_name} 返回格式错误", "UPSTREAM_BAD_PAYLOAD", http_status=500)
+
+    if not result.get("success"):
+        error_code = str(result.get("error_code") or "UPSTREAM_SERVER_ERROR")
+        error_msg = str(result.get("error") or f"{provider_name} 创建邮箱失败")
+        raise PoolServiceError(error_msg, error_code, http_status=500)
+
+    email = str(result.get("email") or "").strip()
+    if not email:
+        raise PoolServiceError(f"{provider_name} 未返回邮箱地址", "UPSTREAM_BAD_PAYLOAD", http_status=500)
+
+    meta = result.get("meta") or {}
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta)
+        except Exception:
+            meta = {}
+    return email, meta if isinstance(meta, dict) else {}
+
+
+def _delete_provider_mailbox_nonblocking(*, provider_name: str, email: str, meta: dict) -> None:
+    """数据库写入失败时，尽力回收刚创建的 Provider 邮箱。"""
+    try:
+        from outlook_web.services.temp_mail_provider_factory import get_temp_mail_provider
+
+        provider = get_temp_mail_provider(provider_name)
+        if not hasattr(provider, "delete_mailbox"):
+            return
+        if provider.delete_mailbox({"email": email, "meta": meta}):
+            logger.info("[pool] 已回收 %s 远程邮箱: %s", provider_name, email)
+        else:
+            logger.warning("[pool] 回收 %s 远程邮箱失败: %s", provider_name, email)
+    except Exception as exc:
+        logger.warning("[pool] 回收 %s 远程邮箱异常: %s, error=%s", provider_name, email, exc)
 
 
 def _delete_cf_mailbox_nonblocking(*, email: str, meta: dict) -> None:

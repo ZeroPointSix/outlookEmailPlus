@@ -152,7 +152,9 @@ def _serialize_temp_email_row(row: Any) -> Dict[str, Any]:
     item["created_by"] = "task" if str(item.get("mailbox_type") or "").strip().lower() == "task" else "user"
     item["meta_json"] = deserialize_temp_email_meta(item.get("meta_json"), source=item.get("source"))
     item["provider_name"] = str(
-        item["meta_json"].get("provider_name") or _default_provider_name_for_source(item.get("source"))
+        item.get("provider_name")
+        or item["meta_json"].get("provider_name")
+        or _default_provider_name_for_source(item.get("source"))
     )
     return item
 
@@ -317,10 +319,10 @@ def create_temp_email(
         db.execute(
             """
             INSERT INTO temp_emails (
-                email, status, mailbox_type, visible_in_ui, source, prefix, domain,
+                email, status, mailbox_type, visible_in_ui, source, provider_name, prefix, domain,
                 task_token, consumer_key, caller_id, task_id, meta_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 normalized_email,
@@ -328,6 +330,7 @@ def create_temp_email(
                 str(mailbox_type or "user").strip() or "user",
                 1 if visible_in_ui else 0,
                 normalized_source,
+                str(provider_name or "").strip() or None,
                 normalized_prefix,
                 normalized_domain,
                 str(task_token or "").strip() or None,

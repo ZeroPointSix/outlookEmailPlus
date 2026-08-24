@@ -115,6 +115,8 @@ def _claim_pool_account(endpoint: str, *, require_email_domain: bool = False):
             "claim_token": account["claim_token"],
             "claimed_at": account.get("claimed_at") or "",
             "lease_expires_at": account["lease_expires_at"],
+            "provider": account.get("provider") or "",
+            "account_type": account.get("account_type") or "",
         }
         _audit(
             endpoint,

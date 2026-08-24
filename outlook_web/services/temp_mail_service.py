@@ -419,6 +419,14 @@ class TempMailService:
         email_addr = str(result.get("email") or "").strip()
         if not email_addr:
             raise TempMailError("TEMP_EMAIL_CREATE_FAILED", "临时邮箱创建失败：缺少邮箱地址", status=502)
+        result_meta_raw = result.get("meta")
+        result_meta: dict[str, Any] = result_meta_raw if isinstance(result_meta_raw, dict) else {}
+        resolved_provider_name = (
+            str(
+                result.get("provider_name") or result_meta.get("provider_name") or getattr(provider, "provider_name", "") or ""
+            ).strip()
+            or normalized_pn
+        )
         mailbox = self._create_or_load_mailbox_record(
             email_addr=email_addr,
             mailbox_type="user",
@@ -426,8 +434,8 @@ class TempMailService:
             source=TEMP_MAIL_SOURCE,
             prefix=normalized_prefix,
             domain=normalized_domain,
-            meta=result.get("meta"),
-            provider_name=result.get("provider_name"),
+            meta=result_meta,
+            provider_name=resolved_provider_name,
             failure_code="TEMP_EMAIL_CREATE_FAILED",
             failure_message="临时邮箱创建失败",
             failure_status=502,
@@ -486,7 +494,7 @@ class TempMailService:
                         source=TEMP_MAIL_SOURCE,
                         prefix=prefix,
                         domain=domain,
-                        meta=probe_mailbox["meta"],
+                        meta=probe_mailbox["meta"] if isinstance(probe_mailbox["meta"], dict) else {},
                         provider_name=provider_name,
                     )
 
@@ -496,13 +504,15 @@ class TempMailService:
                 create_result = None
             if isinstance(create_result, dict) and create_result.get("success"):
                 created_email = str(create_result.get("email") or "").strip() or normalized_email
+                create_meta_raw = create_result.get("meta")
+                create_meta: dict[str, Any] = create_meta_raw if isinstance(create_meta_raw, dict) else {}
                 return self._create_or_load_mailbox_record(
                     email_addr=created_email,
                     mailbox_type="user",
                     visible_in_ui=True,
                     source=TEMP_MAIL_SOURCE,
-                    meta=create_result.get("meta"),
-                    provider_name=create_result.get("provider_name") or provider_name,
+                    meta=create_meta,
+                    provider_name=create_result.get("provider_name") or create_meta.get("provider_name") or provider_name,
                 )
 
         if not allow_local_fallback:
@@ -551,6 +561,14 @@ class TempMailService:
             )
         email_addr = str(result.get("email") or "").strip()
         task_token = self._generate_task_token()
+        result_meta_raw = result.get("meta")
+        result_meta: dict[str, Any] = result_meta_raw if isinstance(result_meta_raw, dict) else {}
+        resolved_provider_name = (
+            str(
+                result.get("provider_name") or result_meta.get("provider_name") or getattr(provider, "provider_name", "") or ""
+            ).strip()
+            or None
+        )
         mailbox = self._create_or_load_mailbox_record(
             email_addr=email_addr,
             mailbox_type="task",
@@ -562,8 +580,8 @@ class TempMailService:
             consumer_key=consumer_key,
             caller_id=caller_id,
             task_id=task_id,
-            meta=result.get("meta"),
-            provider_name=result.get("provider_name"),
+            meta=result_meta,
+            provider_name=resolved_provider_name,
             failure_code="TEMP_EMAIL_CREATE_FAILED",
             failure_message="任务邮箱创建失败",
             failure_status=502,

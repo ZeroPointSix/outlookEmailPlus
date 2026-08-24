@@ -83,6 +83,20 @@ class TempMailServiceTests(unittest.TestCase):
         self.assertTrue(mailbox["visible_in_ui"])
         self.assertEqual(mailbox["created_by"], "user")
 
+    def test_generate_user_mailbox_persists_provider_name_from_provider(self):
+        with self.app.app_context():
+            from outlook_web.repositories import temp_emails as temp_emails_repo
+            from outlook_web.services.temp_mail_service import TempMailService
+
+            provider = _FakeTempMailProvider()
+            provider.provider_name = "icloud_hme"
+            service = TempMailService(provider=provider)
+            mailbox = service.generate_user_mailbox(prefix="hme", domain="mail.service.test")
+            saved = temp_emails_repo.get_temp_email_by_address(mailbox["email"])
+
+        self.assertEqual(saved["provider_name"], "icloud_hme")
+        self.assertEqual(saved["meta_json"]["provider_name"], "icloud_hme")
+
     def test_apply_and_finish_task_mailbox_records_task_fields(self):
         with self.app.app_context():
             from outlook_web.repositories import temp_emails as temp_emails_repo
